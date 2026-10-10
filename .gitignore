@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+publish/
+publish-single/
+out/
+
+# Rider / VS
+.vs/
+.idea/
+*.user
+*.suo
+
+# Local test data
+/HiveBDC/
+
+# OS
+Thumbs.db
+.DS_Store
+

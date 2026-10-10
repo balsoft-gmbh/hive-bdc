@@ -1,0 +1,1 @@
+recipientGln '11111111111' is not a 13-digit GLN; not written.

@@ -1,0 +1,16 @@
+{
+  "product": "Hive BDC",
+  "releases": [
+    {
+      "version": "1.0.0",
+      "date": "2026-10-11",
+      "changes": [
+        "First release of Hive BDC (Balsoft Data Connector). It replaces Hive DocFlow: program, service, folders and Setup carry the new name (HiveBDC.exe, the HiveBDC service, C:\\Program Files\\Balsoft\\Hive BDC and C:\\ProgramData\\HiveBDC).",
+        "Hive BDC is installed fresh. Uninstall Hive DocFlow first, then run the Hive BDC Setup and install the new license file from Balsoft (earlier license files are not accepted).",
+        "Copy your appsettings.json from the Hive DocFlow folder into the Hive BDC folder before the first start to keep companies, document types, SharePoint and mail settings.",
+        "Updates now come from the Hive BDC update feed.",
+        "The dashboard shows the version in three parts (1.0.0), the same as the update feed and the release notes."
+      ]
+    }
+  ]
+}

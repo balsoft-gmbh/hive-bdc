@@ -1,0 +1,43 @@
+{
+  "documentType": "SalesInvoice",
+  "documentNumber": "2026000001",
+  "party": "Customer",
+  "eInvoiceType": "XRechnung",
+  "issueDate": "2026-09-15",
+  "dueDate": "2026-10-15",
+  "currency": "EUR",
+  "reference": "PO-4711",
+  "senderName": "Muster Lieferant GmbH & Co. KG",
+  "senderStreet": "Industriestr. 10",
+  "senderPostcode": "50667",
+  "senderCity": "Köln",
+  "senderCountry": "DE",
+  "senderVatId": "DE987654321",
+  "senderEmail": "finance@muster-lieferant.de",
+  "senderPhone": "+49 221 123456-0",
+  "recipientName": "Muster Kunde GmbH",
+  "recipientStreet": "Musterstr. 1",
+  "recipientPostcode": "10115",
+  "recipientCity": "Berlin",
+  "recipientCountry": "DE",
+  "recipientVatId": "DE123456789",
+  "recipientEmail": "ap@muster-kunde.de",
+  "environment": "Test",
+  "dataAreaId": "001",
+  "vatRate": "19",
+  "bankIban": "DE89 3704 0044 0532 0130 00",
+  "lineItems": [
+    {
+      "description": "Türschließer Typ 5000",
+      "quantity": "4",
+      "unit": "Stk",
+      "unitPrice": "89.90"
+    },
+    {
+      "description": "Montagezubehör",
+      "quantity": "1",
+      "unit": "Stk",
+      "unitPrice": "12.50"
+    }
+  ]
+}
