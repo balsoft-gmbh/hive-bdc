@@ -1,0 +1,1 @@
+no invoiceTypeCode and a negative total: treated as a credit note (381) with absolute amounts.

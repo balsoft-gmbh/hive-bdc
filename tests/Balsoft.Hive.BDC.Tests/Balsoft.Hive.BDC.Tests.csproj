@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Balsoft.Hive.BDC.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Balsoft.Hive.BDC.csproj" />
+    <Compile Include="..\..\app\HiveBDC.App\Services\InstallerSignature.cs" Link="InstallerSignature.cs" />
+    <Compile Include="..\..\app\HiveBDC.App\Services\UpdateHandoff.cs" Link="UpdateHandoff.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Parity\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Parity\Fixtures" />
+    <None Include="Parity\Golden\*" CopyToOutputDirectory="PreserveNewest" LinkBase="Parity\Golden" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,212 @@
+<Window x:Class="Balsoft.Hive.BDC.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Hive BDC Dashboard" Height="800" Width="1080"
+        MinHeight="580" MinWidth="860"
+        Icon="/Assets/hive-bdc-logo.png"
+        FontFamily="Segoe UI, Tahoma"
+        Background="{StaticResource AppBg}">
+
+    <DockPanel>
+        <!-- Menu bar -->
+        <Menu DockPanel.Dock="Top" Background="{StaticResource Surface}">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Settings…" Click="SettingsMenuItem_Click"/>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="All _logs…" Click="LogsMenuItem_Click"/>
+                <MenuItem Header="All _documents…" Click="DocumentsMenuItem_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="Check for updates…" Command="{Binding CheckForUpdatesCommand}"/>
+                <MenuItem Header="_Release notes…" Click="ChangelogMenuItem_Click"/>
+                <Separator/>
+                <MenuItem Header="About Hive BDC…" Click="AboutMenuItem_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBrush}" Padding="20,14">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="/Assets/hive-bdc-logo.png" Width="30" Height="30"
+                           Margin="0,0,12,0" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Hive BDC" FontSize="18" FontWeight="Bold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="Dashboard" FontSize="18" Foreground="#93A3BC" Margin="8,0,0,0"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Border CornerRadius="11" Padding="10,4" Background="#1E2A44" Margin="0,0,14,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="9" Height="9" VerticalAlignment="Center"
+                                     Fill="{Binding IsRunning, Converter={StaticResource RunningToBrush}}"/>
+                            <TextBlock Text="{Binding ConnectionText}" Foreground="#D1D8E4"
+                                       Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                    <Button Content="Settings" Click="SettingsMenuItem_Click" Margin="0,0,8,0"/>
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource PrimaryButton}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Footer: action message -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderSoft}"
+                BorderThickness="0,1,0,0" Padding="20,8">
+            <TextBlock Text="{Binding ActionMessage}" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="8">
+
+                <!-- Top row: Service, License, Metrics. Reflows 3→2→1 columns by window width. -->
+                <UniformGrid Columns="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource WidthToColumns}}">
+
+                    <!-- Service status card -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="SERVICE" Style="{StaticResource SectionHeader}"/>
+                            <Border Style="{StaticResource Pill}" Margin="0,0,0,14"
+                                    Background="{Binding IsRunning, Converter={StaticResource RunningToBrush}}">
+                                <TextBlock Text="{Binding ServiceStatus}" Foreground="White"
+                                           FontWeight="SemiBold" FontSize="12"/>
+                            </Border>
+                            <TextBlock Text="Version" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Text="{Binding Version}" Style="{StaticResource FieldValue}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Companies" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="{Binding CompanyCount}" Style="{StaticResource FieldValue}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Document types" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="{Binding DocumentTypes}" Style="{StaticResource FieldValue}"
+                                               ToolTip="{Binding DocumentTypesDetail}"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{Binding DocumentTypesDetail}" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="#B45309" Margin="0,-4,0,6"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Poll" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="{Binding PollInterval}" Style="{StaticResource FieldValue}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="SharePoint" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="{Binding SharePoint}" Style="{StaticResource FieldValue}"/>
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Content="Start" Command="{Binding StartServiceCommand}"
+                                        Style="{StaticResource SuccessButton}" Margin="0,0,8,0"/>
+                                <Button Content="Stop" Command="{Binding StopServiceCommand}"
+                                        Style="{StaticResource DangerButton}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- License card -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="LICENSE" Style="{StaticResource SectionHeader}"/>
+                            <Border Style="{StaticResource Pill}" Padding="12,5" Margin="0,0,0,14"
+                                    Background="{Binding LicenseColor}">
+                                <TextBlock Text="{Binding LicenseState}" Foreground="White"
+                                           FontWeight="Bold" FontSize="13"/>
+                            </Border>
+                            <TextBlock Text="Customer" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Text="{Binding LicenseCustomer}" Style="{StaticResource FieldValue}"/>
+                            <TextBlock Text="Expires" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Text="{Binding LicenseExpires}" Style="{StaticResource FieldValue}"/>
+                            <TextBlock Text="{Binding LicenseMessage}" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+                            <Border CornerRadius="8" Padding="10,7" Margin="0,10,0,0" Background="#FEF2F2"
+                                    BorderBrush="#FCA5A5" BorderThickness="1"
+                                    Visibility="{Binding LicenseBlocked, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Processing is stopped — install a valid license to resume."
+                                           Foreground="#B91C1C" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap"/>
+                            </Border>
+                            <Button Content="Renew license…" Command="{Binding RenewLicenseCommand}"
+                                    Style="{StaticResource PrimaryButton}"
+                                    HorizontalAlignment="Left" Margin="0,14,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Metrics card -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="EXPORTS" Style="{StaticResource SectionHeader}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{Binding ExportedToday}" Style="{StaticResource Metric}"/>
+                                    <TextBlock Text="Today" Style="{StaticResource FieldLabel}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding ExportedMonth}" Style="{StaticResource Metric}"/>
+                                    <TextBlock Text="This month" Style="{StaticResource FieldLabel}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{Binding ExportedTotal}" Style="{StaticResource Metric}"/>
+                                    <TextBlock Text="Total" Style="{StaticResource FieldLabel}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+
+                <!-- Recent exports -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="RECENT EXPORTS" Style="{StaticResource SectionHeader}"/>
+                            <Button Content="View all →" Click="DocumentsMenuItem_Click" Style="{StaticResource LinkButton}"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <DataGrid ItemsSource="{Binding Recent}" IsReadOnly="True" MaxHeight="240"
+                                  MouseDoubleClick="RecentExport_DoubleClick"
+                                  ToolTip="Double-click a row to open its produced file">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Document ID" Binding="{Binding DocumentId}" Width="*"/>
+                                <DataGridTextColumn Header="Type" Binding="{Binding DocumentType}" Width="140"/>
+                                <DataGridTextColumn Header="Format" Binding="{Binding Format}" Width="80"/>
+                                <DataGridTextColumn Header="Exported" Binding="{Binding ExportedAt}" Width="160"/>
+                                <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90"/>
+                                <DataGridTextColumn Header="SharePoint" Binding="{Binding TargetSite}" Width="2*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Logs -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="LOGS — LIVE TAIL" Style="{StaticResource SectionHeader}"/>
+                            <Button Content="View all →" Click="LogsMenuItem_Click" Style="{StaticResource LinkButton}"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <Border Background="{StaticResource ConsoleBg}" CornerRadius="8" ClipToBounds="True">
+                            <ListBox x:Name="LogList" Style="{StaticResource LogList}"
+                                     ItemsSource="{Binding LogLines}" Height="220"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

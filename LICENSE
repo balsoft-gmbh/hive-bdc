@@ -1,0 +1,26 @@
+Hive BDC, by Balsoft
+Copyright (c) Balsoft GmbH, Herler Str. 109, 51067 Koeln, Germany
+
+All rights reserved.
+
+SOURCE AVAILABLE, NOT OPEN SOURCE
+
+The source code in this repository is published so that it can be read and
+reviewed. Publication grants no licence. In particular, without a written
+license agreement with Balsoft GmbH you may not:
+
+  - run or use the software, in production or otherwise, except to evaluate
+    it under a trial licence issued by Balsoft GmbH;
+  - copy, modify, adapt, translate or create derivative works of it;
+  - distribute, sublicense, rent, sell or otherwise make it available to
+    third parties, in source or binary form;
+  - remove or circumvent the licence check or any copyright notice.
+
+Statutory rights that cannot be excluded (for example under sections 69d and
+69e of the German Copyright Act, UrhG) remain unaffected.
+
+Use is permitted only under a written license agreement with Balsoft GmbH
+(see EULA.md). Licensing enquiries: info@balsoft.de.
+
+Third-party open-source components are used under their respective licenses;
+see THIRD-PARTY-NOTICES.md.

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Balsoft.Hive.BDC.App</RootNamespace>
+    <AssemblyName>HiveBDC.App</AssemblyName>
+    <Product>Hive BDC Dashboard, by Balsoft</Product>
+    <AssemblyTitle>Hive BDC Dashboard</AssemblyTitle>
+    <Company>Balsoft GmbH</Company>
+    <Copyright>© Balsoft GmbH</Copyright>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\hive-bdc.ico</ApplicationIcon>
+    <!-- Embed the UAC manifest so the dashboard always runs elevated (Start/Stop service). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\hive-bdc-logo.png" />
+    <Resource Include="Assets\changelog.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The SharePoint field template import format and its merge rules, shared with the service (unit-tested there). -->
+    <Compile Include="..\..\Configuration\SharePointFieldImport.cs" Link="Shared\SharePointFieldImport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
+    <!-- Dashboard-side audit log (co-logs into the service's rolling daily file). -->
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

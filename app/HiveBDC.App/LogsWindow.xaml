@@ -1,0 +1,61 @@
+<Window x:Class="Balsoft.Hive.BDC.App.LogsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Hive BDC — Logs" Height="720" Width="1040"
+        MinHeight="440" MinWidth="680"
+        Icon="/Assets/hive-bdc-logo.png"
+        FontFamily="Segoe UI, Tahoma"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource AppBg}">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBrush}" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Logs" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="#93A3BC"
+                               Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" Margin="0,0,8,0"/>
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource PrimaryButton}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Colour legend -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderSoft}"
+                BorderThickness="0,0,0,1" Padding="20,8">
+            <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Ellipse Width="9" Height="9" Fill="#C9D1D9" VerticalAlignment="Center"/>
+                    <TextBlock Text="Info" Margin="6,0,0,0" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Ellipse Width="9" Height="9" Fill="#79C0FF" VerticalAlignment="Center"/>
+                    <TextBlock Text="Dashboard action" Margin="6,0,0,0" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Ellipse Width="9" Height="9" Fill="#E3B341" VerticalAlignment="Center"/>
+                    <TextBlock Text="Warning" Margin="6,0,0,0" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Ellipse Width="9" Height="9" Fill="#FF7B72" VerticalAlignment="Center"/>
+                    <TextBlock Text="Error" Margin="6,0,0,0" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="9" Height="9" Fill="#7D8590" VerticalAlignment="Center"/>
+                    <TextBlock Text="Debug" Margin="6,0,0,0" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Background="{StaticResource ConsoleBg}" Margin="8" CornerRadius="10" ClipToBounds="True"
+                Effect="{StaticResource CardShadow}">
+            <ListBox x:Name="LogList" Style="{StaticResource LogList}" Padding="14,10"
+                     ItemsSource="{Binding LogLines}"/>
+        </Border>
+    </DockPanel>
+</Window>

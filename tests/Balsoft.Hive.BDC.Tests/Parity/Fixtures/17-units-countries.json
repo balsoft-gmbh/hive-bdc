@@ -1,0 +1,55 @@
+{
+  "documentType": "SalesInvoice",
+  "documentNumber": "2026000001",
+  "party": "Customer",
+  "eInvoiceType": "XRechnung",
+  "issueDate": "2026-09-15",
+  "dueDate": "2026-10-15",
+  "currency": "EUR",
+  "reference": "PO-4711",
+  "senderName": "Muster Lieferant GmbH & Co. KG",
+  "senderStreet": "Industriestr. 10",
+  "senderPostcode": "50667",
+  "senderCity": "Köln",
+  "senderCountry": "Germany",
+  "senderVatId": "DE987654321",
+  "senderEmail": "finance@muster-lieferant.de",
+  "senderPhone": "+49 221 123456-0",
+  "recipientName": "Muster Kunde GmbH",
+  "recipientStreet": "Musterstr. 1",
+  "recipientPostcode": "10115",
+  "recipientCity": "Berlin",
+  "recipientCountry": "Österreich",
+  "recipientVatId": "U12345678",
+  "recipientEmail": "ap@muster-kunde.de",
+  "environment": "Test",
+  "dataAreaId": "001",
+  "vatRate": "19",
+  "bankIban": "DE89 3704 0044 0532 0130 00",
+  "lineItems": [
+    {
+      "description": "Stunden",
+      "quantity": "2.5",
+      "unit": "h",
+      "unitPrice": "95"
+    },
+    {
+      "description": "Kabel",
+      "quantity": "12",
+      "unit": "m",
+      "unitPrice": "1.99"
+    },
+    {
+      "description": "Unbekannt",
+      "quantity": "1",
+      "unit": "Palette",
+      "unitPrice": "10"
+    },
+    {
+      "description": "Rec20",
+      "quantity": "1",
+      "unit": "SET",
+      "unitPrice": "20"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>HiveBDC</AssemblyName>
+    <RootNamespace>Balsoft.Hive.BDC</RootNamespace>
+    <Product>Hive BDC, by Balsoft</Product>
+    <AssemblyTitle>Hive BDC</AssemblyTitle>
+    <Company>Balsoft GmbH</Company>
+    <Copyright>© Balsoft GmbH</Copyright>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The WPF dashboard lives under app/ (its own project). Keep the service's
+         root-glob from swallowing it — the app builds only via HiveBDC.App.csproj. -->
+    <Compile Remove="app\**\*.cs;tests\**\*.cs;setup\**\*.cs" />
+    <EmbeddedResource Remove="app\**;tests\**" />
+    <None Remove="app\**;tests\**;setup\**" />
+    <Page Remove="app\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Balsoft.Hive.BDC.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Trusted public cert for license verification (compiled in so it can't be swapped). -->
+    <EmbeddedResource Include="build\BalsoftGmbH.cer">
+      <LogicalName>Balsoft.Hive.BDC.BalsoftGmbH.cer</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- Pin the native SQLite bundle above the version Microsoft.Data.Sqlite pulls in
+         transitively to clear advisory GHSA-2m69-gcr7-jv3q. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageReference Include="Balsoft.Hive.EInvoice.Pdf" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CopyToPublishDirectory is stated explicitly: SDK 10.0.301 no longer
+         infers it from CopyToOutputDirectory for single-file publishes.
+         Always, not PreserveNewest: a single-file publish cleans its output
+         folder, and PreserveNewest then skipped the re-copy, so the installer build
+         failed on a missing appsettings.json (2026-08-01). -->
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+    <None Update="install.bat">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+    <None Update="uninstall.bat">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

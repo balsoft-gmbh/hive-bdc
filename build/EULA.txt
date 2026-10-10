@@ -1,0 +1,34 @@
+END USER LICENSE AGREEMENT - Hive BDC, by Balsoft
+
+This End User License Agreement ("EULA") governs the use of the software
+"Hive BDC" (the "Software") provided by Balsoft GmbH, Herler Str. 109,
+51067 Koeln, Germany ("Balsoft").
+
+1. License grant. Subject to a valid commercial agreement with Balsoft,
+   Balsoft grants the customer a non-exclusive, non-transferable license to
+   install and run the Software on systems operated by or for the customer,
+   for the customer's internal business purposes.
+
+2. Restrictions. The customer may not distribute, sublicense, rent, or
+   provide the Software to third parties, nor reverse engineer it except to
+   the extent permitted by mandatory law (e.g. Sec. 69e UrhG).
+
+3. Third-party components. The Software contains open-source components
+   under their own licenses (see THIRD-PARTY-NOTICES.md in the installation
+   folder). Nothing in this EULA restricts rights granted by those licenses
+   for those components.
+
+4. Output. Documents produced by the Software (e-invoice files and dispatched
+   PDFs) belong to the customer. The customer remains responsible for the correctness
+   of the document data supplied to the Software and for legal compliance of issued documents.
+
+5. Warranty and liability. Unless agreed otherwise in the commercial
+   agreement, statutory warranty rules for software apply. Balsoft's
+   liability is limited to intent and gross negligence, and, for slight
+   negligence, to breaches of essential contractual duties, capped at the
+   typical foreseeable damage.
+
+6. Governing law. German law; place of jurisdiction is Cologne, Germany.
+
+If a signed agreement between Balsoft and the customer deviates from this
+EULA, the signed agreement prevails.
