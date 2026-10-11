@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.2.0",
+      "date": "2026-10-12",
+      "changes": [
+        "The dashboard's log panel and the All logs window show the newest entry at the top. An error keeps its details (exception and stack trace) directly below it.",
+        "Settings, Document types: \"Sample JSON…\" next to \"Import columns…\" saves a SharePoint field template file for the selected type and company. It holds the entry's current target and columns, with examples where they are empty; edit it and import it back with \"Import columns…\"."
+      ]
+    },
+    {
       "version": "1.1.0",
       "date": "2026-10-12",
       "changes": [

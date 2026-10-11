@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\Balsoft.Hive.BDC.csproj" />
     <Compile Include="..\..\app\HiveBDC.App\Services\InstallerSignature.cs" Link="InstallerSignature.cs" />
     <Compile Include="..\..\app\HiveBDC.App\Services\UpdateHandoff.cs" Link="UpdateHandoff.cs" />
+    <Compile Include="..\..\app\HiveBDC.App\Services\LogLine.cs" Link="LogLine.cs" />
   </ItemGroup>
 
   <ItemGroup>

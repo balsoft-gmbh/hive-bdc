@@ -139,7 +139,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (logs is { Reachable: true, Data: { } d })
         {
             if (d.Lines is { Count: > 0 })
-                LogLines = LogParser.Parse(d.Lines);
+                LogLines = LogParser.ParseNewestFirst(d.Lines);
             else
                 LogLines = LogParser.Parse(new[] { d.Note ?? d.Error ?? "(no log lines yet)" });
         }

@@ -8,7 +8,7 @@ namespace Balsoft.Hive.BDC.App.ViewModels;
 
 /// <summary>
 /// Backs the full-logs window: the tail of the current day's log file (up to 5000 lines)
-/// over the loopback API. Never reads invoice content — only the service's log lines.
+/// over the loopback API, newest entry first. Never reads invoice content — only the service's log lines.
 /// </summary>
 public sealed partial class LogsViewModel : ObservableObject
 {
@@ -32,7 +32,7 @@ public sealed partial class LogsViewModel : ObservableObject
             {
                 if (d.Lines is { Count: > 0 })
                 {
-                    LogLines = LogParser.Parse(d.Lines);
+                    LogLines = LogParser.ParseNewestFirst(d.Lines);
                     StatusMessage = $"{d.Lines.Count} line(s)" + (string.IsNullOrEmpty(d.File) ? "" : $" — {d.File}");
                 }
                 else

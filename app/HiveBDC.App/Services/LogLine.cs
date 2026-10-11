@@ -13,6 +13,33 @@ public static class LogParser
     public static List<LogLine> Parse(IEnumerable<string> lines)
         => lines.Select(FromText).ToList();
 
+    /// <summary>
+    /// Like <see cref="Parse"/>, but the newest entry first, so the latest activity is always at the
+    /// top of the log views. An entry keeps its own line order: the lines after a timestamped line
+    /// (an exception and its stack trace) stay below it. Lines before the first timestamp (the tail
+    /// cut into an entry) form the oldest entry.
+    /// </summary>
+    public static List<LogLine> ParseNewestFirst(IEnumerable<string> lines)
+    {
+        var entries = new List<List<string>>();
+        foreach (var line in lines)
+        {
+            if (entries.Count == 0 || StartsEntry(line)) entries.Add(new List<string>());
+            entries[^1].Add(line);
+        }
+
+        var result = new List<LogLine>();
+        for (int i = entries.Count - 1; i >= 0; i--)
+            result.AddRange(entries[i].Select(FromText));
+        return result;
+    }
+
+    // Serilog template: "yyyy-MM-dd HH:mm:ss.fff [LVL] message".
+    private static bool StartsEntry(string? line)
+        => line is { Length: >= 19 }
+           && char.IsDigit(line[0]) && char.IsDigit(line[3]) && line[4] == '-' && line[7] == '-'
+           && line[10] == ' ' && line[13] == ':' && line[16] == ':';
+
     public static LogLine FromText(string text)
     {
         text ??= "";

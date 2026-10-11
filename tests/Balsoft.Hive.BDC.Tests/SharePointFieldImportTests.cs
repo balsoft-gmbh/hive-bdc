@@ -129,4 +129,49 @@ public class SharePointFieldImportTests
         Assert.Null(file);
         Assert.Contains(errors, e => e.Contains(expected));
     }
+
+    [Fact]
+    public void Sample_for_an_empty_entry_parses_and_carries_examples()
+    {
+        string json = SharePointFieldImport.CreateSample("SalesConfirmation", "002",
+            new SharePointFieldImportTarget { SiteUrl = "", Library = "", Folder = "", Fields = new() });
+
+        Assert.True(SharePointFieldImport.TryParse(json, out var file, out var errors), string.Join(" | ", errors));
+        var company = Assert.Single(Assert.Single(file!.DocumentTypes, t => t.Id == "SalesConfirmation").Companies);
+        Assert.Equal("002", company.DataAreaId);
+        Assert.Equal("{documentNumber}", company.SharePoint.Fields!["Title"]);
+        Assert.Contains("{documentNumber}", json);   // placeholders are not escaped in the file
+    }
+
+    [Fact]
+    public void Sample_keeps_what_the_entry_has_and_imports_back_unchanged()
+    {
+        var current = new SharePointFieldImportTarget
+        {
+            Enabled = true,
+            SiteUrl = "https://contoso.sharepoint.com/sites/Docs",
+            Library = "Orders",
+            Folder = "2026",
+            Fields = new() { ["Title"] = "{documentNumber}", [" OrderDate "] = "{issueDate:date}", [""] = "dropped" },
+        };
+        string json = SharePointFieldImport.CreateSample("PurchaseOrder", "001", current);
+
+        Assert.True(SharePointFieldImport.TryParse(json, out var file, out _));
+        var route = new FakeRoute("001");
+        var result = SharePointFieldImport.ApplyTo(file!, "PurchaseOrder", route);
+
+        Assert.Single(result.Applied);
+        Assert.Equal("https://contoso.sharepoint.com/sites/Docs", route.SiteUrl);
+        Assert.Equal("Orders", route.Library);
+        Assert.Equal("2026", route.Folder);
+        Assert.Equal(new Dictionary<string, string> { ["Title"] = "{documentNumber}", ["OrderDate"] = "{issueDate:date}" }, route.Fields);
+    }
+
+    [Fact]
+    public void Sample_without_type_or_company_still_parses()
+    {
+        string json = SharePointFieldImport.CreateSample("", null, null);
+        Assert.True(SharePointFieldImport.TryParse(json, out var file, out _));
+        Assert.Equal("001", Assert.Single(Assert.Single(file!.DocumentTypes).Companies).DataAreaId);
+    }
 }
