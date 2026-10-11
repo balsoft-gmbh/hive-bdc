@@ -314,7 +314,10 @@ applies the entry for exactly that type and company (target and column
 templates), so nobody types internal column names by hand. One file can carry
 every type and company of a customer; each company entry imports its own part
 from it. Typically it is prepared from the customer's real library columns
-(Graph `GET /sites/{id}/lists/{id}/columns`).
+(Graph `GET /sites/{id}/lists/{id}/columns`). **Sample JSON…** next to it saves
+a file in this format for the selected type and company: the entry's current
+target and columns, examples (`Title = {documentNumber}`, `DocumentDate =
+{issueDate:date}`, ...) where they are empty. Edit it and import it back.
 
 ```jsonc
 {

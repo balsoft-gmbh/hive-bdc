@@ -225,6 +225,46 @@ public sealed partial class SettingsViewModel : ObservableObject
         StatusIsError = n == 0;
     }
 
+    /// <summary>
+    /// Save a "HiveBDC.SharePointFields" sample for the selected document type and company
+    /// (<paramref name="row"/>): what the entry has now, examples where it is empty. The user edits
+    /// it and brings it back with "Import columns…". Writes only the file the user picks.
+    /// </summary>
+    [RelayCommand]
+    private void SaveFieldTemplateSample(RouteRow? row)
+    {
+        if (row is null) return;
+        var owner = DocumentTypes.FirstOrDefault(t => t.Companies.Contains(row)) ?? SelectedDocumentType;
+        string typeId = owner?.Id.Trim() ?? "";
+        string area = row.DataAreaId.Trim();
+
+        string json = SharePointFieldImport.CreateSample(typeId, area, row.CurrentSharePoint());
+        string stem = string.Join("-", new[] { "hivebdc-sharepoint-fields", typeId, area }.Where(p => p.Length > 0));
+        foreach (char c in Path.GetInvalidFileNameChars()) stem = stem.Replace(c, '_');
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Save a SharePoint field template sample",
+            Filter = "SharePoint field templates (*.json)|*.json|All files (*.*)|*.*",
+            FileName = stem + ".json",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            File.WriteAllText(dlg.FileName, json);
+            AppLog.Info($"Saved a SharePoint field template sample for {typeId} / {area} to {Path.GetFileName(dlg.FileName)}.");
+            StatusMessage = $"Sample saved: {Path.GetFileName(dlg.FileName)}. Edit it, then use \"Import columns…\".";
+            StatusIsError = false;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Save SharePoint field template sample to {dlg.FileName} failed: {ex.Message}");
+            StatusMessage = "Could not save the sample: " + ex.Message;
+            StatusIsError = true;
+        }
+    }
+
     // ── Global file / folder pickers ──────────────────────────────────────────
 
     [RelayCommand] private void BrowseLogDir() => LogDir = PickFolder(LogDir) ?? LogDir;

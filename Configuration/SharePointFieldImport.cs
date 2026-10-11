@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace Balsoft.Hive.BDC.Configuration;
@@ -222,6 +223,80 @@ public static class SharePointFieldImport
         };
         return Apply(scoped, new[] { new SharePointFieldImportScope(id, new[] { route }) });
     }
+
+    private static readonly JsonSerializerOptions SampleOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        // Keep "{documentNumber}" and "&" readable in the file the user edits.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>Example column templates for a sample file when the entry has none yet.</summary>
+    public static readonly IReadOnlyDictionary<string, string> SampleFields = new Dictionary<string, string>
+    {
+        ["Title"] = "{documentNumber}",
+        ["DocumentDate"] = "{issueDate:date}",
+        ["Account"] = "{party}",
+        ["Company"] = "{dataAreaId}",
+    };
+
+    /// <summary>
+    /// A ready-to-edit import file for one document type and company: the "Sample JSON…" in
+    /// Settings. Values the entry already has (site, library, folder, columns) are written as
+    /// they are, so the file doubles as an export; empty ones get examples. The result always
+    /// passes <see cref="TryParse"/>.
+    /// </summary>
+    public static string CreateSample(string? typeId, string? dataAreaId, SharePointFieldImportTarget? current)
+    {
+        string id = string.IsNullOrWhiteSpace(typeId) ? "SalesInvoice" : typeId.Trim();
+        string area = string.IsNullOrWhiteSpace(dataAreaId) ? "001" : dataAreaId.Trim();
+        var configured = current?.Fields?
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Key))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var fields = configured is { Count: > 0 }
+            ? CleanFields(configured)
+            : new Dictionary<string, string>(SampleFields);
+
+        var file = new SharePointFieldImportFile
+        {
+            Format = SharePointFieldImportFile.FormatName,
+            Version = SharePointFieldImportFile.CurrentVersion,
+            Description = "Sample for " + id + " / " + area + ". Edit siteUrl, library, folder and fields, then use "
+                          + "\"Import columns…\" on this company entry in Settings. Field keys are the internal SharePoint "
+                          + "column names; {property} takes a top-level field of the ERP JSON, {property:date} writes yyyy-MM-dd. "
+                          + "One file can hold several document types and companies.",
+            DocumentTypes =
+            {
+                new SharePointFieldImportType
+                {
+                    Id = id,
+                    Companies =
+                    {
+                        new SharePointFieldImportCompany
+                        {
+                            DataAreaId = area,
+                            SharePoint = new SharePointFieldImportTarget
+                            {
+                                Enabled = true,
+                                SiteUrl = ValidSiteUrl(current?.SiteUrl) ?? "https://tenant.sharepoint.com/sites/Name",
+                                Library = string.IsNullOrWhiteSpace(current?.Library) ? "Documents" : current!.Library!.Trim(),
+                                Folder = current?.Folder?.Trim() ?? "",
+                                Fields = fields,
+                            },
+                        },
+                    },
+                },
+            },
+        };
+        return JsonSerializer.Serialize(file, SampleOpts);
+    }
+
+    private static string? ValidSiteUrl(string? url)
+        => !string.IsNullOrWhiteSpace(url)
+           && Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps
+            ? url.Trim()
+            : null;
 
     /// <summary>The field map an import sets: trimmed column names, null templates as "", last duplicate wins.</summary>
     public static Dictionary<string, string> CleanFields(IReadOnlyDictionary<string, string> fields)

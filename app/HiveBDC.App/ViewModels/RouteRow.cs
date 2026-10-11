@@ -94,6 +94,16 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         return map;
     }
 
+    /// <summary>The SharePoint target as the form shows it now (unsaved edits included), for a sample file.</summary>
+    public SharePointFieldImportTarget CurrentSharePoint() => new()
+    {
+        Enabled = SharePointEnabled,
+        SiteUrl = SiteUrl?.Trim() ?? "",
+        Library = Library?.Trim() ?? "",
+        Folder = Folder?.Trim() ?? "",
+        Fields = CollectColumns(),
+    };
+
     /// <summary>Apply an imported target: given values replace the form's, given fields replace all column rows.</summary>
     public void ApplySharePoint(SharePointFieldImportTarget target)
     {

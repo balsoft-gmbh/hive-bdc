@@ -195,7 +195,7 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <Grid>
-                            <TextBlock Text="LOGS — LIVE TAIL" Style="{StaticResource SectionHeader}"/>
+                            <TextBlock Text="LOGS — NEWEST FIRST" Style="{StaticResource SectionHeader}"/>
                             <Button Content="View all →" Click="LogsMenuItem_Click" Style="{StaticResource LinkButton}"
                                     HorizontalAlignment="Right" VerticalAlignment="Top"/>
                         </Grid>
