@@ -28,6 +28,7 @@ public static class InvoiceMapper
         ["l"] = UnitCode.Litre,
         // lenient extras for common D365 SalesUnit values
         ["stk"] = UnitCode.Piece,
+        ["st"] = UnitCode.Piece,      // AX 2009 "Stück" sales unit (customer data, 2026-08)
         ["stück"] = UnitCode.Piece,
         ["pcs"] = UnitCode.Piece,
         ["ea"] = UnitCode.Piece,
@@ -170,6 +171,27 @@ public static class InvoiceMapper
         if (deliveryText is not null && deliveryDate is null)
             warn?.Invoke($"delivery date '{deliveryText}' is not a recognizable date; the issue date is used.");
         inv.Delivery = new DeliveryInformation { ActualDeliveryDate = deliveryDate ?? issueDate };
+        // BG-13 deliver-to: name and address when the ERP sends any of them. BT-80 (country) is
+        // what BR-IC-12 wants on intra-community supplies; the buyer's country is the fallback.
+        string? shipName = Pick(InvoiceFieldAliases.ShipToName);
+        string? shipStreet = Pick(InvoiceFieldAliases.ShipToStreet);
+        string? shipCity = Pick(InvoiceFieldAliases.ShipToCity);
+        string? shipPostcode = Pick(InvoiceFieldAliases.ShipToPostcode);
+        string? shipCountry = Pick(InvoiceFieldAliases.ShipToCountry);
+        if (shipName is not null || shipStreet is not null || shipCity is not null || shipPostcode is not null || shipCountry is not null)
+        {
+            var streetLines = (shipStreet ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            inv.Delivery.PartyName = shipName;
+            inv.Delivery.Address = new PostalAddress
+            {
+                Line1 = streetLines.Length > 0 ? streetLines[0] : null,
+                Line2 = streetLines.Length > 1 ? streetLines[1] : null,
+                Line3 = streetLines.Length > 2 ? string.Join(", ", streetLines.Skip(2)) : null,
+                PostCode = shipPostcode,
+                City = shipCity,
+                CountryCode = ResolveCountry(shipCountry ?? data.RecipientCountry),
+            };
+        }
 
         var iban = (data.BankIban ?? "").Replace(" ", "");
         if (!string.IsNullOrWhiteSpace(iban))
@@ -181,7 +203,6 @@ public static class InvoiceMapper
             inv.PaymentInstructions.RemittanceInformation = Pick(InvoiceFieldAliases.RemittanceInformation);
         }
 
-        AddPaymentTerms(inv, data, issueDate, warn);
 
         // ── Lines ───────────────────────────────────────────────────────────
         var periodStart = ParseDate(data.ServicePeriodFrom);
@@ -226,6 +247,32 @@ public static class InvoiceMapper
                     warn?.Invoke($"line origin country '{origin}' is not a known country; not written.");
                 else line.Item.OriginCountryCode = iso;
             }
+            // BT-149 / BT-146: a price per base quantity (an AX "price unit" of 100) keeps the exact
+            // price; the per-piece unitPrice stays the fallback. BT-141 / BT-136: a line charge
+            // (AX SalesMarkup) or discount the ERP folded into its line amount, so the line adds up.
+            decimal baseQuantity = Decimal(L(InvoiceFieldAliases.PriceBaseQuantity), "price base quantity", warn);
+            decimal pricePerBase = Decimal(L(InvoiceFieldAliases.PricePerBaseQuantity), "price per base quantity", warn);
+            if (baseQuantity > 0m && baseQuantity != 1m)
+            {
+                line.PriceBaseQuantity = baseQuantity;
+                line.NetPrice = pricePerBase > 0m ? Math.Abs(pricePerBase) : Math.Round(line.NetPrice * baseQuantity, 4, MidpointRounding.AwayFromZero);
+            }
+            decimal charge = Decimal(L(InvoiceFieldAliases.LineChargeAmount), "line charge", warn);
+            if (charge != 0m)
+                line.AllowancesAndCharges.Add(new AllowanceCharge
+                {
+                    IsCharge = charge > 0m, Amount = Math.Abs(charge),
+                    Reason = L(InvoiceFieldAliases.LineChargeReason) ?? (charge > 0m ? "Zuschlag" : "Rabatt"),
+                    VatCategory = category, VatRate = line.VatRate,
+                });
+            decimal allowance = Decimal(L(InvoiceFieldAliases.LineAllowanceAmount), "line discount", warn);
+            if (allowance != 0m)
+                line.AllowancesAndCharges.Add(new AllowanceCharge
+                {
+                    IsCharge = allowance < 0m, Amount = Math.Abs(allowance),
+                    Reason = L(InvoiceFieldAliases.LineAllowanceReason) ?? (allowance > 0m ? "Rabatt" : "Zuschlag"),
+                    VatCategory = category, VatRate = line.VatRate,
+                });
             inv.AddLine(line);
         }
         if (lineTerms.Count > 0)
@@ -236,6 +283,9 @@ public static class InvoiceMapper
             .ToList();
         if (leftOut.Count > 0)
             info?.Invoke("JSON fields not written to the e-invoice (no EN 16931 term for them): " + string.Join(", ", leftOut));
+
+        // After the lines: a cash discount given as an amount only needs the gross total.
+        AddPaymentTerms(inv, data, issueDate, warn);
 
         // ── VAT exemption reasons ───────────────────────────────────────────
         // E, AE, K, G and O need a reason in the breakdown (BT-120); the export's vatNote, else a default.
@@ -358,21 +408,40 @@ public static class InvoiceMapper
                 warn?.Invoke($"cash discount until {d.Date} has neither a percentage nor an amount; skipped.");
                 continue;
             }
+            decimal percentValue = d.Percent;
+            if (percentValue <= 0m)
+            {
+                // AX 2009 journals carry the discount amount and date, not the percent: derive it
+                // from the gross total so the text and the #SKONTO# term carry the real rate.
+                decimal gross = inv.CalculateTotals().TaxInclusiveAmount;
+                if (gross > 0m) percentValue = Math.Round(d.Amount / gross * 100m, 2, MidpointRounding.AwayFromZero);
+            }
             if (days is null)
             {
                 warn?.Invoke($"cash discount ({d.Percent} %) has no date and no day count; skipped.");
                 continue;
             }
             string amount = d.Amount > 0m ? $" ({d.Amount.ToString("0.00", CultureInfo.InvariantCulture)} {inv.Currency})" : "";
-            string percent = d.Percent.ToString("0.##", CultureInfo.InvariantCulture);
+            string percent = percentValue.ToString("0.##", CultureInfo.InvariantCulture);
             lines.Add(date.HasValue
                 ? $"Bei Zahlung bis {date.Value:dd.MM.yyyy} {percent} % Skonto{amount}"
                 : $"Bei Zahlung innerhalb von {days} Tagen {percent} % Skonto{amount}");
-            if (d.Percent > 0m)
-                inv.CashDiscounts.Add(new CashDiscount { Days = days.Value, Percent = d.Percent });
+            if (percentValue > 0m)
+                inv.CashDiscounts.Add(new CashDiscount { Days = days.Value, Percent = percentValue });
         }
 
         inv.PaymentTerms = lines.Count == 0 ? null : string.Join("\n", lines);
+    }
+
+    /// <summary>A decimal from an optional JSON text; unparsable text is warned about and ignored.</summary>
+    private static decimal Decimal(string? s, string what, Action<string>? warn)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return 0m;
+        s = s.Trim();
+        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d)) return d;
+        if (decimal.TryParse(s.Replace(".", "").Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out d)) return d;
+        warn?.Invoke($"{what} '{s}' is not a number; ignored.");
+        return 0m;
     }
 
     private static DateTime? ParseDate(string? s)

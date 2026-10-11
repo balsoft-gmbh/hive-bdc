@@ -133,9 +133,13 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | BT-19 Buyer accounting reference | `buyerAccountingReference`, `costCenter` |
 | BT-25 / BT-26 Preceding invoice | `precedingInvoiceNumber`, `precedingInvoiceDate` |
 | BT-72 Delivery date | `deliveryDate`, `lieferdatum` (else the issue date) |
+| BG-13 Deliver to (BT-70, 75, 77, 78, 80) | `deliveryName`, `deliveryStreet`, `deliveryCity`, `deliveryPostcode`, `deliveryCountry` (country falls back to the buyer's; BT-80 is required for intra-community supplies, BR-IC-12) |
 | BT-83 / BT-85 / BT-86 Payment | `paymentReference`, `bankAccountHolder`, `bankSwift` / `bic` |
 | Line BT-127, 132, 133 | `lineNote`, `orderLineReference`, `costCenter` |
 | Line BT-155, 156, 157, 159 | `itemId`, `customerItemId`, `gtin` / `ean`, `originCountry` |
+| Line BT-149 / BT-146 price base quantity | `priceUnit` (an AX price unit such as 100) with `priceUnitPrice` (the price per that quantity); without the latter the per-piece `unitPrice` is scaled |
+| Line BT-141 / BT-144 charge | `lineChargeAmount`, `lineChargeReason` (an AX `SalesMarkup` the ERP folded into its line amount) |
+| Line BT-136 / BT-139 allowance | `lineDiscountAmount`, `lineDiscountReason` |
 
 Without `buyerReference` or a purchase order key, `reference` fills BT-10 and
 BT-13 as before. The log names every term taken from such a key and lists the
@@ -146,10 +150,10 @@ Handlers:
 - **EInvoice** — `eInvoiceType = xrechnung` writes `{documentNumber}.xml` (EN 16931 /
   XRechnung 3.0.2, CII syntax); `eInvoiceType = zugferd` writes `{documentNumber}.pdf`
   (PDF/A-3 carrier with the same CII XML embedded, ZUGFeRD 2.5.2 / Factur-X 1.09.2, profile XRECHNUNG). The
-  mapping recomputes amounts from `quantity × unitPrice` + a single header
-  `vatRate`, tax category `S` (or `E` at rate 0), a country-name → ISO map, and a
-  unit-code map. An ERP that exports a price per price-unit must divide it out
-  before writing the JSON. AX 2009 PDFs that lack a closing `endobj` are repaired
+  mapping recomputes amounts from `quantity × unitPrice` (or `quantity × priceUnitPrice /
+  priceUnit`) plus line charges minus line discounts, a header or per-line `vatRate`, tax
+  category `S` (or `E` at rate 0), a country-name → ISO map, and a unit-code map. A cash
+  discount given as an amount only gets its percent derived from the gross total. AX 2009 PDFs that lack a closing `endobj` are repaired
   on a temp copy before embedding.
 - **Pdf** — the ERP's PDF is copied to the output folder as `{documentNumber}.pdf`
   and delivered untouched.

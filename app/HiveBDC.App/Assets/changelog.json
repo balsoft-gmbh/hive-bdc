@@ -2,6 +2,17 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.1.0",
+      "date": "2026-10-12",
+      "changes": [
+        "E-invoice lines can carry a price per base quantity (priceUnit with priceUnitPrice, EN 16931 BT-149): an AX price of 60.45 per 100 pieces is written exactly instead of as a rounded per-piece price.",
+        "Line charges and line discounts (lineChargeAmount, lineDiscountAmount with optional reasons, BT-141 and BT-136) are written to the e-invoice, so a line with a surcharge adds up to the ERP's line amount again.",
+        "The deliver-to address (deliveryName, deliveryStreet, deliveryPostcode, deliveryCity, deliveryCountry, BG-13) is written; intra-community invoices no longer fail BR-IC-12 for the missing deliver-to country.",
+        "A cash discount sent as an amount without a percent gets its percent derived from the gross total; the payment terms no longer read \"0 % Skonto\".",
+        "The unit \"st\" (AX 2009 Stück) maps to C62 without a warning."
+      ]
+    },
+    {
       "version": "1.0.2",
       "date": "2026-10-11",
       "changes": [

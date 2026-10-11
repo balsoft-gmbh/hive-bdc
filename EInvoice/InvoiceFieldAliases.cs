@@ -29,13 +29,24 @@ public static class InvoiceFieldAliases
     public static readonly Term BuyerAccountingReference = new("BT-19", "Buyer accounting reference");
     public static readonly Term PrecedingInvoiceNumber = new("BT-25", "Preceding invoice reference");
     public static readonly Term PrecedingInvoiceDate = new("BT-26", "Preceding invoice issue date");
+    public static readonly Term ShipToName = new("BT-70", "Deliver to party name");
     public static readonly Term DeliveryDate = new("BT-72", "Actual delivery date");
+    public static readonly Term ShipToStreet = new("BT-75", "Deliver to address line 1");
+    public static readonly Term ShipToCity = new("BT-77", "Deliver to city");
+    public static readonly Term ShipToPostcode = new("BT-78", "Deliver to post code");
+    public static readonly Term ShipToCountry = new("BT-80", "Deliver to country code");
     public static readonly Term RemittanceInformation = new("BT-83", "Remittance information");
     public static readonly Term AccountName = new("BT-85", "Payment account name");
     public static readonly Term Bic = new("BT-86", "Payment service provider identifier (BIC)");
 
     // ── line level ──────────────────────────────────────────────────────────
     public static readonly Term LineNote = new("BT-127", "Invoice line note");
+    public static readonly Term LineAllowanceAmount = new("BT-136", "Invoice line allowance amount");
+    public static readonly Term LineAllowanceReason = new("BT-139", "Invoice line allowance reason");
+    public static readonly Term LineChargeAmount = new("BT-141", "Invoice line charge amount");
+    public static readonly Term LineChargeReason = new("BT-144", "Invoice line charge reason");
+    public static readonly Term PricePerBaseQuantity = new("BT-146", "Item net price per base quantity");
+    public static readonly Term PriceBaseQuantity = new("BT-149", "Item price base quantity");
     public static readonly Term OrderLineReference = new("BT-132", "Referenced purchase order line reference");
     public static readonly Term LineAccountingReference = new("BT-133", "Invoice line buyer accounting reference");
     public static readonly Term SellersItemId = new("BT-155", "Item seller's identifier");
@@ -56,7 +67,12 @@ public static class InvoiceFieldAliases
         [BuyerAccountingReference] = new[] { "buyerAccountingReference", "costCenter", "kostenstelle", "BT-19" },
         [PrecedingInvoiceNumber] = new[] { "precedingInvoiceReference", "precedingInvoiceNumber", "originalInvoiceNumber", "correctedInvoiceNumber", "ursprungsrechnung", "BT-25" },
         [PrecedingInvoiceDate] = new[] { "precedingInvoiceDate", "originalInvoiceDate", "BT-26" },
+        [ShipToName] = new[] { "deliveryName", "shipToName", "deliverToName", "lieferanschriftName", "BT-70" },
         [DeliveryDate] = new[] { "deliveryDate", "actualDeliveryDate", "lieferdatum", "leistungsdatum", "BT-72" },
+        [ShipToStreet] = new[] { "deliveryStreet", "shipToStreet", "deliverToStreet", "lieferanschriftStrasse", "BT-75" },
+        [ShipToCity] = new[] { "deliveryCity", "shipToCity", "deliverToCity", "lieferanschriftOrt", "BT-77" },
+        [ShipToPostcode] = new[] { "deliveryPostcode", "deliveryZipCode", "deliveryZip", "shipToPostcode", "lieferanschriftPlz", "BT-78" },
+        [ShipToCountry] = new[] { "deliveryCountry", "shipToCountry", "deliverToCountry", "lieferanschriftLand", "BT-80" },
         [RemittanceInformation] = new[] { "remittanceInformation", "paymentReference", "verwendungszweck", "BT-83" },
         [AccountName] = new[] { "bankAccountHolder", "accountName", "kontoinhaber", "BT-85" },
         [Bic] = new[] { "bankSwift", "bic", "swift", "swiftCode", "BT-86" },
@@ -65,6 +81,12 @@ public static class InvoiceFieldAliases
     private static readonly Dictionary<string, Term> Line = Build(new()
     {
         [LineNote] = new[] { "lineNote", "note", "notiz", "BT-127" },
+        [LineAllowanceAmount] = new[] { "lineDiscountAmount", "lineAllowanceAmount", "positionsrabatt", "BT-136" },
+        [LineAllowanceReason] = new[] { "lineDiscountReason", "lineAllowanceReason", "BT-139" },
+        [LineChargeAmount] = new[] { "lineChargeAmount", "lineSurchargeAmount", "positionszuschlag", "BT-141" },
+        [LineChargeReason] = new[] { "lineChargeReason", "lineSurchargeReason", "BT-144" },
+        [PricePerBaseQuantity] = new[] { "priceUnitPrice", "pricePerPriceUnit", "pricePerBaseQuantity", "preisProPreiseinheit", "BT-146" },
+        [PriceBaseQuantity] = new[] { "priceUnit", "priceBaseQuantity", "basisQuantity", "preiseinheit", "BT-149" },
         [OrderLineReference] = new[] { "orderLineReference", "purchaseOrderLine", "purchaseOrderLineReference", "bestellposition", "BT-132" },
         [LineAccountingReference] = new[] { "lineAccountingReference", "buyerAccountingReference", "costCenter", "kostenstelle", "BT-133" },
         [SellersItemId] = new[] { "itemId", "itemNumber", "sellersItemIdentifier", "artikelnummer", "BT-155" },
