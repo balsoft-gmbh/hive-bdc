@@ -133,6 +133,7 @@ public sealed class AxDocument
     public decimal CashDiscountAmount { get; set; }
 
     /// <summary>Single cash discount: days after the issue date; 0 = derive from CashDiscountDate.</summary>
+    [JsonConverter(typeof(TolerantInt32Converter))]
     public int CashDiscountDays { get; set; }
 
     /// <summary>Chained cash discounts (e.g. 3 % within 10 days, 2 % within 20 days). Takes precedence over the flat fields when present.</summary>
@@ -198,6 +199,7 @@ public sealed class AxCashDiscount
     public decimal Amount { get; set; }
 
     /// <summary>Days after the issue date; 0 = derive from <see cref="Date"/>.</summary>
+    [JsonConverter(typeof(TolerantInt32Converter))]
     public int Days { get; set; }
 }
 
@@ -225,6 +227,23 @@ public sealed class AxLineItem
     /// <summary>Every line key not bound above (itemId, gtin, order line reference, ...), read by the e-invoice mapper.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement> Extra { get; set; } = new();
+}
+
+/// <summary>Parses an integer from a JSON number or a string ("25", "25.00"); AX exports numbers as text.</summary>
+public sealed class TolerantInt32Converter : JsonConverter<int>
+{
+    public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+            return reader.TryGetInt32(out int i) ? i : (int)Math.Round(reader.GetDecimal(), MidpointRounding.AwayFromZero);
+        if (reader.TokenType == JsonTokenType.String)
+            return (int)Math.Round(TolerantDecimalConverter.ParseDecimal(reader.GetString()), MidpointRounding.AwayFromZero);
+        if (reader.TokenType == JsonTokenType.Null)
+            return 0;
+        throw new JsonException($"Cannot convert {reader.TokenType} to an integer.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
 }
 
 /// <summary>Parses a decimal from a JSON number or a string ('.' or ',' decimal).</summary>

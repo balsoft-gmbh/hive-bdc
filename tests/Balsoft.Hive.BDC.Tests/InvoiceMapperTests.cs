@@ -45,6 +45,106 @@ public class InvoiceMapperTests
         Assert.Equal(20m, discount.NetPrice);
     }
 
+    // ── 1.1.0: price base quantity, line charge / discount, deliver-to, Skonto percent, "st" ──
+
+    [Fact]
+    public void PriceUnitAndLineChargeReproduceTheErpLineAmount()
+    {
+        // AX 2009 customer invoice: 2000 pieces at 60.45 per 100 plus a 315.00 line surcharge = 1524.00,
+        // and a plain 2000 at 50.00 per 100 = 1000.00; the ERP totals are 2524.00 / 479.56 / 3003.56.
+        var mapped = InvoiceMapper.Map(Invoice("", """
+            [ { "description": "Formteil", "quantity": "2000.00", "unit": "st", "unitPrice": "0.6045",
+                "priceUnit": "100.00", "priceUnitPrice": "60.45", "lineChargeAmount": "315.00", "lineChargeReason": "Zuschlag" },
+              { "description": "Werkzeugamortisation", "quantity": "2000.00", "unit": "st", "unitPrice": "0.5000",
+                "priceUnit": "100.00", "priceUnitPrice": "50.00" } ]
+            """));
+        var first = mapped.Lines[0];
+        Assert.Equal(60.45m, first.NetPrice);
+        Assert.Equal(100m, first.PriceBaseQuantity);
+        Assert.Equal(UnitCode.Piece, first.UnitCode);
+        var charge = Assert.Single(first.AllowancesAndCharges);
+        Assert.True(charge.IsCharge);
+        Assert.Equal(315m, charge.Amount);
+        Assert.Equal("Zuschlag", charge.Reason);
+        Assert.Equal(1524m, InvoiceCalculator.LineNetAmount(first));
+        var totals = mapped.CalculateTotals();
+        Assert.Equal(2524m, totals.LineNetTotal);
+        Assert.Equal(479.56m, totals.VatTotal);
+        Assert.Equal(3003.56m, totals.TaxInclusiveAmount);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.Contains("<ram:BasisQuantity unitCode=\"H87\">100</ram:BasisQuantity>", xml);
+        Assert.Contains("<ram:ChargeIndicator>", xml);
+    }
+
+    [Fact]
+    public void PriceUnitWithoutAPerBasePriceScalesTheUnitPrice()
+    {
+        var mapped = InvoiceMapper.Map(Invoice("", """
+            [ { "description": "A", "quantity": "31680", "unitPrice": "0.0335", "priceUnit": "100" } ]
+            """));
+        Assert.Equal(3.35m, mapped.Lines[0].NetPrice);
+        Assert.Equal(100m, mapped.Lines[0].PriceBaseQuantity);
+        Assert.Equal(1061.28m, mapped.CalculateTotals().LineNetTotal);
+    }
+
+    [Fact]
+    public void LineDiscountIsAnAllowanceAndKeepsTheLineAddingUp()
+    {
+        var mapped = InvoiceMapper.Map(Invoice("", """
+            [ { "description": "A", "quantity": "10", "unitPrice": "100", "lineDiscountAmount": "50.00" } ]
+            """));
+        var allowance = Assert.Single(mapped.Lines[0].AllowancesAndCharges);
+        Assert.False(allowance.IsCharge);
+        Assert.Equal(50m, allowance.Amount);
+        Assert.Equal("Rabatt", allowance.Reason);
+        Assert.Equal(950m, mapped.CalculateTotals().LineNetTotal);
+    }
+
+    [Fact]
+    public void DeliverToAddressIsWrittenWithItsCountry()
+    {
+        var mapped = InvoiceMapper.Map(Invoice(""", "deliveryName": "Lager Süd GmbH", "deliveryStreet": "Werk 1\nIndustriestraße 5", "deliveryPostcode": "12345", "deliveryCity": "Musterstadt", "deliveryCountry": "DE" """));
+        Assert.Equal("Lager Süd GmbH", mapped.Delivery!.PartyName);
+        Assert.Equal("Werk 1", mapped.Delivery.Address!.Line1);
+        Assert.Equal("Industriestraße 5", mapped.Delivery.Address.Line2);
+        Assert.Equal("12345", mapped.Delivery.Address.PostCode);
+        Assert.Equal("DE", mapped.Delivery.Address.CountryCode);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.Contains("<ram:ShipToTradeParty>", xml);
+        Assert.Contains("<ram:CountryID>DE</ram:CountryID>", xml);
+    }
+
+    [Fact]
+    public void DeliverToCountryFallsBackToTheBuyerCountryAndIsAbsentWithoutAnyField()
+    {
+        var withName = InvoiceMapper.Map(Invoice(""", "deliveryName": "Lager Nord" """));
+        Assert.Equal("DE", withName.Delivery!.Address!.CountryCode);
+        var without = InvoiceMapper.Map(Invoice());
+        Assert.Null(without.Delivery!.Address);
+        Assert.Null(without.Delivery.PartyName);
+    }
+
+    [Fact]
+    public void CashDiscountPercentIsDerivedFromTheAmountWhenMissing()
+    {
+        // 2 x 150 = 300 net, 357 gross; 10.71 is 3 % of the gross total.
+        var warnings = new List<string>();
+        var mapped = InvoiceMapper.Map(Invoice(""", "cashDiscountDate": "2026-10-01", "cashDiscountAmount": "10.71" """), warnings.Add);
+        Assert.Contains("3 % Skonto (10.71 EUR)", mapped.PaymentTerms);
+        var discount = Assert.Single(mapped.CashDiscounts);
+        Assert.Equal(3m, discount.Percent);
+        Assert.Equal(9, discount.Days);
+        Assert.DoesNotContain(warnings, w => w.Contains("Skonto") || w.Contains("cash discount"));
+    }
+
+    [Fact]
+    public void CashDiscountPercentFromTheErpWins()
+    {
+        var mapped = InvoiceMapper.Map(Invoice(""", "cashDiscountDate": "2026-10-01", "cashDiscountAmount": "10.71", "cashDiscountPercent": "3.00", "cashDiscountDays": "25" """));
+        Assert.Contains("3 % Skonto", mapped.PaymentTerms);
+        Assert.Equal(25, Assert.Single(mapped.CashDiscounts).Days);
+    }
+
     private static AxDocument Invoice(string extraJson = "", string lines = """
         [ { "description": "A", "quantity": "2", "unit": "piece", "unitPrice": "150.00" } ]
         """) => AxDocument.Parse($$"""
