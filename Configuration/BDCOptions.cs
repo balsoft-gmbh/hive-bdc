@@ -171,13 +171,23 @@ public sealed class BDCOptions
     /// <summary>All company entries of all types.</summary>
     public IEnumerable<DocumentRoute> AllRoutes() => DocumentTypes.SelectMany(t => t.Companies);
 
+    /// <summary>Company entries of ENABLED types only: the ones that can actually deliver anything.</summary>
+    public IEnumerable<DocumentRoute> ActiveRoutes() => DocumentTypes.Where(t => t.Enabled).SelectMany(t => t.Companies);
+
     /// <summary>Distinct dataAreaIds across every type, in first-seen order.</summary>
     public IReadOnlyList<string> CompanyIds()
         => AllRoutes().Select(r => r.DataAreaId).Where(id => id.Length > 0)
                       .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-    /// <summary>Whether any company entry uploads to SharePoint (=> the shared uploader is needed).</summary>
-    public bool AnySharePointEnabled() => AllRoutes().Any(r => r.SharePoint.Enabled);
+    /// <summary>
+    /// Whether any company entry of an ENABLED type uploads to SharePoint (=> the shared uploader
+    /// is needed). A disabled type never delivers, so its SharePoint flag must not pull up the
+    /// Graph client or report "SharePoint on".
+    /// </summary>
+    public bool AnySharePointEnabled() => ActiveRoutes().Any(r => r.SharePoint.Enabled);
+
+    /// <summary>Company entries of enabled types that upload to SharePoint.</summary>
+    public int SharePointEntryCount() => ActiveRoutes().Count(r => r.SharePoint.Enabled);
 }
 
 /// <summary>

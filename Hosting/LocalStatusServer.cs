@@ -152,11 +152,11 @@ public sealed partial class LocalStatusServer : BackgroundService
             companies = opts.CompanyIds().Select(id => new
             {
                 dataAreaId = id,
-                sharePointEnabled = opts.AllRoutes().Any(r => string.Equals(r.DataAreaId, id, StringComparison.OrdinalIgnoreCase) && r.SharePoint.Enabled),
+                sharePointEnabled = opts.ActiveRoutes().Any(r => string.Equals(r.DataAreaId, id, StringComparison.OrdinalIgnoreCase) && r.SharePoint.Enabled),
             }).ToArray(),
             folderCount = opts.ScanFolders().Count,
             pollSeconds = opts.PollSeconds,
-            sharePoint = opts.AnySharePointEnabled(),   // any entry uploading
+            sharePoint = opts.AnySharePointEnabled(),   // any entry of an enabled type uploading
             documentTypeCount = opts.DocumentTypes.Count,
             documentTypes = opts.DocumentTypes.Select(t => new
             {
