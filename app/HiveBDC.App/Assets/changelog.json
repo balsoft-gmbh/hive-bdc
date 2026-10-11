@@ -2,6 +2,15 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.0.2",
+      "date": "2026-10-11",
+      "changes": [
+        "A document type that is disabled no longer has its input folder scanned. The installer default folder (C:\\Temp\\HiveBDC) on a type you never enabled caused an access error every 30 seconds; a folder shared with an enabled type is still scanned, and a disabled type's pairs dropped there go to the error folder as before.",
+        "SharePoint upload on a disabled document type no longer starts the SharePoint connection or shows SharePoint as on. Enabling or disabling a type applies on the next scan without a restart.",
+        "Settings, Document types: \"Import columns…\" moved next to the column templates of the company entry and imports the SharePoint target and columns for exactly that type and company from the file."
+      ]
+    },
+    {
       "version": "1.0.0",
       "date": "2026-10-11",
       "changes": [

@@ -162,10 +162,8 @@
                     <DockPanel Grid.Column="0" Margin="0,0,12,0" LastChildFill="True">
                         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
                             <Button Content="Add type" Command="{Binding AddDocumentTypeCommand}" Padding="12,4" Margin="0,0,6,0"/>
-                            <Button Content="Remove" Command="{Binding RemoveDocumentTypeCommand}" Padding="12,4" Margin="0,0,6,0"
+                            <Button Content="Remove" Command="{Binding RemoveDocumentTypeCommand}" Padding="12,4"
                                     IsEnabled="{Binding HasDocumentTypeSelection}"/>
-                            <Button Content="Import columns…" Command="{Binding ImportFieldTemplatesCommand}" Padding="12,4"
-                                    ToolTip="Import SharePoint targets and column templates for the company entries from a HiveBDC.SharePointFields JSON file. Review, then Save."/>
                         </StackPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,6"
                                    Text="Each type lists the companies it is picked up for. A type the ERP sends that is not here is added automatically, routed like the folder it arrived in, and marked auto-registered."/>
@@ -317,7 +315,11 @@
                                                                 <TextBlock Text="Column templates (SharePoint column → value)" Foreground="#6B7280" FontSize="12" VerticalAlignment="Center"/>
                                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                                                     <Button Content="Add row" Command="{Binding AddColumnCommand}" Padding="10,3" Margin="0,0,6,0"/>
-                                                                    <Button Content="Remove" Command="{Binding RemoveColumnCommand}" Padding="10,3"/>
+                                                                    <Button Content="Remove" Command="{Binding RemoveColumnCommand}" Padding="10,3" Margin="0,0,6,0"/>
+                                                                    <Button Content="Import columns…" Padding="10,3"
+                                                                            Command="{Binding DataContext.ImportFieldTemplatesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            ToolTip="Import the SharePoint target and column templates for THIS type and company from a HiveBDC.SharePointFields JSON file. Review, then Save."/>
                                                                 </StackPanel>
                                                             </Grid>
                                                             <DataGrid ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn}"

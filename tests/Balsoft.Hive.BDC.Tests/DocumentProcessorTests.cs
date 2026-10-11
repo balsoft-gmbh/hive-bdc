@@ -89,6 +89,48 @@ public sealed class DocumentProcessorTests : IDisposable
     }
 
     [Fact]
+    public void DisabledTypeFolderIsNeitherCreatedNorScanned()
+    {
+        // Customer install 2026-10-11: disabled types kept the installer default folder and every poll
+        // failed on it. A folder only a disabled type points at must not even be touched.
+        var a = Route("A"); var options = Options(a);
+        string quotes = Path.Combine(_root, "quotes-not-created");
+        // Normalize() seeds every built-in type; disable the real SalesQuotation like a customer would.
+        var quoteType = options.DocumentTypes.Single(t => t.Id == "SalesQuotation");
+        quoteType.Enabled = false; quoteType.Mail = false;
+        quoteType.Companies.Add(new DocumentRoute { DataAreaId = "A", Input = quotes });
+        Pair(a, "order", "A");
+
+        var result = Scan(options);
+
+        Assert.Equal(1, result.Processed);
+        Assert.Equal(0, result.Errors);
+        Assert.False(Directory.Exists(quotes));
+        Assert.Single(options.ScanFolders());
+    }
+
+    [Fact]
+    public void DisabledTypePairInASharedFolderGoesToErrorWhileTheEnabledTypeFlows()
+    {
+        var a = Route("A"); var options = Options(a);
+        var quoteType = options.DocumentTypes.Single(t => t.Id == "SalesQuotation");
+        quoteType.Enabled = false; quoteType.Mail = false;
+        quoteType.Companies.Add(new DocumentRoute { DataAreaId = "A", Input = a.Input });
+        Pair(a, "order", "A");
+        string quote = Path.Combine(a.Input, "quote_1.json");
+        File.WriteAllText(quote, JsonSerializer.Serialize(new { documentType = "SalesQuotation", dataAreaId = "A" }));
+        File.WriteAllText(Path.ChangeExtension(quote, ".pdf"), "Synthetic quotation PDF");
+
+        var result = Scan(options);
+
+        Assert.Equal(1, result.Processed);
+        Assert.Equal(1, result.Errors);
+        Assert.True(File.Exists(Path.Combine(a.Input, "error", "quote_1.json")));
+        Assert.False(File.Exists(quote));
+        Assert.False(File.Exists(Path.Combine(a.Input, "out", "SalesQuotation", "quote.pdf")));
+    }
+
+    [Fact]
     public void LatePdfIsProcessedOnNextScan()
     {
         var a = Route("A"); var options = Options(a);

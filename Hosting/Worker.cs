@@ -67,7 +67,7 @@ public sealed class Worker : BackgroundService
     /// object it was built from, so a corrected secret would otherwise never reach it and the
     /// service would keep authenticating with the old one until it was restarted.
     /// </summary>
-    private static string SharePointSignature(BDCOptions o)
+    internal static string SharePointSignature(BDCOptions o)
     {
         var a = o.SharePointAuth;
         var parts = new List<string> { a.TenantId, a.ClientId, SecretFingerprint(a.ClientSecret) };
@@ -77,12 +77,12 @@ public sealed class Worker : BackgroundService
                 var sp = r.SharePoint;
                 string fields = string.Join(";",
                     sp.Fields.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value));
-                parts.Add(string.Join("~", t.Id, r.DataAreaId, sp.Enabled, sp.SiteUrl, sp.Library, sp.Folder, fields));
+                parts.Add(string.Join("~", t.Id, t.Enabled, r.DataAreaId, sp.Enabled, sp.SiteUrl, sp.Library, sp.Folder, fields));
             }
         return string.Join("|", parts);
     }
 
-    /// <summary>Whether any company entry has SharePoint upload enabled (=> a shared uploader is needed).</summary>
+    /// <summary>Whether any company entry of an enabled type uploads to SharePoint (=> a shared uploader is needed).</summary>
     private static bool AnySharePointEnabled(BDCOptions o) => o.AnySharePointEnabled();
 
     /// <summary>
@@ -114,7 +114,7 @@ public sealed class Worker : BackgroundService
         _log.LogInformation(
             "Hive BDC service started. companies={Companies} documentTypes={Types} poll={Poll}s sharepoint={SharePoint}",
             opts.CompanyIds().Count, opts.DocumentTypes.Count, opts.PollSeconds,
-            uploader is null ? "off" : opts.AllRoutes().Count(r => r.SharePoint.Enabled) + " entr(y/ies) on");
+            uploader is null ? "off" : opts.SharePointEntryCount() + " entr(y/ies) on");
 
         LogMailConfig(opts, mailer);
         LogDocumentTypes(opts);
@@ -135,7 +135,7 @@ public sealed class Worker : BackgroundService
                     spSignature = sig;
                     _log.LogInformation(
                         "SharePoint configuration changed — export is now {State}.",
-                        uploader is null ? "OFF" : "ON (" + opts.AllRoutes().Count(r => r.SharePoint.Enabled) + " entr(y/ies))");
+                        uploader is null ? "OFF" : "ON (" + opts.SharePointEntryCount() + " entr(y/ies))");
                 }
 
                 // Same for mail: rebuild the sender when the mail config changed since last cycle.

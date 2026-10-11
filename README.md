@@ -52,7 +52,9 @@ on the spot as a PDF pass-through (party from the JSON's `party`, else
 Customer; mail on) with the same company entry as the folder it arrived in, logs
 a warning, and processes it. It appears in Settings marked **auto-registered**
 until you save it. A type you never want processed is set to disabled; its pairs
-then go to `error\` with that reason.
+then go to `error\` with that reason. An input folder that only disabled types
+point at is not scanned at all, so the installer default on an unused type
+causes no errors.
 
 ## How dispatch works
 
@@ -302,10 +304,13 @@ the site) and a client secret. The secret is stored **DPAPI-encrypted**
 
 ### Importing column templates
 
-Settings, Document types, **Import columns…** reads a JSON file that sets the
-SharePoint target and column templates of many company entries at once, so
-nobody types internal column names by hand. Typically it is prepared from the
-customer's real library columns (Graph `GET /sites/{id}/lists/{id}/columns`).
+Settings, Document types, select the type and the company entry, then
+**Import columns…** in that entry's SharePoint card reads a JSON file and
+applies the entry for exactly that type and company (target and column
+templates), so nobody types internal column names by hand. One file can carry
+every type and company of a customer; each company entry imports its own part
+from it. Typically it is prepared from the customer's real library columns
+(Graph `GET /sites/{id}/lists/{id}/columns`).
 
 ```jsonc
 {

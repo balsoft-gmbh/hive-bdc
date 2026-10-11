@@ -187,6 +187,42 @@ public static class SharePointFieldImport
         return new SharePointFieldImportResult(applied, skipped);
     }
 
+    /// <summary>
+    /// Apply only the file entry for one document type and company to <paramref name="route"/>:
+    /// the per-company "Import columns…" in Settings. Every other entry in the file is ignored,
+    /// so one customer file can carry all types and companies and each entry imports its part.
+    /// A missing entry is reported as skipped together with what the file does contain.
+    /// </summary>
+    public static SharePointFieldImportResult ApplyTo(SharePointFieldImportFile file, string typeId, ISharePointFieldImportRoute route)
+    {
+        string id = (typeId ?? "").Trim();
+        string area = (route.DataAreaId ?? "").Trim();
+        string scope = $"{(id.Length == 0 ? "(no id yet)" : id)} / {(area.Length == 0 ? "(no company yet)" : area)}";
+
+        var entry = file.DocumentTypes
+            .Where(t => string.Equals(t.Id.Trim(), id, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(t => t.Companies)
+            .FirstOrDefault(c => string.Equals(c.DataAreaId.Trim(), area, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            var available = file.DocumentTypes
+                .SelectMany(t => t.Companies.Select(c => $"{t.Id.Trim()} / {c.DataAreaId.Trim()}"))
+                .ToList();
+            return new SharePointFieldImportResult(Array.Empty<string>(), new[]
+            {
+                $"The file has no entry for {scope}. It contains: " +
+                (available.Count == 0 ? "no company entries." : string.Join(", ", available) + "."),
+            });
+        }
+
+        var scoped = new SharePointFieldImportFile
+        {
+            Format = file.Format, Version = file.Version, Description = file.Description,
+            DocumentTypes = { new SharePointFieldImportType { Id = id, Companies = { entry } } },
+        };
+        return Apply(scoped, new[] { new SharePointFieldImportScope(id, new[] { route }) });
+    }
+
     /// <summary>The field map an import sets: trimmed column names, null templates as "", last duplicate wins.</summary>
     public static Dictionary<string, string> CleanFields(IReadOnlyDictionary<string, string> fields)
     {

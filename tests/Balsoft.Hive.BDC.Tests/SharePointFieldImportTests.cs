@@ -64,6 +64,35 @@ public class SharePointFieldImportTests
     }
 
     [Fact]
+    public void ApplyToOneCompanyTouchesOnlyThatEntry()
+    {
+        Assert.True(SharePointFieldImport.TryParse(ValidFile, out var file, out _));
+        var r001 = new FakeRoute("001");
+
+        var result = SharePointFieldImport.ApplyTo(file!, " SalesInvoice ", r001);
+
+        Assert.Single(result.Applied);
+        Assert.Empty(result.Skipped);                      // the other entries in the file are not "skipped", they are not in scope
+        Assert.Equal("SalesInvoices", r001.Library);
+        Assert.Equal(new Dictionary<string, string> { ["Title"] = "{invoiceNumber}", ["CompanyCode"] = "001" }, r001.Fields);
+    }
+
+    [Fact]
+    public void ApplyToReportsAMissingEntryWithWhatTheFileContains()
+    {
+        Assert.True(SharePointFieldImport.TryParse(ValidFile, out var file, out _));
+        var r = new FakeRoute("agr");
+
+        var result = SharePointFieldImport.ApplyTo(file!, "SalesInvoice", r);
+
+        Assert.Empty(result.Applied);
+        var note = Assert.Single(result.Skipped);
+        Assert.Contains("no entry for SalesInvoice / agr", note);
+        Assert.Contains("salesinvoice / 001, salesinvoice / 002, PaymentAdvice / 001", note);
+        Assert.Equal("OldLibrary", r.Library);             // untouched
+    }
+
+    [Fact]
     public void EmptyFieldsObjectClearsTheTemplates()
     {
         Assert.True(SharePointFieldImport.TryParse(ValidFile, out var file, out _));

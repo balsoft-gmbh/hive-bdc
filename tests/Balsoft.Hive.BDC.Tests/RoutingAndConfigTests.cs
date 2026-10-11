@@ -81,6 +81,40 @@ public class RoutingAndConfigTests
     }
 
     [Fact]
+    public void FolderUsedOnlyByDisabledTypesIsNotScanned()
+    {
+        // Customer install 2026-10-11: five disabled types kept the installer default C:\Temp\HiveBDC and
+        // the service polled it every 30 s into an access-denied error.
+        var invoice = new DocumentTypeOptions { Id = "SalesInvoice", Companies = { Route("agr", @"\\share\E-Invoice") } };
+        var confirm = new DocumentTypeOptions { Id = "SalesConfirmation", Enabled = false, Companies = { Route("default", @"C:\Temp\HiveBDC") } };
+        var po = new DocumentTypeOptions { Id = "PurchaseOrder", Enabled = false, Companies = { Route("default", @"C:\Temp\HiveBDC") } };
+        var quote = new DocumentTypeOptions { Id = "SalesQuotation", Enabled = false, Companies = { Route("agr", @"\\share\E-Invoice") } };
+
+        var folders = ScanFolder.Build(new[] { invoice, confirm, po, quote });
+
+        var shared = Assert.Single(folders);
+        Assert.Equal(@"\\share\E-Invoice", shared.Path);
+        Assert.Equal(2, shared.Routes.Count);   // the disabled type sharing the folder keeps its route (pairs go to error\)
+        Assert.Null(shared.ImpliedTypeId);
+    }
+
+    [Fact]
+    public void SharePointOnADisabledTypeDoesNotCountAsEnabled()
+    {
+        var o = new BDCOptions();
+        o.DocumentTypes.Add(new DocumentTypeOptions { Id = "SalesInvoice", Companies = { Route("agr", @"C:\in") } });
+        o.DocumentTypes.Add(new DocumentTypeOptions { Id = "PurchaseOrder", Enabled = false, Companies = { Route("agr", @"C:\po", sp: true) } });
+
+        Assert.False(o.AnySharePointEnabled());
+        Assert.Equal(0, o.SharePointEntryCount());
+        Assert.DoesNotContain(o.ActiveRoutes(), r => r.SharePoint.Enabled);
+
+        o.DocumentTypes[1].Enabled = true;
+        Assert.True(o.AnySharePointEnabled());
+        Assert.Equal(1, o.SharePointEntryCount());
+    }
+
+    [Fact]
     public void DiscoveredTypeCopiesTheSeedRouteWithoutItsOutput()
     {
         var seed = Route("eco", @"C:\in", sp: true); seed.Output = @"C:\out\SalesInvoice";

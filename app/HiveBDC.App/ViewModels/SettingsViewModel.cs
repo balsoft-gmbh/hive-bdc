@@ -157,17 +157,26 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     // ── SharePoint field template import ──────────────────────────────────────
 
-    /// <summary>What the last import could not place (type or company not configured here).</summary>
+    /// <summary>What the last import could not place (the file has no entry for the selected company).</summary>
     public ObservableCollection<string> ImportNotes { get; } = new();
 
     /// <summary>
-    /// Read a "HiveBDC.SharePointFields" file and apply its SharePoint targets and column
-    /// templates to the matching company entries in this form. Nothing is saved: the user
-    /// reviews the result and saves as usual, so the normal validation still runs.
+    /// Read a "HiveBDC.SharePointFields" file and apply the entry for the selected document type
+    /// and company (<paramref name="row"/>, the button sits in that company's SharePoint card) to
+    /// the form. Other entries in the file are left alone: the import is per company, like the
+    /// column rows it fills. Nothing is saved: the user reviews the result and saves as usual,
+    /// so the normal validation still runs.
     /// </summary>
     [RelayCommand]
-    private void ImportFieldTemplates()
+    private void ImportFieldTemplates(RouteRow? row)
     {
+        if (row is null) return;
+        var owner = DocumentTypes.FirstOrDefault(t => t.Companies.Contains(row)) ?? SelectedDocumentType;
+        if (owner is null) return;
+        string typeId = owner.Id.Trim();
+        string area = row.DataAreaId.Trim();
+        string scopeLabel = $"{(typeId.Length == 0 ? "(no id yet)" : typeId)} / {(area.Length == 0 ? "(no company yet)" : area)}";
+
         var dlg = new OpenFileDialog
         {
             Title = "Import SharePoint field templates",
@@ -195,17 +204,24 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        var scopes = DocumentTypes.Select(t => new SharePointFieldImportScope(t.Id, t.Companies.ToList<ISharePointFieldImportRoute>()));
-        var result = SharePointFieldImport.Apply(file!, scopes);
+        // Only the entry for this type and company is applied; the rest of the file is ignored.
+        var result = SharePointFieldImport.ApplyTo(file!, typeId, row);
         foreach (var s in result.Skipped) ImportNotes.Add(s);
+        if (result.Applied.Count == 0)
+        {
+            AppLog.Warn($"Import SharePoint field templates ({Path.GetFileName(dlg.FileName)}): nothing for {scopeLabel} — " + string.Join(" | ", result.Skipped));
+            StatusMessage = $"Nothing imported: the file has no entry for {scopeLabel}.";
+            StatusIsError = true;
+            return;
+        }
 
-        AppLog.Info($"Imported SharePoint field templates from {Path.GetFileName(dlg.FileName)} — applied: " +
+        AppLog.Info($"Imported SharePoint field templates from {Path.GetFileName(dlg.FileName)} for {scopeLabel} — applied: " +
                     (result.Applied.Count == 0 ? "none" : string.Join("; ", result.Applied)) +
                     (result.Skipped.Count == 0 ? "" : $"; skipped {result.Skipped.Count}."));
         int n = result.Applied.Count;
         StatusMessage = n == 0
-            ? "Nothing imported: no document type / company in the file matches this configuration."
-            : $"Imported {n} company entr{(n == 1 ? "y" : "ies")}{(result.Skipped.Count > 0 ? $", {result.Skipped.Count} skipped" : "")}. Review, then Save.";
+            ? $"Nothing imported for {scopeLabel}."
+            : $"Imported the SharePoint target and columns for {scopeLabel}. Review, then Save.";
         StatusIsError = n == 0;
     }
 

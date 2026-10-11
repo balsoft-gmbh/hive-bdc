@@ -198,7 +198,11 @@ public static class DocumentTypeCatalog
 /// <summary>
 /// One folder the service scans, with every (type, company entry) that points at it. A
 /// folder used by exactly one document type implies that type for a JSON that carries no
-/// documentType.
+/// documentType. A folder that only disabled types point at is not scanned at all: the
+/// installer default (C:\Temp\HiveBDC) stays on every type a customer never configured,
+/// and polling it only produced access-denied errors every cycle (customer install, 2026-10-11).
+/// A folder shared with an enabled type is still scanned, so a disabled type's pairs
+/// dropped there go to error\ with that reason.
 /// </summary>
 public sealed record ScanFolder(string Path, IReadOnlyList<(DocumentTypeOptions Type, DocumentRoute Route)> Routes)
 {
@@ -214,7 +218,7 @@ public sealed record ScanFolder(string Path, IReadOnlyList<(DocumentTypeOptions 
         }
     }
 
-    /// <summary>Build the distinct scan folders for every enabled-or-not type's company entries.</summary>
+    /// <summary>Build the distinct scan folders; a folder used only by disabled types is left out.</summary>
     public static IReadOnlyList<ScanFolder> Build(IEnumerable<DocumentTypeOptions> types)
     {
         static string Key(string p) => System.IO.Path.GetFullPath(p).TrimEnd('\\', '/').ToLowerInvariant();
@@ -228,6 +232,9 @@ public sealed record ScanFolder(string Path, IReadOnlyList<(DocumentTypeOptions 
                 if (!byFolder.TryGetValue(k, out var e)) byFolder[k] = e = (r.Input, new());
                 e.Routes.Add((t, r));
             }
-        return byFolder.Values.Select(e => new ScanFolder(e.Path, e.Routes)).ToList();
+        return byFolder.Values
+            .Where(e => e.Routes.Any(r => r.Item1.Enabled))
+            .Select(e => new ScanFolder(e.Path, e.Routes))
+            .ToList();
     }
 }

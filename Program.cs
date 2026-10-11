@@ -174,8 +174,8 @@ if (dumpTarget is not null)
 
 if (testSharePoint)
 {
-    // Test the shared auth, resolving the first SharePoint-enabled company entry's target if there is one.
-    var testTarget = opts.AllRoutes()
+    // Test the shared auth, resolving the first SharePoint-enabled company entry (of an enabled type) if there is one.
+    var testTarget = opts.ActiveRoutes()
         .Where(r => r.SharePoint.Enabled)
         .Select(r => r.SharePoint.ResolveTarget(out _))
         .FirstOrDefault(t => t is not null);
