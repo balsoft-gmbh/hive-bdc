@@ -142,8 +142,8 @@ JSON keys that did not go into the XML.
 Handlers:
 
 - **EInvoice** — `eInvoiceType = xrechnung` writes `{documentNumber}.xml` (EN 16931 /
-  XRechnung 3.0, CII syntax); `eInvoiceType = zugferd` writes `{documentNumber}.pdf`
-  (PDF/A-3 carrier with the same CII XML embedded, ZUGFeRD 2.x profile). The
+  XRechnung 3.0.2, CII syntax); `eInvoiceType = zugferd` writes `{documentNumber}.pdf`
+  (PDF/A-3 carrier with the same CII XML embedded, ZUGFeRD 2.5.2 / Factur-X 1.09.2, profile XRECHNUNG). The
   mapping recomputes amounts from `quantity × unitPrice` + a single header
   `vatRate`, tax category `S` (or `E` at rate 0), a country-name → ISO map, and a
   unit-code map. An ERP that exports a price per price-unit must divide it out
