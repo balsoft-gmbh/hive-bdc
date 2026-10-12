@@ -292,8 +292,10 @@ Microsoft Graph, and metadata columns are stamped from the document JSON. The
 **target lives in the settings, not in the JSON**.
 
 Prerequisite: an Entra ID app registration in the target tenant with the
-**application** permission `Sites.ReadWrite.All` (or `Sites.Selected` granted on
-the site) and a client secret. The secret is stored **DPAPI-encrypted**
+**application** permission `Sites.Selected` granted on the sites (or
+`Sites.ReadWrite.All`) and a client secret; `scripts\New-HiveBDCSharePointApp.ps1` and
+`scripts\Grant-HiveBDCSharePointAccess.ps1` set it up (see
+[App registrations](#app-registrations)). The secret is stored **DPAPI-encrypted**
 (`enc:...`, machine-bound) and is never returned by the status API.
 
 - `Fields` (dashboard: the **Column templates** table of the company entry) maps SharePoint **internal** column names to templates. `{property}`
@@ -362,15 +364,63 @@ client ID and secret, and the test recipients. Mail can be switched off per docu
 **Test mail** checks the app registration and the mailbox without sending anything, and
 `HiveBDC.exe --test-mail` does the same from the console.
 
-Prerequisite: an Entra ID app registration with the **application** permission `Mail.Send`
-(a separate registration from the SharePoint one). Scope it to the one sending mailbox with
-an [application access policy](https://learn.microsoft.com/graph/auth-limit-mailbox-access);
-`scripts\New-HiveBDCMailApp.ps1` and `scripts\Grant-HiveBDCMailAccess.ps1` do both.
+Prerequisite: an Entra ID app registration (separate from the SharePoint one) that may send
+as exactly one mailbox, through the Exchange role `Application Mail.Send` limited to that
+mailbox; `scripts\New-HiveBDCMailApp.ps1` and `scripts\Grant-HiveBDCMailAccess.ps1`
+set it up (see
+[App registrations](#app-registrations)).
 
 A failed mail request moves the pair to `<Input>\error\` and
 nothing is metered, so dropping it back into the input folder retries it. Missing mail
 configuration holds the pair in the input folder instead. A document with
 no recipient at all is not an error; it is logged and skipped.
+
+## App registrations
+
+Hive BDC uses two app registrations in the customer tenant, one for SharePoint and one
+for mail, so each holds only the permission it needs. Each is set up in two steps, which
+different administrators can do:
+
+1. **Create the app registration**, without any permission: `New-HiveBDCSharePointApp.ps1`
+   creates "Hive BDC SharePoint", `New-HiveBDCMailApp.ps1` creates "Hive BDC Mail". Each prints
+   its client ID. Role: Application Administrator.
+2. **Assign the permissions** to that client ID:
+
+| Script | Permission | Narrowed to | Role |
+|---|---|---|---|
+| `Grant-HiveBDCSharePointAccess.ps1 -AppId ... -SiteUrl ...` | `Sites.Selected` with admin consent (`-AllSites`: `Sites.ReadWrite.All`) | write on each `-SiteUrl` | Global or Privileged Role Administrator, SharePoint Administrator |
+| `Grant-HiveBDCMailAccess.ps1 -AppId ... -SenderMailbox ...` | Exchange role `Application Mail.Send`, no Entra consent | the one `-SenderMailbox` | Exchange Administrator |
+
+The scripts run in **Azure Cloud Shell (PowerShell)**, which has Azure CLI and the needed
+modules ready, or in any PowerShell 5.1+ with Azure CLI. Each shows the tenant and asks
+before changing anything, supports `-WhatIf`, and skips what already exists, so a second
+run is safe. None of them creates or stores a client secret; step 1 prints how.
+
+Azure CLI creates the apps and grants the SharePoint consent. It cannot grant a single site
+or manage Exchange, so the site grant signs in once more with `Microsoft.Graph.Authentication`
+(`Sites.FullControl.All`) and the mailbox restriction uses `ExchangeOnlineManagement`.
+
+The mail app deliberately gets **no** `Mail.Send` consent in Entra ID. Exchange RBAC for
+Applications adds to an Entra consent instead of narrowing it, so a consented app could still
+send as every mailbox. The script removes such a consent if it finds one. Only tenants without
+RBAC for Applications fall back to an Entra consent restricted by an application access policy.
+
+```powershell
+# in Azure Cloud Shell (PowerShell) of the customer tenant
+$base = 'https://balsoft.de/downloads/hive-bdc'
+foreach ($f in 'New-HiveBDCSharePointApp', 'Grant-HiveBDCSharePointAccess', 'New-HiveBDCMailApp', 'Grant-HiveBDCMailAccess') {
+    Invoke-WebRequest "$base/$f.ps1" -OutFile "$f.ps1"
+}
+
+./New-HiveBDCSharePointApp.ps1          # step 1, prints the client ID
+./Grant-HiveBDCSharePointAccess.ps1 -AppId <client-id> -SiteUrl https://contoso.sharepoint.com/sites/Invoices
+./New-HiveBDCMailApp.ps1                # step 1, prints the client ID
+./Grant-HiveBDCMailAccess.ps1 -AppId <client-id> -SenderMailbox rechnung@contoso.de
+```
+
+The same scripts, with a step-by-step guide for the customer's administrator, are on the
+Hive BDC page at balsoft.de. Then enter tenant ID, client IDs and secrets in the dashboard
+under **Settings, Connections**.
 
 ## Settings (`appsettings.json`)
 
