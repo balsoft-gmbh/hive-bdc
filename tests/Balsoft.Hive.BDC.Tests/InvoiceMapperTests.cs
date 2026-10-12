@@ -288,15 +288,15 @@ public class InvoiceMapperTests
     public void Ax2012PurchOrderReferenceIsThePurchaseOrderNotTheInvoiceNumber()
     {
         var inv = InvoiceMapper.Map(Invoice("""
-            , "invoiceNumber": "6153193381", "reference": "6153193381", "purchOrderReference": "6654225246",
-              "buyerReference": "6654225246", "orderReference": "6152392938"
+            , "invoiceNumber": "RE-2026-0815", "reference": "RE-2026-0815", "purchOrderReference": "4500123456",
+              "buyerReference": "4500123456", "orderReference": "SO-2026-0042"
             """));
-        Assert.Equal("6654225246", inv.PurchaseOrderReference);
-        Assert.Equal("6654225246", inv.BuyerReference);
-        Assert.Equal("6152392938", inv.SalesOrderReference);
+        Assert.Equal("4500123456", inv.PurchaseOrderReference);
+        Assert.Equal("4500123456", inv.BuyerReference);
+        Assert.Equal("SO-2026-0042", inv.SalesOrderReference);
         string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
-        Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>6654225246</ram:IssuerAssignedID>", xml);
-        Assert.DoesNotMatch(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>6153193381<", xml);
+        Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>4500123456</ram:IssuerAssignedID>", xml);
+        Assert.DoesNotMatch(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>RE-2026-0815<", xml);
     }
 
     [Fact]
