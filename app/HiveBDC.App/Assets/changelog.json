@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.2.1",
+      "date": "2026-10-12",
+      "changes": [
+        "The purchase order reference (BT-13) is also taken from the JSON keys purchOrderReference, purchOrderRef, purchOrderFormNum, purchaseOrderNumber, purchaseOrderId and customerRequisition.",
+        "A generic \"reference\" that equals the invoice number is no longer written as the purchase order reference; the log says why BT-13 stayed empty."
+      ]
+    },
+    {
       "version": "1.2.0",
       "date": "2026-10-12",
       "changes": [

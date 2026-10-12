@@ -15,7 +15,7 @@
     <AssemblyTitle>Hive BDC Setup</AssemblyTitle>
     <Company>Balsoft GmbH</Company>
     <Copyright>© Balsoft GmbH</Copyright>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <ApplicationIcon>..\..\app\HiveBDC.App\Assets\hive-bdc.ico</ApplicationIcon>
     <!-- Setup always runs elevated: it writes to Program Files, HKLM and the service manager. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>

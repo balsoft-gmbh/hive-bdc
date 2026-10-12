@@ -126,7 +126,7 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | BT-10 Buyer reference | `buyerReference`, `leitwegId`, `BT-10` |
 | BT-11 Project reference | `projectReference`, `projektnummer` |
 | BT-12 Contract reference | `contractReference` (the Aktivbank `zrKennzeichen` wins) |
-| BT-13 Purchase order reference | `purchaseOrderReference`, `purchase order reference`, `customerOrderNumber`, `bestellnummer` |
+| BT-13 Purchase order reference | `purchaseOrderReference`, `purchOrderReference`, `purchOrderFormNum`, `purchase order reference`, `customerOrderNumber`, `bestellnummer` |
 | BT-14 Sales order reference | `orderReference`, `salesOrderNumber`, `auftragsnummer` |
 | BT-15 / BT-16 Receiving / despatch advice | `receivingAdviceReference`, `deliveryNoteNumber`, `packingSlipNumber` |
 | BT-17 Tender or lot | `tenderReference` |
@@ -142,7 +142,8 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | Line BT-136 / BT-139 allowance | `lineDiscountAmount`, `lineDiscountReason` |
 
 Without `buyerReference` or a purchase order key, `reference` fills BT-10 and
-BT-13 as before. The log names every term taken from such a key and lists the
+BT-13 as before, except that a `reference` equal to the invoice number never
+becomes BT-13 (the log says so). The log names every term taken from such a key and lists the
 JSON keys that did not go into the XML.
 
 Handlers:

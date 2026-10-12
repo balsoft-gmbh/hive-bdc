@@ -282,6 +282,35 @@ public class InvoiceMapperTests
         Assert.Null(inv.SalesOrderReference);
     }
 
+    // AX 2012 export (2026-10-12): "reference" carries the invoice number and the customer's
+    // purchase order comes as "purchOrderReference"; BT-13 must be the purchase order.
+    [Fact]
+    public void Ax2012PurchOrderReferenceIsThePurchaseOrderNotTheInvoiceNumber()
+    {
+        var inv = InvoiceMapper.Map(Invoice("""
+            , "invoiceNumber": "6153193381", "reference": "6153193381", "purchOrderReference": "6654225246",
+              "buyerReference": "6654225246", "orderReference": "6152392938"
+            """));
+        Assert.Equal("6654225246", inv.PurchaseOrderReference);
+        Assert.Equal("6654225246", inv.BuyerReference);
+        Assert.Equal("6152392938", inv.SalesOrderReference);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>6654225246</ram:IssuerAssignedID>", xml);
+        Assert.DoesNotMatch(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>6153193381<", xml);
+    }
+
+    [Fact]
+    public void GenericReferenceEqualToTheInvoiceNumberDoesNotBecomeBt13()
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(Invoice(""", "invoiceNumber": "RE-77", "reference": "re-77" """), null, info.Add);
+        Assert.Null(inv.PurchaseOrderReference);
+        Assert.Equal("re-77", inv.BuyerReference);
+        Assert.Contains(info, m => m.Contains("BT-13") && m.Contains("invoice number"));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.DoesNotContain("<ram:BuyerOrderReferencedDocument>", xml);
+    }
+
     [Fact]
     public void EmptyExtraValuesAreNotWritten()
     {
