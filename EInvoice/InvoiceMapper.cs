@@ -136,11 +136,18 @@ public static class InvoiceMapper
         if (NullIfEmpty(data.RecipientId) is { } recipientId) inv.Buyer.Identifiers.Add(new SchemedIdentifier(recipientId.Trim()));
         else if (recipientGln is not null) inv.Buyer.Identifiers.Add(recipientGln);
 
-        // BT-10 and BT-13: a dedicated key (buyerReference, "purchase order reference", ...) wins;
-        // without one, the generic "reference" fills both, as it always did.
+        // BT-10 and BT-13: a dedicated key (buyerReference, purchOrderReference, "purchase order
+        // reference", ...) wins; without one, the generic "reference" fills both, as it always did.
+        // Exception: an ERP that sets "reference" to its own invoice number (AX 2012 export does)
+        // must not end up with the invoice number as the buyer's purchase order (BT-13).
         string? reference = NullIfEmpty(data.Reference)?.Trim();
+        bool referenceIsInvoiceNumber = reference is not null
+            && string.Equals(reference, NullIfEmpty(data.InvoiceNumber)?.Trim(), StringComparison.OrdinalIgnoreCase);
         inv.BuyerReference = Pick(InvoiceFieldAliases.BuyerReference) ?? reference;
-        inv.PurchaseOrderReference = Pick(InvoiceFieldAliases.PurchaseOrderReference) ?? reference;
+        inv.PurchaseOrderReference = Pick(InvoiceFieldAliases.PurchaseOrderReference)
+            ?? (referenceIsInvoiceNumber ? null : reference);
+        if (referenceIsInvoiceNumber && inv.PurchaseOrderReference is null)
+            info?.Invoke("e-invoice BT-13 Purchase order reference left empty: 'reference' holds the invoice number and no purchase order key (purchOrderReference, purchaseOrderReference, ...) was sent");
         inv.ProjectReference = Pick(InvoiceFieldAliases.ProjectReference);
         inv.SalesOrderReference = Pick(InvoiceFieldAliases.SalesOrderReference);
         inv.ReceivingAdviceReference = Pick(InvoiceFieldAliases.ReceivingAdviceReference);

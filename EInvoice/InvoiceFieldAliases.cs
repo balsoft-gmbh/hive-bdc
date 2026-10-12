@@ -59,7 +59,7 @@ public static class InvoiceFieldAliases
         [BuyerReference] = new[] { "buyerReference", "leitwegId", "leitweg", "käuferreferenz", "kaeuferreferenz", "BT-10" },
         [ProjectReference] = new[] { "projectReference", "projectNumber", "projektnummer", "projektreferenz", "BT-11" },
         [ContractReference] = new[] { "contractReference", "contractNumber", "vertragsnummer", "BT-12" },
-        [PurchaseOrderReference] = new[] { "purchase order reference", "purchaseOrderReference", "buyerOrderReference", "customerOrderNumber", "customerPurchaseOrder", "bestellnummer", "kundenbestellnummer", "BT-13" },
+        [PurchaseOrderReference] = new[] { "purchase order reference", "purchaseOrderReference", "purchaseOrderNumber", "purchaseOrderId", "purchOrderReference", "purchOrderRef", "purchOrderFormNum", "buyerOrderReference", "customerOrderNumber", "customerPurchaseOrder", "customerRequisition", "bestellnummer", "kundenbestellnummer", "BT-13" },
         [SalesOrderReference] = new[] { "orderReference", "salesOrderReference", "salesOrderNumber", "salesId", "auftragsnummer", "BT-14" },
         [ReceivingAdviceReference] = new[] { "receivingAdviceReference", "goodsReceiptNumber", "wareneingangsnummer", "BT-15" },
         [DespatchAdviceReference] = new[] { "despatchAdviceReference", "dispatchAdviceReference", "deliveryNoteNumber", "packingSlipNumber", "packingSlipId", "lieferscheinnummer", "BT-16" },
