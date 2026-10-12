@@ -1,104 +1,52 @@
 <#
 .SYNOPSIS
-    Lets Hive BDC send mail as ONE mailbox, and as no other mailbox.
+    Step 2 of 2 for mail: allows the Hive BDC Mail app to send as ONE mailbox, and as no other.
 
 .DESCRIPTION
-    Hive BDC sends documents (invoices, confirmations, orders, ...) through Microsoft Graph with its own app registration.
-    App-only sending needs the APPLICATION permission Mail.Send, which on its own lets the
-    app send as EVERY mailbox in the tenant. This script grants that permission and then
-    restricts it to a single sender, so the app can only ever send as, for example,
-    the mailbox given in -SenderMailbox.
+    Run in Azure Cloud Shell (PowerShell) after New-HiveBDCMailApp.ps1.
+    Steps, each skipped when already in place:
+      1. Azure CLI: show the tenant, the app and the mailbox, and ask before changing anything.
+      2. Exchange Online: RBAC for Applications, the role "Application Mail.Send" limited to
+         a management scope that contains only -SenderMailbox.
 
-    Three steps, each skipped when it is already in place:
+    The app gets NO Mail.Send consent in Entra ID, because an Entra consent is tenant-wide
+    and RBAC grants add to it instead of narrowing it; an existing Entra consent is
+    removed. Tenants without RBAC for Applications get the older application access
+    policy, which does restrict an Entra consent.
 
-      1. Entra ID       consent the Microsoft Graph application permission Mail.Send.
-      2. Exchange       register the app's service principal.
-      3. Exchange       restrict it to the one mailbox. RBAC for Applications is used where
-                        the tenant has it (a management scope plus the "Application
-                        Mail.Send" role), otherwise an application access policy.
-
-    Step 1 alone is tenant-wide send-as. Steps 2 and 3 are what narrow it down, so run the
-    whole script rather than only consenting the permission in the portal.
-
-    Nothing about the client secret is touched, asked for, or written. This script grants
-    access to a mailbox; Hive BDC itself is configured in its dashboard.
-
-    HOW TO RUN IT
-
-      Azure Cloud Shell (PowerShell), or any PowerShell 5.1+ with internet access:
-
-        ./Grant-HiveBDCMailAccess.ps1 -AppId <application-client-id> -WhatIf   # dry run
-        ./Grant-HiveBDCMailAccess.ps1 -AppId <application-client-id>           # for real
-
-      You need Global Administrator (step 1) and Exchange Administrator (steps 2 and 3).
-      Missing modules are installed for the current user; in Cloud Shell that persists.
-      Sign-in uses a device code there, so watch the console for the code and URL.
-
-      Everything the script creates is skipped when it already exists, so re-running it is
-      safe.
-
-    AFTERWARDS
-
-      Allow up to 30 minutes for Exchange Online to apply the restriction everywhere. Until
-      it has, a send can still fail with ErrorAccessDenied; that is propagation, not a
-      misconfiguration.
-
-      Then in the Hive BDC dashboard: Settings > Document mail. Set "Send from" to the
-      mailbox, enter the client ID and secret, add the test recipients, press "Test mail".
-
-.PARAMETER AppId
-    Application (client) ID of the Hive BDC mail app registration.
-
-.PARAMETER SenderMailbox
-    The one mailbox the app may send as, e.g. invoices@contoso.com.
-
-.PARAMETER Name
-    Prefix for the objects this script creates (scope, role assignment, security group).
-
-.PARAMETER UseApplicationAccessPolicy
-    Force the older application access policy even where RBAC for Applications is available.
-
-.PARAMETER SkipGraphConsent
-    Skip step 1, for when Mail.Send was already consented in the Entra portal.
-
-.PARAMETER Interactive
-    Force a browser sign-in instead of a device code. Device code is the default in Cloud
-    Shell and on Linux, where no browser can be opened.
+    Role: Exchange Administrator (plus Privileged Role Administrator only to remove an old
+    Entra consent, or for the access policy fallback). -WhatIf shows the plan only.
 
 .EXAMPLE
-    ./Grant-HiveBDCMailAccess.ps1 -AppId 11111111-2222-3333-4444-555555555555
-
-.EXAMPLE
-    ./Grant-HiveBDCMailAccess.ps1 -AppId 1111... -SenderMailbox rechnung@contoso.de -WhatIf
+    ./Grant-HiveBDCMailAccess.ps1 -AppId 11111111-2222-3333-4444-555555555555 -SenderMailbox invoices@contoso.com
 #>
-
 #Requires -Version 5.1
-
-[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
+    # Application (client) ID printed by New-HiveBDCMailApp.ps1.
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
     [string] $AppId,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory = $true)]
     [ValidatePattern('^[^@\s]+@[^@\s]+\.[^@\s]+$')]
     [string] $SenderMailbox,
 
+    # Prefix of the Exchange objects (scope, role assignment, security group).
     [ValidatePattern('^[A-Za-z0-9-]{3,40}$')]
     [string] $Name = 'HiveBDCMail',
 
     [switch] $UseApplicationAccessPolicy,
 
-    [switch] $SkipGraphConsent,
+    [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
+    [string] $TenantId,
 
-    [switch] $Interactive
+    # Do not ask before changing the tenant.
+    [switch] $Force
 )
 
 $ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
-
 $GraphAppId = '00000003-0000-0000-c000-000000000000'   # Microsoft Graph, same in every tenant
-$MailSendRole = 'Mail.Send'
 $GraphV1 = 'https://graph.microsoft.com/v1.0'
 
 function Write-Step { param([string] $Text) Write-Host "`n== $Text" -ForegroundColor Cyan }
@@ -106,248 +54,186 @@ function Write-Ok { param([string] $Text) Write-Host "   [ok]   $Text" -Foregrou
 function Write-Skip { param([string] $Text) Write-Host "   [have] $Text" -ForegroundColor DarkGray }
 function Write-Note { param([string] $Text) Write-Host "   $Text" -ForegroundColor Gray }
 
-# Cloud Shell and Linux have no browser to hand off to, so device code is the default there.
 $isCloudShell = [bool]$env:ACC_CLOUD -or ("$env:AZUREPS_HOST_ENVIRONMENT" -like '*cloud-shell*')
-$useDeviceCode = -not $Interactive -and ($isCloudShell -or $IsLinux -or $IsMacOS)
+$useDeviceCode = $isCloudShell -or ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)
 
-function Install-IfMissing {
-    param([string] $ModuleName)
-    if (Get-Module -ListAvailable -Name $ModuleName) { return }
-    Write-Note "installing $ModuleName for the current user (one time)..."
-    # Trusting the gallery avoids an interactive prompt that would stall an unattended run.
-    if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
-        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-    }
-    Install-Module -Name $ModuleName -Scope CurrentUser -Force -AllowClobber
-    Write-Ok "$ModuleName installed"
+# Runs az and returns its JSON output; a failed command stops the script.
+function Invoke-Az {
+    $output = & az @args --only-show-errors --output json
+    if ($LASTEXITCODE -ne 0) { throw "'az $($args[0]) $($args[1])' failed (exit code $LASTEXITCODE), see above." }
+    $text = ($output | Out-String).Trim()
+    if (-not $text) { return }
+    $parsed = $text | ConvertFrom-Json
+    return $parsed   # return, not the pipeline, so a JSON array arrives as its items
 }
 
-# Whether a cmdlet exists in the current session, used to tell the two Exchange paths apart.
+# One Microsoft Graph call through 'az rest'. The body goes through a file because
+# Windows PowerShell 5.1 and az.cmd both mangle quotes in JSON arguments.
+function Invoke-GraphAz {
+    param([string] $Method, [string] $Path, $Body)
+    $azArgs = @('rest', '--method', $Method, '--url', "$GraphV1/$Path")
+    $bodyFile = $null
+    if ($null -ne $Body) {
+        $bodyFile = [IO.Path]::GetTempFileName()
+        [IO.File]::WriteAllText($bodyFile, ($Body | ConvertTo-Json -Depth 8))
+        $azArgs += @('--body', "@$bodyFile", '--headers', 'Content-Type=application/json')
+    }
+    try { return Invoke-Az @azArgs }
+    finally { if ($bodyFile) { Remove-Item -LiteralPath $bodyFile -ErrorAction SilentlyContinue } }
+}
+
+function Get-AzCliAccount {
+    $ErrorActionPreference = 'Continue'   # 'not signed in' arrives on stderr
+    $text = (& az account show --output json 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -eq 0 -and $text) { return $text | ConvertFrom-Json }
+}
+
 function Test-Cmdlet { param([string] $CmdletName) [bool](Get-Command $CmdletName -ErrorAction SilentlyContinue) }
 
-# One Graph call. Returns $null on 404 rather than throwing, so "does it exist" reads plainly.
-function Invoke-Graph {
-    param(
-        [string] $Method,
-        [string] $Uri,
-        [hashtable] $Body
-    )
-    try {
-        if ($Body) {
-            return Invoke-MgGraphRequest -Method $Method -Uri $Uri -Body ($Body | ConvertTo-Json -Depth 6) `
-                -ContentType 'application/json' -OutputType PSObject
-        }
-        return Invoke-MgGraphRequest -Method $Method -Uri $Uri -OutputType PSObject
-    }
-    catch {
-        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { return $null }
-        throw
-    }
-}
+if ($WhatIfPreference) { Write-Host 'DRY RUN - nothing will be changed.' -ForegroundColor Yellow }
 
-Write-Host 'Hive BDC - grant send-as for one mailbox' -ForegroundColor White
-Write-Note "app:     $AppId"
+# -- 1. sign-in -----------------------------------------------------------------------
+Write-Step '1/2 Sign-in'
+if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+    throw 'Azure CLI (az) was not found. Run this script in Azure Cloud Shell (PowerShell).'
+}
+$account = Get-AzCliAccount
+if (-not $account -or ($TenantId -and $account.tenantId -ne $TenantId)) {
+    $login = @('login', '--allow-no-subscriptions', '--only-show-errors', '--output', 'none')
+    if ($TenantId) { $login += @('--tenant', $TenantId) }
+    if ($useDeviceCode) { $login += '--use-device-code' }
+    & az @login
+    if ($LASTEXITCODE -ne 0) { throw 'az login failed.' }
+    $account = Get-AzCliAccount
+}
+$tenantId = $account.tenantId
+$tenantName = (@((Invoke-GraphAz GET 'organization?$select=displayName').value) | Select-Object -First 1).displayName
+Write-Note "tenant:  $tenantName ($tenantId)"
+Write-Note "account: $($account.user.name)"
+$app = Invoke-Az ad app show --id $AppId
+$AppName = $app.displayName
+$appId = $app.appId
+$sp = Invoke-Az ad sp list --spn $appId | Select-Object -First 1
+if (-not $sp) { throw "The app $appId has no service principal. Run New-HiveBDCMailApp.ps1 first." }
+Write-Note "app:     $AppName ($appId)"
 Write-Note "mailbox: $SenderMailbox"
-if ($WhatIfPreference) { Write-Host '   DRY RUN - nothing will be changed.' -ForegroundColor Yellow }
-if ($useDeviceCode) { Write-Note 'sign-in: device code (watch for the code and URL below)' }
-
-# ── 1. Entra ID: consent Mail.Send for the app ────────────────────────────────
-$spObjectId = $null
-
-if ($SkipGraphConsent) {
-    Write-Step '1/3 Microsoft Graph permission Mail.Send (skipped by -SkipGraphConsent)'
-}
-else {
-    Write-Step '1/3 Microsoft Graph permission Mail.Send'
-
-    # Only the Authentication module is needed: the calls below go through
-    # Invoke-MgGraphRequest, which keeps the install small and quick in Cloud Shell.
-    Install-IfMissing 'Microsoft.Graph.Authentication'
-    Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-
-    $connect = @{ Scopes = @('Application.ReadWrite.All', 'AppRoleAssignment.ReadWrite.All'); NoWelcome = $true }
-    if ($useDeviceCode) { $connect['UseDeviceCode'] = $true }
-    Connect-MgGraph @connect
-    Write-Note ("signed in to tenant {0}" -f (Get-MgContext).TenantId)
-
-    $found = Invoke-Graph GET "$GraphV1/servicePrincipals?`$filter=appId eq '$AppId'&`$select=id,displayName"
-    $appSp = @($found.value)[0]
-
-    if (-not $appSp) {
-        # An app registration has no service principal in its tenant until something creates
-        # one, and nothing can be granted to it before that exists.
-        if ($PSCmdlet.ShouldProcess($AppId, 'Create the service principal for the app registration')) {
-            $appSp = Invoke-Graph POST "$GraphV1/servicePrincipals" @{ appId = $AppId }
-            Write-Ok "created the service principal ($($appSp.id))"
-        }
-    }
-    else {
-        Write-Skip "service principal exists: $($appSp.displayName) ($($appSp.id))"
-    }
-
-    if ($appSp) {
-        $spObjectId = $appSp.id
-
-        $graphSpResult = Invoke-Graph GET "$GraphV1/servicePrincipals?`$filter=appId eq '$GraphAppId'&`$select=id,appRoles"
-        $graphSp = @($graphSpResult.value)[0]
-        $role = @($graphSp.appRoles | Where-Object { $_.value -eq $MailSendRole -and $_.allowedMemberTypes -contains 'Application' })[0]
-        if (-not $role) { throw "The application role '$MailSendRole' was not found on Microsoft Graph." }
-
-        $assignments = Invoke-Graph GET "$GraphV1/servicePrincipals/$spObjectId/appRoleAssignments"
-        $already = @($assignments.value | Where-Object { $_.appRoleId -eq $role.id -and $_.resourceId -eq $graphSp.id })[0]
-
-        if ($already) {
-            Write-Skip "$MailSendRole is already consented for this app"
-        }
-        elseif ($PSCmdlet.ShouldProcess($AppId, "Consent the Graph application permission $MailSendRole")) {
-            Invoke-Graph POST "$GraphV1/servicePrincipals/$spObjectId/appRoleAssignments" @{
-                principalId = $spObjectId
-                resourceId  = $graphSp.id
-                appRoleId   = $role.id
-            } | Out-Null
-            Write-Ok "$MailSendRole consented (tenant-wide; steps 2 and 3 narrow it to one mailbox)"
-        }
-    }
+if (-not $Force -and -not $WhatIfPreference) {
+    $answer = Read-Host "   Allow it to send as $SenderMailbox only? (y/n)"
+    if ($answer -notmatch '^(y|yes|j|ja)$') { Write-Note 'Stopped. Nothing was changed.'; return }
 }
 
-# ── 2. Exchange Online: the app's service principal ───────────────────────────
-Write-Step '2/3 Exchange Online service principal'
-Install-IfMissing 'ExchangeOnlineManagement'
-Import-Module ExchangeOnlineManagement -ErrorAction Stop
+# The tenant-wide Entra consent, if someone granted one; step 2 decides what happens to it.
+$graphSp = Invoke-Az ad sp show --id $GraphAppId
+$mailSend = @($graphSp.appRoles | Where-Object { $_.value -eq 'Mail.Send' -and $_.allowedMemberTypes -contains 'Application' }) |
+    Select-Object -First 1
+$entraGrant = @((Invoke-GraphAz GET "servicePrincipals/$($sp.id)/appRoleAssignments").value |
+    Where-Object { $_.appRoleId -eq $mailSend.id -and $_.resourceId -eq $graphSp.id }) | Select-Object -First 1
 
-if ($useDeviceCode) { Connect-ExchangeOnline -Device -ShowBanner:$false }
-else { Connect-ExchangeOnline -ShowBanner:$false }
-Write-Note 'signed in to Exchange Online'
+# -- 3. Exchange Online ---------------------------------------------------------------
+Write-Step '2/2 Exchange Online: send as one mailbox only'
+if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
+    Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber
+}
+Import-Module ExchangeOnlineManagement
+if ($useDeviceCode) { Connect-ExchangeOnline -Device -ShowBanner:$false } else { Connect-ExchangeOnline -ShowBanner:$false }
 
+if (Test-Cmdlet 'Get-ConnectionInformation') {
+    $exoTenant = @(Get-ConnectionInformation)[0].TenantID
+    if ($exoTenant -and "$exoTenant" -ne $tenantId) {
+        Disconnect-ExchangeOnline -Confirm:$false | Out-Null
+        throw "Exchange Online signed in to tenant $exoTenant, but the app is in $tenantId."
+    }
+}
 $mailbox = Get-Mailbox -Identity $SenderMailbox -ErrorAction SilentlyContinue
-if (-not $mailbox) { throw "The mailbox '$SenderMailbox' was not found in this tenant." }
-Write-Note "mailbox found: $($mailbox.DisplayName) <$($mailbox.PrimarySmtpAddress)>"
+if (-not $mailbox) { throw "The mailbox '$SenderMailbox' was not found in Exchange Online." }
 
-$rbacAvailable = (Test-Cmdlet 'New-ServicePrincipal') -and (Test-Cmdlet 'New-ManagementRoleAssignment')
-$useRbac = $rbacAvailable -and -not $UseApplicationAccessPolicy
-
-if ($useRbac) {
-    $exoSp = Get-ServicePrincipal -Identity $AppId -ErrorAction SilentlyContinue
-    if ($exoSp) {
-        Write-Skip "Exchange service principal exists ($($exoSp.ServicePrincipalName))"
-    }
-    else {
-        # Exchange needs the Entra service principal's OBJECT id, not the application id.
-        if (-not $spObjectId) {
-            throw "The service principal object id for $AppId is unknown, because step 1 was skipped. " +
-                  'Re-run without -SkipGraphConsent, or register it by hand: ' +
-                  'New-ServicePrincipal -AppId <appId> -ObjectId <objectId>'
-        }
-        if ($PSCmdlet.ShouldProcess($AppId, 'Register the service principal in Exchange Online')) {
-            New-ServicePrincipal -AppId $AppId -ObjectId $spObjectId -DisplayName "$Name ($AppId)" | Out-Null
-            Write-Ok 'registered the service principal in Exchange Online'
-        }
-    }
-}
-else {
-    Write-Note 'RBAC for Applications is not in use here; step 3 will create an application access policy.'
-}
-
-# ── 3. Exchange Online: restrict the app to this one mailbox ──────────────────
-Write-Step '3/3 Restrict the app to a single mailbox'
+$useRbac = (Test-Cmdlet 'New-ServicePrincipal') -and (Test-Cmdlet 'New-ManagementRoleAssignment') -and
+           -not $UseApplicationAccessPolicy
 
 if ($useRbac) {
     $scopeName = "$Name-Scope"
     $assignmentName = "$Name-MailSend"
-    # Quote-safe: an apostrophe in an address would otherwise break the OPATH filter.
-    $filter = "PrimarySmtpAddress -eq '{0}'" -f $SenderMailbox.Replace("'", "''")
+
+    if (Get-ServicePrincipal -Identity $appId -ErrorAction SilentlyContinue) { Write-Skip 'registered in Exchange Online' }
+    elseif ($PSCmdlet.ShouldProcess($appId, 'Register the service principal in Exchange Online')) {
+        # Exchange needs the service principal's OBJECT id, not the application id.
+        New-ServicePrincipal -AppId $appId -ObjectId $sp.id -DisplayName $AppName | Out-Null
+        Write-Ok 'registered in Exchange Online'
+    }
 
     $scope = Get-ManagementScope -Identity $scopeName -ErrorAction SilentlyContinue
     if ($scope) {
-        Write-Skip "management scope '$scopeName' exists: $($scope.RecipientFilter)"
+        Write-Skip "scope '$scopeName': $($scope.RecipientFilter)"
         if ($scope.RecipientFilter -notmatch [regex]::Escape($SenderMailbox)) {
-            Write-Warning ("The existing scope '$scopeName' does NOT match $SenderMailbox. " +
-                           'Review it, or re-run with a different -Name.')
+            Write-Warning "The scope '$scopeName' does NOT match $SenderMailbox. Review it, or use another -Name."
         }
     }
-    elseif ($PSCmdlet.ShouldProcess($scopeName, "Create a management scope limited to $SenderMailbox")) {
+    elseif ($PSCmdlet.ShouldProcess($scopeName, "Create a management scope with only $SenderMailbox")) {
+        # Doubled apostrophes keep an address with ' from breaking the filter.
+        $filter = "PrimarySmtpAddress -eq '{0}'" -f $SenderMailbox.Replace("'", "''")
         New-ManagementScope -Name $scopeName -RecipientRestrictionFilter $filter | Out-Null
-        Write-Ok "created the management scope '$scopeName'"
+        Write-Ok "created the scope '$scopeName'"
     }
 
-    $assignment = Get-ManagementRoleAssignment -Identity $assignmentName -ErrorAction SilentlyContinue
-    if ($assignment) {
-        Write-Skip "role assignment '$assignmentName' exists"
-    }
-    elseif ($PSCmdlet.ShouldProcess($assignmentName, "Assign 'Application Mail.Send' scoped to $scopeName")) {
-        New-ManagementRoleAssignment -Name $assignmentName -App $AppId `
-            -Role 'Application Mail.Send' -CustomResourceScope $scopeName | Out-Null
-        Write-Ok "assigned 'Application Mail.Send', scoped to $SenderMailbox"
+    if (Get-ManagementRoleAssignment -Identity $assignmentName -ErrorAction SilentlyContinue) { Write-Skip "role assignment '$assignmentName'" }
+    elseif ($PSCmdlet.ShouldProcess($assignmentName, "Assign 'Application Mail.Send' limited to $scopeName")) {
+        New-ManagementRoleAssignment -Name $assignmentName -App $appId -Role 'Application Mail.Send' `
+            -CustomResourceScope $scopeName | Out-Null
+        Write-Ok "assigned 'Application Mail.Send' for $SenderMailbox"
     }
 
-    Write-Note ''
-    Write-Note 'Verify with:'
-    Write-Note "  Get-ManagementRoleAssignment -Identity $assignmentName | Format-List Name,Role,CustomResourceScope"
+    # An Entra consent would add tenant-wide send-as on top of the scoped role.
+    if (-not $entraGrant) { Write-Skip 'no tenant-wide Mail.Send consent in Entra ID (correct)' }
+    elseif ($PSCmdlet.ShouldProcess($AppName, 'Remove the tenant-wide Mail.Send consent from Entra ID')) {
+        Invoke-GraphAz DELETE "servicePrincipals/$($sp.id)/appRoleAssignments/$($entraGrant.id)" | Out-Null
+        Write-Ok 'removed the tenant-wide Mail.Send consent from Entra ID'
+    }
+    $verify = "Test-ServicePrincipalAuthorization -Identity $appId -Resource $SenderMailbox"
 }
 else {
+    # Older tenants: Entra consent for Mail.Send, restricted by an application access
+    # policy to a mail-enabled SECURITY group (a Microsoft 365 group does not work).
     if (-not (Test-Cmdlet 'New-ApplicationAccessPolicy')) {
-        throw 'Neither RBAC for Applications nor application access policies are available in this ' +
-              'session. Update the ExchangeOnlineManagement module, reconnect, and run this again.'
+        throw 'Neither RBAC for Applications nor application access policies are available. Update ExchangeOnlineManagement and retry.'
     }
-
-    # Older mechanism: a mail-enabled security group holds the allowed mailboxes and the
-    # policy restricts the app to that group. It must be a mail-enabled SECURITY group;
-    # a Microsoft 365 group does not work here.
     $groupAlias = $Name.ToLowerInvariant()
-    $domain = $SenderMailbox.Split('@')[1]
-    $groupAddress = "$groupAlias@$domain"
+    $groupAddress = "$groupAlias@$($SenderMailbox.Split('@')[1])"
 
-    $group = Get-DistributionGroup -Identity $groupAddress -ErrorAction SilentlyContinue
-    if ($group) {
-        Write-Skip "security group '$groupAddress' exists"
-    }
+    if (Get-DistributionGroup -Identity $groupAddress -ErrorAction SilentlyContinue) { Write-Skip "group $groupAddress" }
     elseif ($PSCmdlet.ShouldProcess($groupAddress, 'Create the mail-enabled security group')) {
-        $group = New-DistributionGroup -Name $Name -Alias $groupAlias -PrimarySmtpAddress $groupAddress `
-            -Type Security -Members $SenderMailbox
-        Write-Ok "created the mail-enabled security group '$groupAddress'"
+        New-DistributionGroup -Name $Name -Alias $groupAlias -PrimarySmtpAddress $groupAddress -Type Security | Out-Null
+        Write-Ok "created the group $groupAddress"
     }
-
-    if ($group) {
-        $members = @(Get-DistributionGroupMember -Identity $groupAddress -ErrorAction SilentlyContinue)
-        $isMember = @($members | ForEach-Object { $_.PrimarySmtpAddress }) -contains $mailbox.PrimarySmtpAddress
-        if ($isMember) {
-            Write-Skip "$SenderMailbox is already a member"
-        }
-        elseif ($PSCmdlet.ShouldProcess($groupAddress, "Add $SenderMailbox as a member")) {
-            Add-DistributionGroupMember -Identity $groupAddress -Member $SenderMailbox
-            Write-Ok "added $SenderMailbox to the group"
-        }
+    $members = @(Get-DistributionGroupMember -Identity $groupAddress -ErrorAction SilentlyContinue | ForEach-Object { $_.PrimarySmtpAddress })
+    if ($members -contains $mailbox.PrimarySmtpAddress) { Write-Skip "$SenderMailbox is a member" }
+    elseif ($PSCmdlet.ShouldProcess($groupAddress, "Add $SenderMailbox")) {
+        Add-DistributionGroupMember -Identity $groupAddress -Member $SenderMailbox
+        Write-Ok "added $SenderMailbox to the group"
     }
-
-    $policy = @(Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue | Where-Object { $_.AppId -eq $AppId })[0]
-    if ($policy) {
-        Write-Skip "an application access policy for this app already exists ($($policy.AccessRight))"
-    }
-    elseif ($PSCmdlet.ShouldProcess($AppId, "Restrict the app to $groupAddress")) {
-        New-ApplicationAccessPolicy -AppId $AppId -PolicyScopeGroupId $groupAddress `
-            -AccessRight RestrictAccess `
+    if (@(Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue | Where-Object { $_.AppId -eq $appId })) { Write-Skip 'application access policy' }
+    elseif ($PSCmdlet.ShouldProcess($appId, "Restrict the app to $groupAddress")) {
+        New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $groupAddress -AccessRight RestrictAccess `
             -Description "Hive BDC may send only as members of $groupAddress" | Out-Null
         Write-Ok 'created the application access policy'
     }
 
-    Write-Note ''
-    Write-Note 'Verify with (Granted = allowed):'
-    Write-Note "  Test-ApplicationAccessPolicy -Identity $SenderMailbox -AppId $AppId"
-    Write-Note '  and confirm another mailbox comes back Denied:'
-    Write-Note "  Test-ApplicationAccessPolicy -Identity <someone.else@$domain> -AppId $AppId"
+    # The consent comes last, so it is never in place without the policy that limits it.
+    if ($entraGrant) { Write-Skip 'Mail.Send consented in Entra ID' }
+    elseif ($PSCmdlet.ShouldProcess($AppName, 'Grant admin consent for Mail.Send')) {
+        Invoke-GraphAz POST "servicePrincipals/$($sp.id)/appRoleAssignments" @{
+            principalId = $sp.id; resourceId = $graphSp.id; appRoleId = $mailSend.id
+        } | Out-Null
+        Write-Ok 'Mail.Send consented, limited by the policy above'
+    }
+    $verify = "Test-ApplicationAccessPolicy -Identity $SenderMailbox -AppId $appId"
 }
-
-Write-Host ''
-Write-Host 'Done.' -ForegroundColor Green
-Write-Note "The app can send as $SenderMailbox, and as nothing else."
-Write-Note 'Allow up to 30 minutes for Exchange Online to apply this everywhere; until then a send'
-Write-Note 'can still fail with ErrorAccessDenied, which is propagation rather than a misconfiguration.'
-Write-Note ''
-Write-Note 'Then in the Hive BDC dashboard, Settings > Document mail:'
-Write-Note "  Send from      $SenderMailbox"
-Write-Note "  Client ID      $AppId"
-Write-Note '  Client secret  from the app registration'
-Write-Note '  Test recipients  the addresses that receive documents from a non-production AX'
-Write-Note 'and press "Test mail".'
-
 Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+
+# -- next -----------------------------------------------------------------------------
+Write-Host "`nDONE" -ForegroundColor Yellow
+Write-Host "  Tenant ID  $tenantId"
+Write-Host "  Client ID  $appId"
+Write-Host "  Send from  $SenderMailbox"
+Write-Note 'Hive BDC dashboard: Settings > Connections > Document mail, then Test mail.'
+Write-Note 'Exchange needs up to 30 minutes to apply this; until then sending can fail with ErrorAccessDenied.'
+Write-Note "Check later: $verify"
