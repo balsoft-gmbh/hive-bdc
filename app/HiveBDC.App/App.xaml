@@ -164,6 +164,7 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CaretBrush" Value="{StaticResource TextPrimary}"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -171,7 +172,7 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                          VerticalAlignment="Center"/>
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
