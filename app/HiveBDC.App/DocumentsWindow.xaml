@@ -33,7 +33,7 @@
                     <DataGridTextColumn Header="Document ID" Binding="{Binding DocumentId}" Width="*"/>
                     <DataGridTextColumn Header="Company" Binding="{Binding DataAreaId}" Width="90"/>
                     <DataGridTextColumn Header="Type" Binding="{Binding DocumentType}" Width="150"/>
-                    <DataGridTextColumn Header="Format" Binding="{Binding Format}" Width="90"/>
+                    <DataGridTextColumn Header="Format" Binding="{Binding Format}" Width="100"/>
                     <DataGridTextColumn Header="Exported" Binding="{Binding ExportedAt}" Width="160"/>
                     <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90"/>
                     <DataGridTextColumn Header="SharePoint" Binding="{Binding TargetSite}" Width="2*"/>

@@ -2,6 +2,16 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.2.3",
+      "date": "2026-10-14",
+      "changes": [
+        "Settings, Document types: the buttons Add row, Remove, Sample JSON… and Import columns… sit below the column template table. Next to the label they covered \"Column templates\" when the window was narrower than about 1300 pixels, which includes its default size.",
+        "Dashboard (Recent exports) and the Documents window: the Format column is wide enough for \"xrechnung\" instead of cutting it to \"xrechnun\".",
+        "Settings, Connections: the test recipients start at the top of their box instead of floating in its middle.",
+        "Settings, Document types: the Column and Template columns of the column template table are equally wide, so internal names such as Customer_x0020_Number are no longer cut off."
+      ]
+    },
+    {
       "version": "1.2.2",
       "date": "2026-10-12",
       "changes": [
