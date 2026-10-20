@@ -311,6 +311,36 @@ public class InvoiceMapperTests
         Assert.DoesNotContain("<ram:BuyerOrderReferencedDocument>", xml);
     }
 
+    // Validators warn when the register court, number, seat and managing directors are missing from
+    // the XML (customer, 2026-10-20). The export's legalNotice becomes a BT-22 note with BT-21 REG,
+    // next to the general notes, which keep no subject code.
+    [Fact]
+    public void LegalNoticeBecomesARegNoteNextToTheGeneralNotes()
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(Invoice("""
+            , "notes": "Es gelten unsere AGB.\n",
+              "legalNotice": "Muster Lieferant GmbH mit Sitz in Musterstadt.\nAmtsgericht Musterstadt - HRB 12345\nGeschäftsführer: Max Muster\n"
+            """), null, info.Add);
+
+        Assert.Equal(2, inv.Notes.Count);
+        Assert.Equal(("Es gelten unsere AGB.", null), (inv.Notes[0].Text, inv.Notes[0].SubjectCode));
+        Assert.Equal("REG", inv.Notes[1].SubjectCode);
+        Assert.Equal("Muster Lieferant GmbH mit Sitz in Musterstadt.\nAmtsgericht Musterstadt - HRB 12345\nGeschäftsführer: Max Muster", inv.Notes[1].Text);
+        Assert.DoesNotContain(info, m => m.Contains("not written") && m.Contains("legalNotice"));
+
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.Matches(@"<ram:IncludedNote>\s*<ram:Content>Muster Lieferant GmbH[^<]*HRB 12345[^<]*</ram:Content>\s*<ram:SubjectCode>REG</ram:SubjectCode>\s*</ram:IncludedNote>", xml);
+        Assert.Matches(@"<ram:IncludedNote>\s*<ram:Content>Es gelten unsere AGB.</ram:Content>\s*</ram:IncludedNote>", xml);
+    }
+
+    [Fact]
+    public void EmptyLegalNoticeAddsNoNote()
+    {
+        var inv = InvoiceMapper.Map(Invoice(""", "legalNotice": "  " """));
+        Assert.Empty(inv.Notes);
+    }
+
     [Fact]
     public void EmptyExtraValuesAreNotWritten()
     {

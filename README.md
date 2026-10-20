@@ -88,6 +88,10 @@ for e-invoices:
   "senderGln": "4000001000005",         // 13 digits -> BT-29-0 seller GLN (scheme 0088)
   "recipientId": "99002",               // Anschlusshausnummer -> BT-46 buyer ID
   "recipientGln": "",                   // 13 digits -> BT-46-0 buyer GLN; anything else is ignored with a warning
+  // invoice notes (BT-22)
+  "notes": "...",                       // general note, written without a subject code
+  "legalNotice": "...",                 // legal form, seat, register court and number, managing directors
+                                        // -> note with subject code REG (BT-21); validators look for it
   // payment terms (BT-20): the net term from dueDate (+ optional text) and the cash discount(s)
   "paymentTermsText": "Bitte zahlen Sie bis zum 22 Juli 2026 ohne Abzug.",   // optional, default generated
   "cashDiscountDate": "2026-07-02", "cashDiscountPercent": "2", "cashDiscountAmount": "77.30",  // one Skonto

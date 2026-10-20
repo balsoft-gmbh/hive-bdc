@@ -86,6 +86,8 @@ public static class InvoiceMapper
 
         if (!string.IsNullOrWhiteSpace(data.Notes))
             inv.Notes.Add(new InvoiceNote(data.Notes.Trim()));
+        if (!string.IsNullOrWhiteSpace(data.LegalNotice))
+            inv.Notes.Add(new InvoiceNote(data.LegalNotice.Trim(), "REG"));
 
         // ── Seller ──────────────────────────────────────────────────────────
         // BT-29 identifier and BT-29-0 GLN are what a settlement house (Aktivbank

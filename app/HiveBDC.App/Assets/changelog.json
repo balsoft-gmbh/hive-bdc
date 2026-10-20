@@ -2,6 +2,13 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.3.0",
+      "date": "2026-10-20",
+      "changes": [
+        "E-invoices carry the legal information of the seller (legal form, seat, register court and number, managing directors) when the ERP export sends it in legalNotice. It is written as an invoice note with subject code REG (BT-22 with BT-21), the place validators check for these details; until now they reported them as missing although the PDF footer showed them."
+      ]
+    },
+    {
       "version": "1.2.3",
       "date": "2026-10-14",
       "changes": [

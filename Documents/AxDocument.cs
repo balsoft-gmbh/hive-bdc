@@ -99,6 +99,14 @@ public sealed class AxDocument
 
     public string BankIban { get; set; } = "";
     public string Notes { get; set; } = "";
+
+    /// <summary>
+    /// The legal information company law requires on business letters (legal form, seat, register
+    /// court and number, managing directors), usually the invoice footer. Written as an invoice
+    /// note with subject code REG (BT-22 with BT-21).
+    /// </summary>
+    public string LegalNotice { get; set; } = "";
+
     public string ServicePeriodFrom { get; set; } = "";
     public string ServicePeriodTo { get; set; } = "";
 

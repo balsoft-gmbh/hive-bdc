@@ -12,7 +12,7 @@
     <AssemblyTitle>Hive BDC Dashboard</AssemblyTitle>
     <Company>Balsoft GmbH</Company>
     <Copyright>© Balsoft GmbH</Copyright>
-    <Version>1.2.3</Version>
+    <Version>1.3.0</Version>
     <ApplicationIcon>Assets\hive-bdc.ico</ApplicationIcon>
     <!-- Embed the UAC manifest so the dashboard always runs elevated (Start/Stop service). -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
