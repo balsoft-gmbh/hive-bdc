@@ -95,6 +95,21 @@ public static class InvoiceFieldAliases
         [OriginCountry] = new[] { "originCountry", "countryOfOrigin", "ursprungsland", "BT-159" },
     });
 
+    // Spellings that beat every other key of their term, in this order, whatever the JSON key order.
+    // AX 2012 sends its customer purchase order field as purchOrderReference, and a customer field
+    // mapping can add purchaseOrderReference next to it; AX writes the keys alphabetically.
+    private static readonly Dictionary<string, string[]> Precedence = new()
+    {
+        [PurchaseOrderReference.Bt] = new[] { "purchOrderReference", "purchaseOrderReference" },
+    };
+
+    private static int Rank(Term term, string normalizedKey)
+    {
+        if (!Precedence.TryGetValue(term.Bt, out var keys)) return int.MaxValue;
+        int i = Array.FindIndex(keys, k => Normalize(k) == normalizedKey);
+        return i < 0 ? int.MaxValue : i;
+    }
+
     private static Dictionary<string, Term> Build(Dictionary<Term, string[]> spellings)
     {
         var map = new Dictionary<string, Term>(StringComparer.Ordinal);
@@ -124,13 +139,17 @@ public static class InvoiceFieldAliases
         foreach (var (key, element) in extra)
         {
             string? value = Text(element);
-            if (!table.TryGetValue(Normalize(key), out var term))
+            string normalized = Normalize(key);
+            if (!table.TryGetValue(normalized, out var term))
             {
                 unused.Add(key);
                 continue;
             }
-            // Empty values are not written; the first non-empty spelling wins.
-            if (string.IsNullOrWhiteSpace(value) || found.ContainsKey(term.Bt)) continue;
+            // Empty values are not written; the first non-empty spelling wins unless a later one
+            // ranks higher in Precedence.
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            if (found.TryGetValue(term.Bt, out var earlier)
+                && Rank(term, Normalize(earlier.SourceKey)) <= Rank(term, normalized)) continue;
             found[term.Bt] = new Found(term, value.Trim(), key);
         }
         return (found, unused);

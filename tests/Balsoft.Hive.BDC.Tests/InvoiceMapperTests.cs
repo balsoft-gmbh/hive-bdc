@@ -299,6 +299,34 @@ public class InvoiceMapperTests
         Assert.DoesNotMatch(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>RE-2026-0815<", xml);
     }
 
+    // AX 2012 export (2026-10-20): next to "purchOrderReference" a customer field mapping sent
+    // "purchaseOrderReference", and AX writes the keys alphabetically, so the mapping won BT-13.
+    // purchOrderReference wins whatever the key order; BT-10 still comes from buyerReference.
+    [Theory]
+    [InlineData("\"purchaseOrderReference\": \"CUST-REF-1\", \"purchOrderReference\": \"PO-4711\"")]
+    [InlineData("\"purchOrderReference\": \"PO-4711\", \"purchaseOrderReference\": \"CUST-REF-1\"")]
+    public void PurchOrderReferenceWinsBt13OverPurchaseOrderReference(string poKeys)
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(Invoice($$"""
+            , "invoiceNumber": "RE-2026-0815", "reference": "RE-2026-0815", "buyerReference": "CUST-REF-1", {{poKeys}}
+            """), null, info.Add);
+        Assert.Equal("PO-4711", inv.PurchaseOrderReference);
+        Assert.Equal("CUST-REF-1", inv.BuyerReference);
+        Assert.Contains(info, m => m.Contains("BT-13") && m.Contains("'purchOrderReference'"));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>PO-4711</ram:IssuerAssignedID>", xml);
+    }
+
+    [Fact]
+    public void EmptyPurchOrderReferenceLeavesBt13ToPurchaseOrderReference()
+    {
+        var inv = InvoiceMapper.Map(Invoice("""
+            , "purchOrderReference": " ", "customerRequisition": "REQ-9", "purchaseOrderReference": "CUST-REF-1"
+            """));
+        Assert.Equal("CUST-REF-1", inv.PurchaseOrderReference);
+    }
+
     [Fact]
     public void GenericReferenceEqualToTheInvoiceNumberDoesNotBecomeBt13()
     {

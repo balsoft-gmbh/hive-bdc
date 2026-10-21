@@ -2,6 +2,13 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.3.1",
+      "date": "2026-10-21",
+      "changes": [
+        "The purchase order reference (BT-13) comes from purchOrderReference whenever the ERP export fills it, then from purchaseOrderReference, then from any other purchase order key. Until now the key that came first in the file won, so a customer field mapping that also sent purchaseOrderReference replaced the customer's purchase order number. The buyer reference (BT-10) is unchanged."
+      ]
+    },
+    {
       "version": "1.3.0",
       "date": "2026-10-20",
       "changes": [

@@ -145,6 +145,10 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | Line BT-141 / BT-144 charge | `lineChargeAmount`, `lineChargeReason` (an AX `SalesMarkup` the ERP folded into its line amount) |
 | Line BT-136 / BT-139 allowance | `lineDiscountAmount`, `lineDiscountReason` |
 
+When a term arrives under several keys, the first non-empty one in the JSON wins.
+BT-13 is the exception: `purchOrderReference` wins, then `purchaseOrderReference`,
+then the first other purchase order key.
+
 Without `buyerReference` or a purchase order key, `reference` fills BT-10 and
 BT-13 as before, except that a `reference` equal to the invoice number never
 becomes BT-13 (the log says so). The log names every term taken from such a key and lists the
