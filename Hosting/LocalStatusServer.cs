@@ -132,7 +132,7 @@ public sealed partial class LocalStatusServer : BackgroundService
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "Local API {Request} failed.", $"{ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}");
+            _log.LogError(ex, "Local API {Request} failed.", ForLog($"{ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}"));
             try { Respond(ctx, 500, new { error = "internal error" }); } catch { /* ignore */ }
         }
     }
@@ -295,6 +295,9 @@ public sealed partial class LocalStatusServer : BackgroundService
         File.WriteAllText(Path.Combine(dir, EndpointFileName), json);
     }
 
+    /// <summary>A caller-supplied value for the log, without line breaks that could fake further log entries.</summary>
+    internal static string ForLog(string value) => value.Replace("\r", " ").Replace("\n", " ");
+
     private void Respond(HttpListenerContext ctx, int status, object body)
     {
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(body);
@@ -303,8 +306,8 @@ public sealed partial class LocalStatusServer : BackgroundService
         // error answers carry messages and validation errors only, never settings or secrets.
         if (status >= 400)
         {
-            string what = $"{ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}";
-            string reason = Encoding.UTF8.GetString(bytes);
+            string what = ForLog($"{ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}");
+            string reason = ForLog(Encoding.UTF8.GetString(bytes));
             if (reason.Length > 1000) reason = reason[..1000] + "…";
             if (status >= 500) _log.LogError("Local API {Request} answered {Status}: {Reason}", what, status, reason);
             else _log.LogWarning("Local API {Request} answered {Status}: {Reason}", what, status, reason);

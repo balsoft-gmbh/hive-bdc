@@ -385,14 +385,23 @@ public sealed class DocumentProcessor
         if (plan.Redirected)
             _log.LogInformation(
                 "[mail] {Id} ({Type}) REDIRECTED — environment={Env}, sent to {To} instead of {Original}; {Kind} body, attachment {File}",
-                documentId, type.Id, plan.Environment, string.Join(", ", plan.To),
-                plan.OriginalTo.Count > 0 ? string.Join(", ", plan.OriginalTo) : "(none)", body.IsHtml ? "HTML" : "text", Path.GetFileName(outFile));
+                documentId, type.Id, plan.Environment, MaskAddresses(plan.To),
+                plan.OriginalTo.Count > 0 ? MaskAddresses(plan.OriginalTo) : "(none)", body.IsHtml ? "HTML" : "text", Path.GetFileName(outFile));
         else
             _log.LogInformation(
                 "[mail] {Id} ({Type}) -> {To}{Cc}; from {From}, {Kind} body, attachment {File}",
-                documentId, type.Id, string.Join(", ", plan.To),
-                plan.Cc.Count > 0 ? " cc " + string.Join(", ", plan.Cc) : "",
+                documentId, type.Id, MaskAddresses(plan.To),
+                plan.Cc.Count > 0 ? " cc " + MaskAddresses(plan.Cc) : "",
                 mailer.From, body.IsHtml ? "HTML" : "text", Path.GetFileName(outFile));
+    }
+
+    /// <summary>Log form of mail addresses: first character of the local part and the domain ("m***@contoso.com").</summary>
+    internal static string MaskAddresses(IEnumerable<string> addresses) => string.Join(", ", addresses.Select(MaskAddress));
+
+    internal static string MaskAddress(string address)
+    {
+        int at = address.IndexOf('@');
+        return at <= 0 ? "***" : address[0] + "***" + address[at..];
     }
 
     /// <summary>Short log tag for a folder: its implied type, or "shared" when several types use it.</summary>
