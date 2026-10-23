@@ -129,6 +129,7 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 |---|---|
 | BT-10 Buyer reference | `buyerReference`, `leitwegId`, `BT-10` |
 | BT-11 Project reference | `projectReference`, `projektnummer` |
+| Project name (CII, next to BT-11) | `projectName`, `projektname`, `projektbezeichnung` (written only with a project reference; without a name the XML keeps "Project reference") |
 | BT-12 Contract reference | `contractReference` (the Aktivbank `zrKennzeichen` wins) |
 | BT-13 Purchase order reference | `purchaseOrderReference`, `purchOrderReference`, `purchOrderFormNum`, `purchase order reference`, `customerOrderNumber`, `bestellnummer` |
 | BT-14 Sales order reference | `orderReference`, `salesOrderNumber`, `auftragsnummer` |

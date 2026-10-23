@@ -20,6 +20,8 @@ public static class InvoiceFieldAliases
     // ── document level ──────────────────────────────────────────────────────
     public static readonly Term BuyerReference = new("BT-10", "Buyer reference");
     public static readonly Term ProjectReference = new("BT-11", "Project reference");
+    // No EN 16931 term: the CII project name next to BT-11 (SpecifiedProcuringProject/Name).
+    public static readonly Term ProjectName = new("BT-11 name", "Project name");
     public static readonly Term ContractReference = new("BT-12", "Contract reference");
     public static readonly Term PurchaseOrderReference = new("BT-13", "Purchase order reference");
     public static readonly Term SalesOrderReference = new("BT-14", "Sales order reference");
@@ -58,6 +60,7 @@ public static class InvoiceFieldAliases
     {
         [BuyerReference] = new[] { "buyerReference", "leitwegId", "leitweg", "käuferreferenz", "kaeuferreferenz", "BT-10" },
         [ProjectReference] = new[] { "projectReference", "projectNumber", "projektnummer", "projektreferenz", "BT-11" },
+        [ProjectName] = new[] { "projectName", "projektname", "projektbezeichnung" },
         [ContractReference] = new[] { "contractReference", "contractNumber", "vertragsnummer", "BT-12" },
         [PurchaseOrderReference] = new[] { "purchase order reference", "purchaseOrderReference", "purchaseOrderNumber", "purchaseOrderId", "purchOrderReference", "purchOrderRef", "purchOrderFormNum", "buyerOrderReference", "customerOrderNumber", "customerPurchaseOrder", "customerRequisition", "bestellnummer", "kundenbestellnummer", "BT-13" },
         [SalesOrderReference] = new[] { "orderReference", "salesOrderReference", "salesOrderNumber", "salesId", "auftragsnummer", "BT-14" },

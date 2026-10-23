@@ -370,6 +370,48 @@ public class InvoiceMapperTests
     }
 
     [Fact]
+    public void ProjectNameIsWrittenNextToTheProjectReference()
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(Invoice(""", "projectReference": "001-PRJ-0815", "projectName": "Reparaturen Kleinaufträge" """), null, info.Add);
+        Assert.Equal("Reparaturen Kleinaufträge", inv.ProjectName);
+        Assert.Contains(info, m => m.Contains("Project name") && m.Contains("'projectName'"));
+        Assert.DoesNotContain(info, m => m.StartsWith("JSON fields not written", StringComparison.Ordinal) && m.Contains("projectName"));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.Matches(@"<ram:SpecifiedProcuringProject>\s*<ram:ID>001-PRJ-0815</ram:ID>\s*<ram:Name>Reparaturen Kleinaufträge</ram:Name>", xml);
+    }
+
+    [Theory]
+    [InlineData("projektname")]
+    [InlineData("Projektbezeichnung")]
+    [InlineData("project name")]
+    public void ProjectNameIsRecognisedUnderItsUsualSpellings(string key)
+    {
+        var inv = InvoiceMapper.Map(Invoice($$""", "projectReference": "PRJ-1", "{{key}}": "Werk Süd" """));
+        Assert.Equal("Werk Süd", inv.ProjectName);
+    }
+
+    [Fact]
+    public void WithoutAProjectNameTheXmlKeepsTheRequiredPlaceholder()
+    {
+        var inv = InvoiceMapper.Map(Invoice(""", "projectReference": "PRJ-1", "projectName": " " """));
+        Assert.Null(inv.ProjectName);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.Matches(@"<ram:ID>PRJ-1</ram:ID>\s*<ram:Name>Project reference</ram:Name>", xml);
+    }
+
+    [Fact]
+    public void ProjectNameWithoutAProjectReferenceIsLeftOutAndLogged()
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(Invoice(""", "projectName": "Werk Süd" """), null, info.Add);
+        Assert.Contains(info, m => m.Contains("project name left out"));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.DoesNotContain("SpecifiedProcuringProject", xml);
+        Assert.DoesNotContain("Werk Süd", xml);
+    }
+
+    [Fact]
     public void EmptyExtraValuesAreNotWritten()
     {
         var inv = InvoiceMapper.Map(Invoice(""", "reference": "R-1", "purchase order reference": "  ", "projectReference": "" """));

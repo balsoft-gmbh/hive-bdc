@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.3.2",
+      "date": "2026-10-23",
+      "changes": [
+        "The project name from the ERP export (projectName, projektname or projektbezeichnung) is written into the e-invoice next to the project reference (BT-11). Until now that place always said \"Project reference\". The e-invoice stays valid XRechnung and ZUGFeRD.",
+        "Updated the e-invoice library to Balsoft.Hive.EInvoice 1.1.0, which also brings a cryptography component patched for two .NET security advisories (CVE-2026-84008, CVE-2026-70162)."
+      ]
+    },
+    {
       "version": "1.3.1",
       "date": "2026-10-21",
       "changes": [

@@ -151,6 +151,9 @@ public static class InvoiceMapper
         if (referenceIsInvoiceNumber && inv.PurchaseOrderReference is null)
             info?.Invoke("e-invoice BT-13 Purchase order reference left empty: 'reference' holds the invoice number and no purchase order key (purchOrderReference, purchaseOrderReference, ...) was sent");
         inv.ProjectReference = Pick(InvoiceFieldAliases.ProjectReference);
+        inv.ProjectName = Pick(InvoiceFieldAliases.ProjectName);
+        if (inv.ProjectName is not null && inv.ProjectReference is null)
+            info?.Invoke("e-invoice project name left out: it is written only next to a project reference (BT-11, projectReference)");
         inv.SalesOrderReference = Pick(InvoiceFieldAliases.SalesOrderReference);
         inv.ReceivingAdviceReference = Pick(InvoiceFieldAliases.ReceivingAdviceReference);
         inv.DespatchAdviceReference = Pick(InvoiceFieldAliases.DespatchAdviceReference);
