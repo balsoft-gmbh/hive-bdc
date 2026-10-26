@@ -1,6 +1,8 @@
+using System.Text.Json.Nodes;
 using Balsoft.Hive.BDC.Configuration;
 using Balsoft.Hive.BDC.Delivery;
 using Balsoft.Hive.BDC.Documents;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Balsoft.Hive.BDC.Tests;
@@ -31,16 +33,54 @@ public class RoutingAndConfigTests
     };
 
     [Fact]
-    public void NormalizeAddsMissingBuiltInsAndDropsEntriesWithoutInput()
+    public void NormalizeKeepsTheConfiguredTypesOnlyAndDropsEntriesWithoutInput()
     {
         var o = new BDCOptions();
         o.DocumentTypes.Add(new DocumentTypeOptions { Id = "PurchaseOrder", Companies = { Route("001", ""), Route("002", @"C:\po") } });
         o.Normalize();
 
-        Assert.Equal(6, o.DocumentTypes.Count);
-        var po = o.DocumentTypes.Single(t => t.Id == "PurchaseOrder");
+        var po = Assert.Single(o.DocumentTypes);
+        Assert.Equal("PurchaseOrder", po.Id);
         Assert.Single(po.Companies);
         Assert.Equal("002", po.Companies[0].DataAreaId);
+    }
+
+    [Fact]
+    public void NormalizeSeedsTheBuiltInsOnlyWhenNoTypeIsConfigured()
+    {
+        var o = new BDCOptions();
+        o.Normalize();
+        Assert.Equal(DocumentTypeCatalog.BuiltIn.Select(t => t.Id), o.DocumentTypes.Select(t => t.Id));
+    }
+
+    /// <summary>Customer report 2026-10-26: built-in types removed in Settings were back after Save.</summary>
+    [Fact]
+    public void BuiltInsRemovedInSettingsStayRemovedAfterTheServiceReloadsTheFile()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "hivebdc-settings-" + Guid.NewGuid() + ".json");
+        try
+        {
+            var invoice = new DocumentTypeOptions
+            {
+                Id = "SalesInvoice", DisplayName = "Sales invoice", Handler = DocumentHandlerKind.EInvoice,
+                Companies = { Route("A", @"C:\in") },
+            };
+            SettingsFile.Update(path, section =>
+            {
+                section["DocumentTypes"] = new JsonArray(SettingsFile.DocumentTypeNode(invoice));
+                return true;
+            });
+
+            var reloaded = new ConfigurationBuilder()
+                .AddJsonFile(path).Build().GetSection(SettingsFile.Section).Get<BDCOptions>()!;
+            reloaded.Normalize();
+            reloaded.Normalize();
+
+            var only = Assert.Single(reloaded.DocumentTypes);
+            Assert.Equal("SalesInvoice", only.Id);
+            Assert.Equal("A", Assert.Single(only.Companies).DataAreaId);
+        }
+        finally { File.Delete(path); }
     }
 
     [Fact]

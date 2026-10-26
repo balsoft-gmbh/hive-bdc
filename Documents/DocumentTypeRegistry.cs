@@ -8,7 +8,8 @@ namespace Balsoft.Hive.BDC.Documents;
 /// and registers types the ERP sends that nobody configured yet.
 ///
 /// Resolution order: the configured list (appsettings, which ships with the six built-in
-/// types), then the built-in catalog (in case someone deleted an entry by hand), then
+/// types), then the built-in catalog (a built-in removed in Settings, which is never
+/// re-registered; the processor sends its pairs to error\), then
 /// discovery: the id is appended to appsettings.json as a PDF pass-through routed like the
 /// company entry it was found under, the host's reload watcher picks the file up, and the
 /// dashboard shows the new type. Until that reload lands, the entry also lives in memory

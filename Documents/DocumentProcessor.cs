@@ -177,6 +177,9 @@ public sealed class DocumentProcessor
         // The folder's entry for that company seeds a newly discovered type.
         var seed = PickRoute(folder.Routes.Select(r => r.Route), company);
         var type = _registry.Resolve(opts, typeId, data.Party, seed, out _);
+        if (!type.Discovered && !opts.DocumentTypes.Contains(type))
+            throw new InvalidOperationException(
+                $"Document type '{type.Id}' was removed in Settings > Document types. Add it again (Add type, ID {type.Id}), then drop the pair back into the input folder.");
         var route = PickRoute(folder.Routes.Where(r => r.Type.Matches(type.Id)).Select(r => r.Route), company)
                     ?? PickRoute(type.Companies, company)
                     ?? (type.Discovered && seed is not null ? _registry.AddCompany(type, seed) : null)

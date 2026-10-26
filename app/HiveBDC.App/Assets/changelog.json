@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.3.3",
+      "date": "2026-10-26",
+      "changes": [
+        "Settings, Document types: a built-in type you remove stays removed after Save. Until now the service added every missing built-in type back when it loaded the settings, so removed types reappeared. A document the ERP still sends for a removed type goes to the error folder with the reason. Removing every type is refused; untick Enabled instead.",
+        "The log shows mail recipients masked (m***@contoso.com) and removes line breaks from values of local API requests, so a request cannot add fake log lines."
+      ]
+    },
+    {
       "version": "1.3.2",
       "date": "2026-10-23",
       "changes": [

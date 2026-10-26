@@ -95,10 +95,9 @@ public sealed class DocumentProcessorTests : IDisposable
         // failed on it. A folder only a disabled type points at must not even be touched.
         var a = Route("A"); var options = Options(a);
         string quotes = Path.Combine(_root, "quotes-not-created");
-        // Normalize() seeds every built-in type; disable the real SalesQuotation like a customer would.
-        var quoteType = options.DocumentTypes.Single(t => t.Id == "SalesQuotation");
-        quoteType.Enabled = false; quoteType.Mail = false;
+        var quoteType = new DocumentTypeOptions { Id = "SalesQuotation", Enabled = false, Mail = false };
         quoteType.Companies.Add(new DocumentRoute { DataAreaId = "A", Input = quotes });
+        options.DocumentTypes.Add(quoteType);
         Pair(a, "order", "A");
 
         var result = Scan(options);
@@ -113,9 +112,9 @@ public sealed class DocumentProcessorTests : IDisposable
     public void DisabledTypePairInASharedFolderGoesToErrorWhileTheEnabledTypeFlows()
     {
         var a = Route("A"); var options = Options(a);
-        var quoteType = options.DocumentTypes.Single(t => t.Id == "SalesQuotation");
-        quoteType.Enabled = false; quoteType.Mail = false;
+        var quoteType = new DocumentTypeOptions { Id = "SalesQuotation", Enabled = false, Mail = false };
         quoteType.Companies.Add(new DocumentRoute { DataAreaId = "A", Input = a.Input });
+        options.DocumentTypes.Add(quoteType);
         Pair(a, "order", "A");
         string quote = Path.Combine(a.Input, "quote_1.json");
         File.WriteAllText(quote, JsonSerializer.Serialize(new { documentType = "SalesQuotation", dataAreaId = "A" }));
@@ -128,6 +127,25 @@ public sealed class DocumentProcessorTests : IDisposable
         Assert.True(File.Exists(Path.Combine(a.Input, "error", "quote_1.json")));
         Assert.False(File.Exists(quote));
         Assert.False(File.Exists(Path.Combine(a.Input, "out", "SalesQuotation", "quote.pdf")));
+    }
+
+    /// <summary>Customer report 2026-10-26: removed built-ins came back; one the ERP still sends must not register again.</summary>
+    [Fact]
+    public void RemovedBuiltInTypeGoesToErrorAndIsNotRegisteredAgain()
+    {
+        var a = Route("A"); var options = Options(a);
+        Assert.DoesNotContain(options.DocumentTypes, t => t.Id == "SalesQuotation");
+        Pair(a, "order", "A");
+        RawPair(a.Input, "quote_1", new { documentType = "SalesQuotation", dataAreaId = "A" });
+
+        var result = Scan(options);
+
+        Assert.Equal(1, result.Processed);
+        Assert.Equal(1, result.Errors);
+        Assert.True(File.Exists(Path.Combine(a.Input, "error", "quote_1.json")));
+        Assert.False(Directory.Exists(Path.Combine(a.Input, "out", "SalesQuotation")));
+        Assert.False(File.Exists(Path.Combine(_root, "settings.json")));
+        Assert.DoesNotContain(options.DocumentTypes, t => t.Id == "SalesQuotation");
     }
 
     [Fact]

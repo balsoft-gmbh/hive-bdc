@@ -82,7 +82,8 @@ public sealed partial class LocalStatusServer
     // Mail/DocumentTypes[]) to appsettings.json ATOMICALLY. 200 {ok:true} | 400
     // {ok:false,errors:[...]}. The reload watcher then hot-applies it (no restart).
     // documentTypes absent from the POST => the stored list is kept; present => replaced
-    // as sent (missing built-ins are re-added on load). Any legacy "Companies" list is
+    // as sent, so a removed built-in stays removed; an empty list is refused, because the
+    // service seeds the six built-ins into an empty one on load. Any legacy "Companies" list is
     // dropped on write, since it was migrated into the types on read.
 
     private void PostConfig(HttpListenerContext ctx, HttpListenerRequest req)
@@ -123,6 +124,8 @@ public sealed partial class LocalStatusServer
         var types = dto.DocumentTypes;
         var seenTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool anySharePoint = false;
+        if (types is { Count: 0 })
+            errors.Add("Keep at least one document type. To stop one from being processed, untick Enabled instead of removing it.");
         if (types is not null)
         {
             for (int i = 0; i < types.Count; i++)

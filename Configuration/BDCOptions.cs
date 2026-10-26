@@ -33,7 +33,7 @@ public sealed class BDCOptions
     /// <summary>SHARED mail config ("HiveBDC:Mail"): own app registration, sender mailbox, redirect list.</summary>
     public MailOptions Mail { get; set; } = new();
 
-    /// <summary>The document types the service dispatches, each with its company entries. Missing built-ins are re-added by <see cref="Normalize"/>.</summary>
+    /// <summary>The document types the service dispatches, each with its company entries. The built-ins are seeded by <see cref="Normalize"/> only when none is configured.</summary>
     public List<DocumentTypeOptions> DocumentTypes { get; set; } = new();
 
     // ── LEGACY members (older schemas), folded into DocumentTypes by Normalize ─────────
@@ -112,9 +112,10 @@ public sealed class BDCOptions
     }
 
     /// <summary>
-    /// Trim every configured type, drop blank/duplicate ids (first wins), and append any
-    /// built-in type that is missing, so a hand-edited appsettings without the six defaults
-    /// still lists all of them. Order: as configured, then the missing built-ins.
+    /// Trim every configured type and drop blank/duplicate ids (first wins). The six built-ins
+    /// are seeded only when no type is configured at all (the installer's fallback file, an
+    /// older shape whose companies are migrated next). Once types are configured the list is
+    /// taken as it is, so a built-in removed in Settings stays removed.
     /// </summary>
     private void NormalizeDocumentTypes()
     {
@@ -128,9 +129,8 @@ public sealed class BDCOptions
             if (clean.Any(x => x.Matches(t.Id))) continue;
             clean.Add(t);
         }
-        foreach (var b in DocumentTypeCatalog.BuiltIn)
-            if (!clean.Any(x => x.Matches(b.Id)))
-                clean.Add(b);
+        if (clean.Count == 0)
+            clean.AddRange(DocumentTypeCatalog.BuiltIn);
         DocumentTypes = clean;
     }
 

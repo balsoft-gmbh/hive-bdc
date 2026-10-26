@@ -166,7 +166,7 @@
                                     IsEnabled="{Binding HasDocumentTypeSelection}"/>
                         </StackPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,6"
-                                   Text="Each type lists the companies it is picked up for. A type the ERP sends that is not here is added automatically, routed like the folder it arrived in, and marked auto-registered."/>
+                                   Text="Each type lists the companies it is picked up for. A type the ERP sends that is not here is added automatically, routed like the folder it arrived in, and marked auto-registered. A built-in type you remove stays removed; its files go to the error folder."/>
                         <ListBox ItemsSource="{Binding DocumentTypes}" SelectedItem="{Binding SelectedDocumentType}"
                                  Style="{StaticResource MasterList}">
                             <ListBox.ItemTemplate>

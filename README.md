@@ -52,9 +52,12 @@ on the spot as a PDF pass-through (party from the JSON's `party`, else
 Customer; mail on) with the same company entry as the folder it arrived in, logs
 a warning, and processes it. It appears in Settings marked **auto-registered**
 until you save it. A type you never want processed is set to disabled; its pairs
-then go to `error\` with that reason. An input folder that only disabled types
-point at is not scanned at all, so the installer default on an unused type
-causes no errors.
+then go to `error\` with that reason. A built-in type you remove (**Remove** in
+Settings) stays removed: it is not added back on the next start or save, and a
+pair the ERP still sends for it goes to `error\` instead of being registered
+again. Removing every type is refused; disable them instead. An input folder
+that only disabled types point at is not scanned at all, so the installer
+default on an unused type causes no errors.
 
 ## How dispatch works
 
@@ -489,9 +492,10 @@ DPAPI-encrypts the secrets. Schema:
           }
         ]
       }
-      // ... the other built-ins; missing ones are re-added on load (without company
-      // entries, i.e. not picked up until configured). Auto-registered types carry
-      // "Discovered": true until saved from the dashboard.
+      // ... the other built-ins you use. A built-in left out stays out; only a file with
+      // no types at all gets the six built-ins on load (without company entries, i.e.
+      // not picked up until configured). Auto-registered types carry "Discovered": true
+      // until saved from the dashboard.
     ]
   }
 }
