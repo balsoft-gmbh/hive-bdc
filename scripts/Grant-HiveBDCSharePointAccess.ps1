@@ -11,7 +11,10 @@
          Sites.Selected alone opens no site at all.
       3. SharePoint: write access on each -SiteUrl. This needs the delegated permission
          Sites.FullControl.All, which an Azure CLI sign-in does not carry, so it signs in
-         once more with Microsoft.Graph.Authentication.
+         once more through Microsoft's public client "Microsoft Graph Command Line Tools"
+         (the one Connect-MgGraph uses): in a browser on a PC, by code in Cloud Shell. No
+         PowerShell module needed. If the tenant blocks sign-in by code, run this script on
+         your own computer instead of Cloud Shell.
 
     -AllSites grants Sites.ReadWrite.All (every site) instead and skips step 3.
     Roles: Privileged Role Administrator or Global Administrator for the consent, and
@@ -54,8 +57,10 @@ function Write-Ok { param([string] $Text) Write-Host "   [ok]   $Text" -Foregrou
 function Write-Skip { param([string] $Text) Write-Host "   [have] $Text" -ForegroundColor DarkGray }
 function Write-Note { param([string] $Text) Write-Host "   $Text" -ForegroundColor Gray }
 
+# Only Cloud Shell has no browser to sign in with; there a device code is the way in.
+# Elsewhere the browser is used, because many tenants block sign-in by code.
 $isCloudShell = [bool]$env:ACC_CLOUD -or ("$env:AZUREPS_HOST_ENVIRONMENT" -like '*cloud-shell*')
-$useDeviceCode = $isCloudShell -or ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)
+$useDeviceCode = $isCloudShell
 
 # Runs az and returns its JSON output; a failed command stops the script.
 function Invoke-Az {
@@ -98,6 +103,90 @@ function Get-PermissionAppIds {
             }
         }
     }
+}
+
+# A delegated Microsoft Graph token for Sites.FullControl.All, which Azure CLI cannot get.
+# It signs in through Microsoft's public client "Microsoft Graph Command Line Tools" (the
+# one Connect-MgGraph uses) without that module, whose current versions fail on older
+# PowerShell hosts. With a browser: authorization code with PKCE on a localhost redirect.
+# Without one (Cloud Shell): a device code, which some tenants block by Conditional Access.
+# The token stays in memory.
+$GraphCliClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'
+
+function ConvertTo-Base64Url { param([byte[]] $Bytes) [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_') }
+
+function Get-BrowserToken {
+    param([string] $Tenant, [string] $Scope)
+    $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $probe.Start(); $port = $probe.LocalEndpoint.Port; $probe.Stop()
+    $redirect = "http://localhost:$port/"
+    $listener = [System.Net.HttpListener]::new()
+    $listener.Prefixes.Add($redirect)
+    $listener.Start()
+    try {
+        $random = [byte[]]::new(32)
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($random)
+        $verifier = ConvertTo-Base64Url $random
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $challenge = ConvertTo-Base64Url ($sha.ComputeHash([Text.Encoding]::ASCII.GetBytes($verifier)))
+        $state = [guid]::NewGuid().ToString('N')
+        $query = @{
+            client_id = $GraphCliClientId; response_type = 'code'; redirect_uri = $redirect; scope = $Scope
+            code_challenge = $challenge; code_challenge_method = 'S256'; state = $state; prompt = 'select_account'
+        }.GetEnumerator() | ForEach-Object { "$($_.Key)=$([Uri]::EscapeDataString($_.Value))" }
+        $url = "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/authorize?" + ($query -join '&')
+
+        Write-Note 'A browser window opens for the sign-in. If it does not, open this address:'
+        Write-Note "  $url"
+        if ($IsMacOS) { & open $url } elseif ($IsLinux) { & xdg-open $url 2>$null } else { Start-Process $url }
+
+        $pending = $listener.GetContextAsync()
+        if (-not $pending.Wait([TimeSpan]::FromMinutes(5))) { throw 'No sign-in within 5 minutes. Run the script again.' }
+        $context = $pending.Result
+        $answer = $context.Request.QueryString
+        $page = [Text.Encoding]::UTF8.GetBytes('<html><body style="font-family:sans-serif">Signed in. You can close this tab and go back to PowerShell.</body></html>')
+        $context.Response.ContentType = 'text/html; charset=utf-8'
+        $context.Response.OutputStream.Write($page, 0, $page.Length)
+        $context.Response.Close()
+
+        if ($answer['error']) { throw "Sign-in failed: $($answer['error_description'])" }
+        if ($answer['state'] -ne $state) { throw 'Sign-in answer did not match this request.' }
+        $token = Invoke-RestMethod -Method POST -Uri "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/token" -Body @{
+            grant_type = 'authorization_code'; client_id = $GraphCliClientId; code = $answer['code']
+            redirect_uri = $redirect; code_verifier = $verifier; scope = $Scope
+        }
+        return $token.access_token
+    }
+    finally { $listener.Stop(); $listener.Close() }
+}
+
+function Get-DeviceCodeToken {
+    param([string] $Tenant, [string] $Scope)
+    $base = "https://login.microsoftonline.com/$Tenant/oauth2/v2.0"
+    $code = Invoke-RestMethod -Method POST -Uri "$base/devicecode" -Body @{ client_id = $GraphCliClientId; scope = $Scope }
+    Write-Host "   $($code.message)" -ForegroundColor Yellow
+    $deadline = (Get-Date).AddSeconds([int]$code.expires_in)
+    $interval = [int]$code.interval
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds $interval
+        try {
+            $token = Invoke-RestMethod -Method POST -Uri "$base/token" -Body @{
+                grant_type = 'urn:ietf:params:oauth:grant-type:device_code'; client_id = $GraphCliClientId; device_code = $code.device_code
+            }
+            return $token.access_token
+        }
+        catch {
+            $reason = try { ($_.ErrorDetails.Message | ConvertFrom-Json).error } catch { '' }
+            if ($reason -eq 'authorization_pending') { continue }
+            if ($reason -eq 'slow_down') { $interval += 5; continue }
+            if ($reason -in @('access_denied', 'invalid_grant')) {
+                throw ('Sign-in with a code was refused; your organisation may block it. Run this script on your own ' +
+                       'computer instead (PowerShell with Azure CLI), where the sign-in opens a browser.')
+            }
+            throw
+        }
+    }
+    throw 'The sign-in code expired. Run the script again.'
 }
 
 if ($WhatIfPreference) { Write-Host 'DRY RUN - nothing will be changed.' -ForegroundColor Yellow }
@@ -163,13 +252,10 @@ $failed = @()
 if ($AllSites) { Write-Step '3/3 Sites (not needed with -AllSites)' }
 else {
     Write-Step '3/3 Write access on the sites'
-    if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
-        Install-Module -Name Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber
-    }
-    Import-Module Microsoft.Graph.Authentication
-    $connect = @{ TenantId = $tenantId; Scopes = @('Sites.FullControl.All'); NoWelcome = $true }
-    if ($useDeviceCode) { $connect['UseDeviceCode'] = $true }
-    Connect-MgGraph @connect
+    Write-Note 'Granting a site needs Sites.FullControl.All for your account; sign in once more:'
+    $scope = 'https://graph.microsoft.com/Sites.FullControl.All'
+    $graphToken = if ($useDeviceCode) { Get-DeviceCodeToken $tenantId $scope } else { Get-BrowserToken $tenantId $scope }
+    $headers = @{ Authorization = "Bearer $graphToken" }
 
     foreach ($url in $SiteUrl) {
         $uri = [Uri]$url
@@ -178,8 +264,8 @@ else {
             "$($uri.Host):/$($segments[0])/$([Uri]::UnescapeDataString($segments[1]))"
         } else { $uri.Host }
         try {
-            $site = Invoke-MgGraphRequest -Method GET -OutputType PSObject -Uri "$GraphV1/sites/$siteRef`?`$select=id,webUrl"
-            $permissions = Invoke-MgGraphRequest -Method GET -OutputType PSObject -Uri "$GraphV1/sites/$($site.id)/permissions"
+            $site = Invoke-RestMethod -Headers $headers -Uri "$GraphV1/sites/$siteRef`?`$select=id,webUrl"
+            $permissions = Invoke-RestMethod -Headers $headers -Uri "$GraphV1/sites/$($site.id)/permissions"
             $existing = @($permissions.value | Where-Object { (Get-PermissionAppIds $_) -contains $appId }) | Select-Object -First 1
 
             if ($existing -and @($existing.roles | Where-Object { $_ -in @('write', 'owner', 'fullcontrol') })) {
@@ -187,25 +273,25 @@ else {
             }
             elseif ($existing) {
                 if ($PSCmdlet.ShouldProcess($site.webUrl, 'Raise the access to write')) {
-                    Invoke-MgGraphRequest -Method PATCH -Uri "$GraphV1/sites/$($site.id)/permissions/$($existing.id)" `
+                    Invoke-RestMethod -Headers $headers -Method PATCH -Uri "$GraphV1/sites/$($site.id)/permissions/$($existing.id)" `
                         -Body (@{ roles = @('write') } | ConvertTo-Json) -ContentType 'application/json' | Out-Null
                     Write-Ok "$($site.webUrl): raised to write"
                 }
             }
             elseif ($PSCmdlet.ShouldProcess($site.webUrl, 'Grant write access')) {
                 $body = @{ roles = @('write'); grantedToIdentities = @(@{ application = @{ id = $appId; displayName = $AppName } }) }
-                Invoke-MgGraphRequest -Method POST -Uri "$GraphV1/sites/$($site.id)/permissions" `
+                Invoke-RestMethod -Headers $headers -Method POST -Uri "$GraphV1/sites/$($site.id)/permissions" `
                     -Body ($body | ConvertTo-Json -Depth 5) -ContentType 'application/json' | Out-Null
                 Write-Ok "$($site.webUrl): write"
             }
         }
         catch {
             $failed += $url
-            Write-Warning "$url : $($_.Exception.Message)"
+            $detail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+            Write-Warning "$url : $detail"
             Write-Note 'Your account needs SharePoint Administrator and has to be a member of this site.'
         }
     }
-    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
 }
 
 # -- next -----------------------------------------------------------------------------

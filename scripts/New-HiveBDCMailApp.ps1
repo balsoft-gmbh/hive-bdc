@@ -33,8 +33,10 @@ function Write-Ok { param([string] $Text) Write-Host "   [ok]   $Text" -Foregrou
 function Write-Skip { param([string] $Text) Write-Host "   [have] $Text" -ForegroundColor DarkGray }
 function Write-Note { param([string] $Text) Write-Host "   $Text" -ForegroundColor Gray }
 
+# Only Cloud Shell has no browser to sign in with; there a device code is the way in.
+# Elsewhere the browser is used, because many tenants block sign-in by code.
 $isCloudShell = [bool]$env:ACC_CLOUD -or ("$env:AZUREPS_HOST_ENVIRONMENT" -like '*cloud-shell*')
-$useDeviceCode = $isCloudShell -or ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)
+$useDeviceCode = $isCloudShell
 
 # Runs az and returns its JSON output; a failed command stops the script.
 function Invoke-Az {

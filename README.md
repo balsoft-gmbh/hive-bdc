@@ -402,7 +402,7 @@ different administrators can do:
 | Script | Permission | Narrowed to | Role |
 |---|---|---|---|
 | `Grant-HiveBDCSharePointAccess.ps1 -AppId ... -SiteUrl ...` | `Sites.Selected` with admin consent (`-AllSites`: `Sites.ReadWrite.All`) | write on each `-SiteUrl` | Global or Privileged Role Administrator, SharePoint Administrator |
-| `Grant-HiveBDCMailAccess.ps1 -AppId ... -SenderMailbox ...` | Exchange role `Application Mail.Send`, no Entra consent | the one `-SenderMailbox` | Exchange Administrator |
+| `Grant-HiveBDCMailAccess.ps1 -AppId ... -SenderMailbox ...` | Exchange role `Application Mail.Send`, no Entra consent | the one `-SenderMailbox` | Exchange Administrator (Organization Management) |
 
 The scripts run in **Azure Cloud Shell (PowerShell)**, which has Azure CLI and the needed
 modules ready, or in any PowerShell 5.1+ with Azure CLI. Each shows the tenant and asks
@@ -410,8 +410,17 @@ before changing anything, supports `-WhatIf`, and skips what already exists, so 
 run is safe. None of them creates or stores a client secret; step 1 prints how.
 
 Azure CLI creates the apps and grants the SharePoint consent. It cannot grant a single site
-or manage Exchange, so the site grant signs in once more with `Microsoft.Graph.Authentication`
-(`Sites.FullControl.All`) and the mailbox restriction uses `ExchangeOnlineManagement`.
+or manage Exchange (Graph and SharePoint both refuse its token for that), so step 2 signs in
+once more: the site grant asks for `Sites.FullControl.All` through Microsoft's public client
+"Microsoft Graph Command Line Tools" (plain REST, no Graph module), and the mailbox
+restriction uses `ExchangeOnlineManagement`. Outside Cloud Shell that sign-in opens a browser;
+in Cloud Shell it uses a device code, which many tenants block with Conditional Access. For
+those tenants run step 2 on the admin's own computer (PowerShell with Azure CLI, plus
+`Install-Module ExchangeOnlineManagement` for the mail script).
+
+Custom Exchange scopes need `Enable-OrganizationCustomization` once per tenant; the mail script
+turns it on when it is off. Exchange applies it with a delay of up to about an hour, so a first
+run can stop with a "run again later" message; the rerun skips everything already done.
 
 The mail app deliberately gets **no** `Mail.Send` consent in Entra ID. Exchange RBAC for
 Applications adds to an Entra consent instead of narrowing it, so a consented app could still

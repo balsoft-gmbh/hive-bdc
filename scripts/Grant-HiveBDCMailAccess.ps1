@@ -54,8 +54,10 @@ function Write-Ok { param([string] $Text) Write-Host "   [ok]   $Text" -Foregrou
 function Write-Skip { param([string] $Text) Write-Host "   [have] $Text" -ForegroundColor DarkGray }
 function Write-Note { param([string] $Text) Write-Host "   $Text" -ForegroundColor Gray }
 
+# Only Cloud Shell has no browser to sign in with; there a device code is the way in.
+# Elsewhere the browser is used, because many tenants block sign-in by code.
 $isCloudShell = [bool]$env:ACC_CLOUD -or ("$env:AZUREPS_HOST_ENVIRONMENT" -like '*cloud-shell*')
-$useDeviceCode = $isCloudShell -or ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)
+$useDeviceCode = $isCloudShell
 
 # Runs az and returns its JSON output; a failed command stops the script.
 function Invoke-Az {
@@ -161,6 +163,14 @@ if ($useRbac) {
         Write-Ok 'registered in Exchange Online'
     }
 
+    # Custom scopes need the one-time switch Enable-OrganizationCustomization, which tenants
+    # that never customised Exchange have off ("isn't currently allowed in your organization").
+    if (-not (Get-OrganizationConfig).IsDehydrated) { Write-Skip 'organisation customization is enabled' }
+    elseif ($PSCmdlet.ShouldProcess('Exchange Online organisation', 'Enable-OrganizationCustomization (one-time, permanent)')) {
+        Enable-OrganizationCustomization
+        Write-Ok 'enabled organisation customization (needed once for custom scopes)'
+    }
+
     $scope = Get-ManagementScope -Identity $scopeName -ErrorAction SilentlyContinue
     if ($scope) {
         Write-Skip "scope '$scopeName': $($scope.RecipientFilter)"
@@ -171,7 +181,17 @@ if ($useRbac) {
     elseif ($PSCmdlet.ShouldProcess($scopeName, "Create a management scope with only $SenderMailbox")) {
         # Doubled apostrophes keep an address with ' from breaking the filter.
         $filter = "PrimarySmtpAddress -eq '{0}'" -f $SenderMailbox.Replace("'", "''")
-        New-ManagementScope -Name $scopeName -RecipientRestrictionFilter $filter | Out-Null
+        try { New-ManagementScope -Name $scopeName -RecipientRestrictionFilter $filter -ErrorAction Stop | Out-Null }
+        catch {
+            if ($_.Exception.Message -notmatch 'OrganizationCustomization') { throw }
+            # Exchange applies the switch with a delay of up to about an hour.
+            Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+            Write-Host ''
+            Write-Host '   Exchange Online has not applied the customization switch yet; that takes up to an hour.' -ForegroundColor Yellow
+            Write-Host '   Run this script again later with the same parameters. Everything done so far is skipped,' -ForegroundColor Yellow
+            Write-Host '   and the app cannot send mail until it has finished.' -ForegroundColor Yellow
+            return
+        }
         Write-Ok "created the scope '$scopeName'"
     }
 
