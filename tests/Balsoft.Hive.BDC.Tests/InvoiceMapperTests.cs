@@ -145,6 +145,150 @@ public class InvoiceMapperTests
         Assert.Equal(25, Assert.Single(mapped.CashDiscounts).Days);
     }
 
+    // ── 1.3.4: header charge total (BT-99) and sellerItemId ──
+
+    // What the minimal fixture lacks for a clean XRechnung pre-flight (BR-DE-3/4/6/7/8/9/15, PEPPOL R010/R020).
+    private const string XRechnungComplete = """
+        , "buyerReference": "04011000-12345-67", "senderStreet": "Weg 1", "senderPostcode": "10115", "senderCity": "Berlin",
+        "senderEmail": "rechnung@example.com", "senderPhone": "+49 30 000000", "recipientPostcode": "20095", "recipientCity": "Hamburg",
+        "recipientEmail": "ap@example.com"
+        """;
+
+    [Fact]
+    public void HeaderChargeTotalBecomesADocumentLevelChargeWithTheHeaderVat()
+    {
+        // 300.00 net at 19 % plus 25.50 freight and small-quantity surcharges on the header.
+        var warnings = new List<string>();
+        var mapped = InvoiceMapper.Map(Invoice(XRechnungComplete + """, "chargeTotalAmount": "25.50" """), warnings.Add);
+
+        var charge = Assert.Single(mapped.AllowancesAndCharges);
+        Assert.True(charge.IsCharge);
+        Assert.Equal(25.5m, charge.Amount);
+        Assert.Equal("Zuschläge", charge.Reason);
+        Assert.Equal(VatCategory.StandardRate, charge.VatCategory);
+        Assert.Equal(19m, charge.VatRate);
+        var totals = mapped.CalculateTotals();
+        Assert.Equal(300m, totals.LineNetTotal);
+        Assert.Equal(25.5m, totals.ChargeTotal);
+        Assert.Equal(325.5m, totals.TaxExclusiveAmount);
+        Assert.Equal(61.85m, totals.VatTotal);
+        Assert.Equal(387.35m, totals.TaxInclusiveAmount);
+        Assert.Equal(325.5m, Assert.Single(totals.VatBreakdown).TaxableAmount);
+
+        Assert.True(EInvoiceGenerator.Preflight(mapped, warnings.Add).IsValid, string.Join("\n", warnings));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.Contains("<ram:ChargeTotalAmount>25.50</ram:ChargeTotalAmount>", xml);
+        Assert.Contains("<ram:TaxBasisTotalAmount>325.50</ram:TaxBasisTotalAmount>", xml);
+        Assert.Contains("<ram:GrandTotalAmount>387.35</ram:GrandTotalAmount>", xml);
+        int settlement = xml.IndexOf("<ram:ApplicableHeaderTradeSettlement>", StringComparison.Ordinal);
+        int headerCharge = xml.IndexOf("<ram:SpecifiedTradeAllowanceCharge>", settlement, StringComparison.Ordinal);
+        Assert.True(headerCharge > settlement, "no header SpecifiedTradeAllowanceCharge");
+        string block = xml.Substring(headerCharge, xml.IndexOf("</ram:SpecifiedTradeAllowanceCharge>", headerCharge, StringComparison.Ordinal) - headerCharge);
+        Assert.Contains("<udt:Indicator>true</udt:Indicator>", block);
+        Assert.Contains("<ram:ActualAmount>25.50</ram:ActualAmount>", block);
+        Assert.Contains("<ram:Reason>Zuschläge</ram:Reason>", block);
+        Assert.Contains("<ram:CategoryCode>S</ram:CategoryCode>", block);
+        Assert.Contains("<ram:RateApplicablePercent>19", block);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(""", "chargeTotalAmount": "" """)]
+    [InlineData(""", "chargeTotalAmount": "0" """)]
+    [InlineData(""", "chargeTotalAmount": "0.00" """)]
+    public void MissingOrZeroHeaderChargeAddsNothing(string extraJson)
+    {
+        var mapped = InvoiceMapper.Map(Invoice(extraJson));
+        Assert.Empty(mapped.AllowancesAndCharges);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.DoesNotContain("ChargeTotalAmount", xml);
+        Assert.DoesNotContain("<ram:SpecifiedTradeAllowanceCharge>", xml);
+    }
+
+    [Fact]
+    public void HeaderChargeOnACreditNoteIsPositive()
+    {
+        var mapped = InvoiceMapper.Map(Invoice(""", "invoiceTypeCode": "381", "chargeTotalAmount": "-10" """, """
+            [ { "description": "A", "quantity": "-1", "unitPrice": "100" } ]
+            """));
+        var charge = Assert.Single(mapped.AllowancesAndCharges);
+        Assert.True(charge.IsCharge);
+        Assert.Equal(10m, charge.Amount);
+        Assert.Equal(110m, mapped.CalculateTotals().TaxExclusiveAmount);
+    }
+
+    [Fact]
+    public void NegativeHeaderChargeOnAPlainInvoiceIsAnAllowance()
+    {
+        var mapped = InvoiceMapper.Map(Invoice(""", "chargeTotalAmount": "-10" """));
+        var allowance = Assert.Single(mapped.AllowancesAndCharges);
+        Assert.False(allowance.IsCharge);
+        Assert.Equal(10m, allowance.Amount);
+        Assert.Equal("Rabatt", allowance.Reason);
+        var totals = mapped.CalculateTotals();
+        Assert.Equal(10m, totals.AllowanceTotal);
+        Assert.Equal(290m, totals.TaxExclusiveAmount);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.Contains("<ram:AllowanceTotalAmount>10.00</ram:AllowanceTotalAmount>", xml);
+        Assert.DoesNotContain("ChargeTotalAmount", xml);
+    }
+
+    [Fact]
+    public void HeaderChargeFollowsTheHeaderVatCategoryNotTheLines()
+    {
+        // Header: category E at 0 %; the lines carry their own 19 %. The charge sits in E with a reason (BR-E-10).
+        var warnings = new List<string>();
+        var mapped = InvoiceMapper.Map(Invoice(XRechnungComplete + """, "vatRate": "0", "vatCategory": "E", "vatNote": "Steuerfrei nach § 4 UStG", "chargeTotalAmount": "12", "chargeReason": "Fracht" """, """
+            [ { "description": "A", "quantity": "1", "unitPrice": "100", "vatRate": "19" } ]
+            """), warnings.Add);
+        var charge = Assert.Single(mapped.AllowancesAndCharges);
+        Assert.Equal(VatCategory.Exempt, charge.VatCategory);
+        Assert.Equal(0m, charge.VatRate);
+        Assert.Equal("Fracht", charge.Reason);
+        Assert.Equal(VatCategory.StandardRate, mapped.Lines[0].VatCategory);
+        var totals = mapped.CalculateTotals();
+        Assert.Equal(19m, totals.VatTotal);
+        Assert.Equal(2, totals.VatBreakdown.Count);
+        var exempt = totals.VatBreakdown.Single(b => b.Category == VatCategory.Exempt);
+        Assert.Equal(12m, exempt.TaxableAmount);
+        Assert.Equal("Steuerfrei nach § 4 UStG", exempt.ExemptionReason);
+        Assert.True(EInvoiceGenerator.Preflight(mapped, warnings.Add).IsValid, string.Join("\n", warnings));
+    }
+
+    [Fact]
+    public void UnparsableHeaderChargeWarnsAndIsIgnored()
+    {
+        var warnings = new List<string>();
+        var mapped = InvoiceMapper.Map(Invoice(""", "chargeTotalAmount": "abc" """), warnings.Add);
+        Assert.Empty(mapped.AllowancesAndCharges);
+        Assert.Contains(warnings, w => w.Contains("header charge total") && w.Contains("abc"));
+        Assert.Equal(300m, mapped.CalculateTotals().TaxExclusiveAmount);
+    }
+
+    [Theory]
+    [InlineData("sellerItemId")]
+    [InlineData("itemId")]
+    public void SellerItemIdLandsInSellerAssignedId(string key)
+    {
+        var mapped = InvoiceMapper.Map(Invoice("", $$"""
+            [ { "description": "A", "quantity": "1", "unitPrice": "10", "{{key}}": "4711" } ]
+            """));
+        Assert.Equal("4711", mapped.Lines[0].Item.SellersIdentifier);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        int product = xml.IndexOf("<ram:SpecifiedTradeProduct>", StringComparison.Ordinal);
+        int id = xml.IndexOf("<ram:SellerAssignedID>4711</ram:SellerAssignedID>", StringComparison.Ordinal);
+        Assert.True(product >= 0 && id > product && id < xml.IndexOf("</ram:SpecifiedTradeProduct>", product, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CashDiscountAmountDerivesItsPercentFromTheGrossIncludingTheHeaderCharge()
+    {
+        // 300.00 + 20.00 charge = 320.00 net, 380.80 gross; a 7.616 Skonto amount is 2 %.
+        var mapped = InvoiceMapper.Map(Invoice(""", "chargeTotalAmount": "20", "cashDiscounts": [ { "date": "2026-10-06", "amount": "7.616" } ] """));
+        var discount = Assert.Single(mapped.CashDiscounts);
+        Assert.Equal(2m, discount.Percent);
+    }
+
     private static AxDocument Invoice(string extraJson = "", string lines = """
         [ { "description": "A", "quantity": "2", "unit": "piece", "unitPrice": "150.00" } ]
         """) => AxDocument.Parse($$"""

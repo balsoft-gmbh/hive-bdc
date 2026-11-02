@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.3.4",
+      "date": "2026-11-02",
+      "changes": [
+        "Header charges from the ERP export (chargeTotalAmount: freight, small-quantity surcharge and other misc charges summed on the header) are written as one document level charge (BT-99) with the reason from chargeReason or \"Zuschläge\" and the VAT of the header vatCategory and vatRate. The charge counts in the charge total (BT-108), the tax basis (BT-109) and the VAT breakdown, so the e-invoice totals match the printed invoice. Until now the key was logged as not written and the totals were short by the charges.",
+        "The line key sellerItemId is recognised as the seller's item number (BT-155, SellerAssignedID), next to itemId and itemNumber."
+      ]
+    },
+    {
       "version": "1.3.3",
       "date": "2026-10-26",
       "changes": [

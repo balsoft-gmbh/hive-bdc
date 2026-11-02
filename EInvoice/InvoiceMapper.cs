@@ -296,12 +296,30 @@ public static class InvoiceMapper
         if (leftOut.Count > 0)
             info?.Invoke("JSON fields not written to the e-invoice (no EN 16931 term for them): " + string.Join(", ", leftOut));
 
-        // After the lines: a cash discount given as an amount only needs the gross total.
+        // BT-99 / BT-104: the ERP's header charges (AX misc charges: freight, small-quantity surcharge,
+        // ...) as one document level charge, taxed with the header category and rate. Absolute-value
+        // documents keep the sign in BT-3; on a plain invoice a negative total is an allowance (BG-20).
+        decimal headerCharge = Decimal(Pick(InvoiceFieldAliases.DocumentChargeAmount), "header charge total", warn);
+        if (absolute) headerCharge = Math.Abs(headerCharge);
+        if (headerCharge != 0m)
+        {
+            var headerCategory = ResolveCategory(data.VatCategory, data.VatRate, warn);
+            inv.AllowancesAndCharges.Add(new AllowanceCharge
+            {
+                IsCharge = headerCharge > 0m, Amount = Math.Abs(headerCharge),
+                Reason = Pick(InvoiceFieldAliases.DocumentChargeReason) ?? (headerCharge > 0m ? "Zuschläge" : "Rabatt"),
+                VatCategory = headerCategory,
+                VatRate = headerCategory == VatCategory.NotSubjectToVat ? null : data.VatRate,
+            });
+        }
+
+        // After the lines and the header charge: a cash discount given as an amount only needs the gross total.
         AddPaymentTerms(inv, data, issueDate, warn);
 
         // ── VAT exemption reasons ───────────────────────────────────────────
         // E, AE, K, G and O need a reason in the breakdown (BT-120); the export's vatNote, else a default.
-        foreach (var category in inv.Lines.Select(l => l.VatCategory).Distinct().Where(c => c.RequiresExemptionReason()))
+        foreach (var category in inv.Lines.Select(l => l.VatCategory).Concat(inv.AllowancesAndCharges.Select(a => a.VatCategory))
+                     .Distinct().Where(c => c.RequiresExemptionReason()))
         {
             inv.VatExemptions.Add(new VatExemption
             {

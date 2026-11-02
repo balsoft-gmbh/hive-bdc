@@ -31,6 +31,8 @@ public static class InvoiceFieldAliases
     public static readonly Term BuyerAccountingReference = new("BT-19", "Buyer accounting reference");
     public static readonly Term PrecedingInvoiceNumber = new("BT-25", "Preceding invoice reference");
     public static readonly Term PrecedingInvoiceDate = new("BT-26", "Preceding invoice issue date");
+    public static readonly Term DocumentChargeAmount = new("BT-99", "Document level charge amount");
+    public static readonly Term DocumentChargeReason = new("BT-104", "Document level charge reason");
     public static readonly Term ShipToName = new("BT-70", "Deliver to party name");
     public static readonly Term DeliveryDate = new("BT-72", "Actual delivery date");
     public static readonly Term ShipToStreet = new("BT-75", "Deliver to address line 1");
@@ -61,6 +63,8 @@ public static class InvoiceFieldAliases
         [BuyerReference] = new[] { "buyerReference", "leitwegId", "leitweg", "käuferreferenz", "kaeuferreferenz", "BT-10" },
         [ProjectReference] = new[] { "projectReference", "projectNumber", "projektnummer", "projektreferenz", "BT-11" },
         [ProjectName] = new[] { "projectName", "projektname", "projektbezeichnung" },
+        [DocumentChargeAmount] = new[] { "chargeTotalAmount", "headerChargeAmount", "documentChargeAmount", "markupTotalAmount", "zuschlaege", "zuschläge", "BT-99" },
+        [DocumentChargeReason] = new[] { "chargeReason", "headerChargeReason", "documentChargeReason", "BT-104" },
         [ContractReference] = new[] { "contractReference", "contractNumber", "vertragsnummer", "BT-12" },
         [PurchaseOrderReference] = new[] { "purchase order reference", "purchaseOrderReference", "purchaseOrderNumber", "purchaseOrderId", "purchOrderReference", "purchOrderRef", "purchOrderFormNum", "buyerOrderReference", "customerOrderNumber", "customerPurchaseOrder", "customerRequisition", "bestellnummer", "kundenbestellnummer", "BT-13" },
         [SalesOrderReference] = new[] { "orderReference", "salesOrderReference", "salesOrderNumber", "salesId", "auftragsnummer", "BT-14" },
@@ -92,7 +96,7 @@ public static class InvoiceFieldAliases
         [PriceBaseQuantity] = new[] { "priceUnit", "priceBaseQuantity", "basisQuantity", "preiseinheit", "BT-149" },
         [OrderLineReference] = new[] { "orderLineReference", "purchaseOrderLine", "purchaseOrderLineReference", "bestellposition", "BT-132" },
         [LineAccountingReference] = new[] { "lineAccountingReference", "buyerAccountingReference", "costCenter", "kostenstelle", "BT-133" },
-        [SellersItemId] = new[] { "itemId", "itemNumber", "sellersItemIdentifier", "artikelnummer", "BT-155" },
+        [SellersItemId] = new[] { "itemId", "itemNumber", "sellerItemId", "sellersItemId", "sellersItemIdentifier", "artikelnummer", "BT-155" },
         [BuyersItemId] = new[] { "buyersItemIdentifier", "buyerItemId", "customerItemId", "externalItemId", "kundenartikelnummer", "BT-156" },
         [Gtin] = new[] { "gtin", "ean", "eanCode", "barcode", "BT-157" },
         [OriginCountry] = new[] { "originCountry", "countryOfOrigin", "ursprungsland", "BT-159" },

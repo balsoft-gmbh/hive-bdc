@@ -143,8 +143,9 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | BT-72 Delivery date | `deliveryDate`, `lieferdatum` (else the issue date) |
 | BG-13 Deliver to (BT-70, 75, 77, 78, 80) | `deliveryName`, `deliveryStreet`, `deliveryCity`, `deliveryPostcode`, `deliveryCountry` (country falls back to the buyer's; BT-80 is required for intra-community supplies, BR-IC-12) |
 | BT-83 / BT-85 / BT-86 Payment | `paymentReference`, `bankAccountHolder`, `bankSwift` / `bic` |
+| BT-99 / BT-104 Document level charge | `chargeTotalAmount` (the sum of the ERP's header charges: freight, small-quantity surcharge, ...), `chargeReason` (default "Zuschläge"); one header charge taxed with the header `vatCategory` / `vatRate`, counted in BT-108, BT-109 and the VAT breakdown. A negative value on a plain invoice is a document level allowance ("Rabatt"); credit notes take the absolute value |
 | Line BT-127, 132, 133 | `lineNote`, `orderLineReference`, `costCenter` |
-| Line BT-155, 156, 157, 159 | `itemId`, `customerItemId`, `gtin` / `ean`, `originCountry` |
+| Line BT-155, 156, 157, 159 | `itemId` / `sellerItemId`, `customerItemId`, `gtin` / `ean`, `originCountry` |
 | Line BT-149 / BT-146 price base quantity | `priceUnit` (an AX price unit such as 100) with `priceUnitPrice` (the price per that quantity); without the latter the per-piece `unitPrice` is scaled |
 | Line BT-141 / BT-144 charge | `lineChargeAmount`, `lineChargeReason` (an AX `SalesMarkup` the ERP folded into its line amount) |
 | Line BT-136 / BT-139 allowance | `lineDiscountAmount`, `lineDiscountReason` |

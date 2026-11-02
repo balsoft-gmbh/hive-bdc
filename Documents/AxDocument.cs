@@ -95,6 +95,9 @@ public sealed class AxDocument
 
     [JsonConverter(typeof(TolerantDecimalConverter))]
     public decimal VatRate { get; set; }
+
+    /// <summary>Header VAT category (UNTDID 5305). Blank = S, or E when the rate is 0. The VAT of a header charge.</summary>
+    public string VatCategory { get; set; } = "";
     public string VatNote { get; set; } = "";
 
     public string BankIban { get; set; } = "";
