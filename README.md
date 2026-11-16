@@ -738,6 +738,36 @@ it, so a document is never stored twice. A refused sign-in or an unreachable
 DocuWare keeps the document waiting and is tried again on the next scan. The
 target needs the licence feature `sharepoint`.
 
+### Azure Blob Storage (D365 F&O)
+
+The F&O model sends each document's JSON as a blob without extension and its PDF as
+a second blob that the JSON names in `pdfLink`. A company entry with a `Source` of
+kind `blob` takes them from there:
+
+```json
+{ "DataAreaId": "USMF", "Input": "D:\\HiveBDC\\staging\\usmf", "Output": "",
+  "Source": { "Kind": "blob", "Connection": "fo-storage",
+    "Settings": { "Container": "bdc-out", "Prefix": "SalesInvoice/",
+                  "ProcessedPrefix": "processed/SalesInvoice/", "ErrorPrefix": "error/SalesInvoice/" } } }
+```
+
+Before every scan, each new JSON blob under the prefix and its PDF are downloaded
+into the input folder as `{id}_blob.json` and `{id}_blob.pdf`, and the normal
+pipeline processes them. A note per pair in the folder's `.hive-sources` records
+where it came from; once the pair is in `processed` or `error`, its blobs are moved
+to the processed or error prefix (defaults: `processed/` and `error/` in front of the
+source prefix). The notes are files, so a restart loses nothing, and a pair is never
+downloaded twice. A `pdfLink` that points outside the source container is not
+fetched; the document waits with that reason in its history.
+
+A target of kind `blob` uploads the produced file to `Container` under `Prefix`, for
+an F&O receive flow; with `"Status": "true"` it also writes
+`{prefix}{document id}.status.json` with number, type, company and file name.
+
+An `azure-storage` connection holds the storage connection string as its secret, or,
+in Azure, the account address in `Settings.AccountUrl`, signing in with the managed
+identity.
+
 ### Import from DocuWare
 
 **Settings > Imports > Add import from DocuWare…** sets up a flow that runs on every

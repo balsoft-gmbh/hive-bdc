@@ -486,6 +486,7 @@ public sealed partial class DocumentProcessor
         TargetKinds.SharePoint => "SharePoint",
         TargetKinds.Mail => "Mail",
         ConnectionKinds.DocuWare => "DocuWare",
+        "blob" => "Blob Storage",
         _ => kind.Length == 0 ? kind : char.ToUpperInvariant(kind[0]) + kind[1..],
     };
 

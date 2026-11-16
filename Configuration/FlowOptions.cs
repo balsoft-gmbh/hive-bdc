@@ -13,7 +13,7 @@ public sealed class FlowOptions
 
     public bool Enabled { get; set; } = true;
 
-    public FlowSourceOptions Source { get; set; } = new();
+    public SourceOptions Source { get; set; } = new();
 
     public ProduceOptions Produce { get; set; } = new();
 
@@ -39,7 +39,7 @@ public sealed class FlowOptions
 /// Where records come from. DocuWare: Settings FileCabinet, ReadyField and ReadyValue (which documents are ready), and
 /// DoneValue, written into ReadyField once the record is handed over, so it is not picked up again.
 /// </summary>
-public sealed class FlowSourceOptions
+public sealed class SourceOptions
 {
     public string Kind { get; set; } = "";
     public string Connection { get; set; } = "";

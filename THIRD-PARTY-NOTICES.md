@@ -20,6 +20,7 @@ grant for these components.
 | Microsoft.Extensions.* (Hosting, Hosting.WindowsServices, Configuration, DependencyInjection, Logging, Options and their dependencies) | 10.0.9 | service host, configuration, logging | Copyright (c) .NET Foundation and Contributors | MIT |
 | System.Security.Cryptography.Pkcs, System.Security.Cryptography.ProtectedData, System.ServiceProcess.ServiceController, System.Diagnostics.EventLog | 8.0.2, 10.0.0, 10.0.x, 10.0.9 | installer signature check, encrypted settings, service control, event log | Copyright (c) .NET Foundation and Contributors | MIT |
 | CommunityToolkit.Mvvm | 8.4.0 | dashboard view models | Copyright (c) .NET Foundation and Contributors | MIT |
+| Azure.Storage.Blobs, Azure.Data.Tables, Azure.Messaging.ServiceBus, Azure.Identity, Azure.Security.KeyVault.Secrets (with Azure.Core and their dependencies) | 12.30.1, 12.13.0, 7.21.0, 1.21.0, 4.12.0 | Azure Blob Storage source and target, Azure run mode | Copyright (c) Microsoft Corporation | MIT |
 | .NET runtime (bundled, self-contained build) | 10.0 | runs the service and the dashboard | Copyright (c) .NET Foundation and Contributors | MIT, plus the runtime's own third-party notices: https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT |
 
 Build and test tools that are not shipped (validators, test frameworks, signing

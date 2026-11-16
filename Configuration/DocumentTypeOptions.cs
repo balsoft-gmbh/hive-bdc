@@ -108,6 +108,12 @@ public sealed class DocumentRoute
     /// <summary>Further targets next to the SharePoint block, of any kind the installed version knows.</summary>
     public List<TargetOptions> Targets { get; set; } = new();
 
+    /// <summary>
+    /// Where the documents come from when not the input folder itself: Kind "blob" downloads them from Azure Blob
+    /// Storage into the input folder (Settings Container, Prefix, ProcessedPrefix, ErrorPrefix). Null = the folder.
+    /// </summary>
+    public SourceOptions? Source { get; set; }
+
     /// <summary>What this entry delivers to, in order: the SharePoint block when it is on, then every enabled further target.</summary>
     public IEnumerable<TargetOptions> EffectiveTargets()
     {
@@ -133,6 +139,8 @@ public sealed class DocumentRoute
         Targets.RemoveAll(t => t is null);
         foreach (var t in Targets) t.Normalize();
         Targets.RemoveAll(t => t.Kind.Length == 0);
+        Source?.Normalize();
+        if (Source is { Kind.Length: 0 }) Source = null;
     }
 
     /// <summary>A copy for another document type (same company, same folders, same target).</summary>
@@ -151,6 +159,12 @@ public sealed class DocumentRoute
             Fields = new Dictionary<string, string>(SharePoint.Fields),
         },
         Targets = Targets.Select(t => t.Clone()).ToList(),
+        Source = Source is null ? null : new SourceOptions
+        {
+            Kind = Source.Kind,
+            Connection = Source.Connection,
+            Settings = new Dictionary<string, string>(Source.Settings, StringComparer.OrdinalIgnoreCase),
+        },
     };
 }
 

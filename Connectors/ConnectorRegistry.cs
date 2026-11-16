@@ -14,6 +14,7 @@ public sealed class ConnectorRegistry
         registry.RegisterTarget(TargetKinds.SharePoint, runtime => new SharePointDocumentTarget(runtime.Uploader));
         registry.RegisterTarget(TargetKinds.Mail, runtime => new MailDocumentTarget(runtime.Options.Mail, runtime.Mailer));
         registry.RegisterTarget(ConnectionKinds.DocuWare, runtime => new DocuWareDocumentTarget(runtime.Options, DocuWareClients.For));
+        registry.RegisterTarget("blob", runtime => new BlobDocumentTarget(runtime.Options, (c, container) => AzureBlobStore.For(c, container)));
         return registry;
     }
 

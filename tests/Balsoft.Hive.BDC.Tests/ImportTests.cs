@@ -103,7 +103,7 @@ public sealed class ImportTests : IDisposable
         {
             Id = "requisitions",
             Name = "Requisitions from DocuWare",
-            Source = new FlowSourceOptions
+            Source = new SourceOptions
             {
                 Kind = "docuware", Connection = "docuware",
                 Settings = { ["FileCabinet"] = "c-1", ["ReadyField"] = "STATUS", ["ReadyValue"] = "ready", ["DoneValue"] = "in ERP" },

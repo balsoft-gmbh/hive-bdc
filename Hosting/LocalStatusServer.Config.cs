@@ -266,8 +266,11 @@ public sealed partial class LocalStatusServer
                 // list) must not delete the ones the settings file has.
                 var posted = t.Companies ?? new();
                 for (int i = 0; i < opt.Companies.Count; i++)
+                {
                     if (posted[i].Targets is null)
                         opt.Companies[i].Targets = SettingsFile.StoredTargets(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
+                    opt.Companies[i].Source = posted[i].Source ?? SettingsFile.StoredSource(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
+                }
                 arr.Add(SettingsFile.DocumentTypeNode(opt));
             }
             typesNode = arr;
@@ -412,6 +415,8 @@ public sealed partial class LocalStatusServer
         public string? Output { get; set; }
         public CompanySpDto? SharePoint { get; set; }
         public List<TargetPostDto>? Targets { get; set; }
+        /// <summary>Absent => keep the stored source (a dashboard that does not know sources).</summary>
+        public SourceOptions? Source { get; set; }
     }
 
     /// <summary>One further target of a company entry on POST. Absent list = keep the stored targets.</summary>

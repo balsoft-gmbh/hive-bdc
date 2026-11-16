@@ -118,6 +118,12 @@ public static class SettingsFile
                 ["Fields"] = fields,
             },
         };
+        if (r.Source is not null)
+        {
+            var sourceSettings = new JsonObject();
+            foreach (var (k, v) in r.Source.Settings) sourceSettings[k] = v ?? "";
+            node["Source"] = new JsonObject { ["Kind"] = r.Source.Kind, ["Connection"] = r.Source.Connection, ["Settings"] = sourceSettings };
+        }
         // Written only when there is one, so an entry without further targets keeps the shape
         // every earlier version wrote and reads.
         if (r.Targets.Count > 0)
@@ -162,6 +168,24 @@ public static class SettingsFile
             if (target.Kind.Length > 0) result.Add(target);
         }
         return result;
+    }
+
+    /// <summary>The stored Source of one company entry, for a save from a dashboard that does not send it.</summary>
+    public static SourceOptions? StoredSource(JsonObject? section, string typeId, string dataAreaId, string input)
+    {
+        static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+        static string Folder(string p) => p.Trim().TrimEnd('\\', '/');
+        if (section?["DocumentTypes"] is not JsonArray types) return null;
+        var type = types.OfType<JsonObject>().FirstOrDefault(t => DocumentTypeCatalog.SameId(Text(t["Id"]), typeId));
+        var entry = (type?["Companies"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c =>
+            string.Equals(Text(c["DataAreaId"]).Trim(), dataAreaId.Trim(), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Folder(Text(c["Input"])), Folder(input), StringComparison.OrdinalIgnoreCase));
+        if (entry?["Source"] is not JsonObject node) return null;
+        var source = new SourceOptions { Kind = Text(node["Kind"]), Connection = Text(node["Connection"]) };
+        if (node["Settings"] is JsonObject settings)
+            foreach (var (k, v) in settings) source.Settings[k] = Text(v);
+        source.Normalize();
+        return source.Kind.Length == 0 ? null : source;
     }
 
     public static JsonObject TargetNode(TargetOptions t)

@@ -4,6 +4,7 @@ namespace Balsoft.Hive.BDC.Configuration;
 public static class ConnectionKinds
 {
     public const string DocuWare = "docuware";
+    public const string AzureStorage = "azure-storage";
 }
 
 /// <summary>
@@ -44,6 +45,9 @@ public sealed class ConnectionOptions
             if (Setting("UserName").Length == 0) problems.Add($"Connection '{Id}': the DocuWare user name is empty.");
             if (Secret.Length == 0) problems.Add($"Connection '{Id}': the DocuWare password is empty.");
         }
+        if (Kind == ConnectionKinds.AzureStorage && Secret.Length == 0
+            && !(Uri.TryCreate(Setting("AccountUrl"), UriKind.Absolute, out var account) && account.Scheme == Uri.UriSchemeHttps))
+            problems.Add($"Connection '{Id}': give the storage connection string, or in Azure the account address (https://<account>.blob.core.windows.net) for the managed identity.");
         return problems;
     }
 }
