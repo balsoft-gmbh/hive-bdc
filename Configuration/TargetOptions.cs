@@ -33,9 +33,12 @@ public sealed class TargetOptions
 
     public string Setting(string name) => Settings.TryGetValue(name, out var v) ? v?.Trim() ?? "" : "";
 
+    /// <summary>Settings shown to people only; they do not change where a document goes.</summary>
+    private static readonly HashSet<string> DisplayOnly = new(StringComparer.OrdinalIgnoreCase) { "FileCabinetName" };
+
     /// <summary>Identifies this destination among the targets of all entries: kind, connection and settings.</summary>
     public string Key => string.Join("|", new[] { Kind, Connection }
-        .Concat(Settings.OrderBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
+        .Concat(Settings.Where(s => !DisplayOnly.Contains(s.Key)).OrderBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
             .Select(s => s.Key.ToLowerInvariant() + "=" + (s.Value ?? "").Trim().TrimEnd('/', '\\').ToLowerInvariant())));
 
     public void Normalize()

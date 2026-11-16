@@ -50,11 +50,12 @@ public partial class SettingsWindow : Window
 
     private async void OnSave(object sender, RoutedEventArgs e)
     {
-        bool ok = await _vm.SaveAsync(SecretBox.Password, MailSecretBox.Password);
+        bool ok = await _vm.SaveAsync(SecretBox.Password, MailSecretBox.Password, DocuWareSecretBox.Password);
         if (ok)
         {
             SecretBox.Clear();
             MailSecretBox.Clear();
+            DocuWareSecretBox.Clear();
             DialogResult = true;   // closes the modal
         }
     }
@@ -74,6 +75,41 @@ public partial class SettingsWindow : Window
         };
         if (dlg.ShowDialog(this) != true) return;
         new WordCheckWindow(dlg.FileName) { Owner = this }.Show();
+    }
+
+    private async void OnTestDocuWare(object sender, RoutedEventArgs e)
+        => await _vm.TestDocuWareAsync(DocuWareSecretBox.Password);
+
+    private async void OnAddDocuWareTarget(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ViewModels.RouteRow row) return;
+        await EditDocuWareTarget(row, null);
+    }
+
+    private async void OnEditTarget(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ViewModels.RouteRow row || row.SelectedTarget is not { } target) return;
+        if (!target.IsDocuWare)
+        {
+            MessageBox.Show(this, "This target was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        await EditDocuWareTarget(row, target);
+    }
+
+    private async Task EditDocuWareTarget(ViewModels.RouteRow row, ViewModels.TargetRow? existing)
+    {
+        if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))
+        {
+            MessageBox.Show(this, "Set up the DocuWare sign-in on the Connections tab first (address, user name, password), then add the target.",
+                "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var vm = _vm.CreateDocuWareTarget(DocuWareSecretBox.Password, existing);
+        var dialog = new DocuWareTargetWindow(vm) { Owner = this };
+        await Task.Yield();
+        if (dialog.ShowDialog() == true) row.PutTarget(vm.ToTarget(), existing);
     }
 
     private void OnCancel(object sender, RoutedEventArgs e)

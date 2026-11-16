@@ -164,6 +164,42 @@ public sealed class EventHistoryTests : IDisposable
         Assert.Empty(_ledger.Events("nothing", 10));
     }
 
+    [Fact]
+    public void NeedsAttentionListsDocumentsWhoseLastStepFailedOrWaits()
+    {
+        _ledger.RecordEvent(new DocumentEvent("a", "a_1.json", "failed", "failed", "a failed"));
+        _ledger.RecordEvent(new DocumentEvent("b", "b_1.json", "failed", "failed", "b failed first"));
+        _ledger.RecordEvent(new DocumentEvent("b", "b_1.json", "done", "ok", "b done after a retry"));
+        _ledger.RecordEvent(new DocumentEvent("c", "c_1.json", "waiting", "waiting", "c waits"));
+
+        Assert.Equal(new[] { "c waits", "a failed" }, _ledger.Attention(10).Select(e => e.Message));
+    }
+
+    [Fact]
+    public void RetryPutsAFailedPairAndAWordDocumentBackIntoTheInputFolder()
+    {
+        var route = Route(Archive());
+        var options = Options(route);
+        string error = Path.Combine(route.Input, "error");
+        Directory.CreateDirectory(error);
+        File.WriteAllText(Path.Combine(error, "order_1.json"), "{}");
+        File.WriteAllText(Path.Combine(error, "order_1.pdf"), "pdf");
+        File.WriteAllText(Path.Combine(error, "orderly_1.json"), "{}");
+        File.WriteAllText(Path.Combine(error, "INV_7.docx"), "docx");
+        File.WriteAllText(Path.Combine(error, "INV_7.docx.error.txt"), "reason");
+
+        Assert.Equal(new[] { "order_1.json", "order_1.pdf" }, DocumentProcessor.PutBackForRetry(options, "order").OrderBy(n => n));
+        Assert.True(File.Exists(Path.Combine(route.Input, "order_1.json")));
+        Assert.True(File.Exists(Path.Combine(error, "orderly_1.json")));
+
+        Assert.Equal(new[] { "INV_7.docx" }, DocumentProcessor.PutBackForRetry(options, "INV-7"));
+        Assert.False(File.Exists(Path.Combine(error, "INV_7.docx.error.txt")));
+
+        Assert.Empty(DocumentProcessor.PutBackForRetry(options, "../order"));
+        Assert.Empty(DocumentProcessor.PutBackForRetry(options, ""));
+        Assert.Empty(DocumentProcessor.PutBackForRetry(options, "order"));
+    }
+
     [Theory]
     [InlineData("Mailbox anna.berg@example.com was not found", "Mailbox a***@example.com was not found")]
     [InlineData("line one\r\n  line two", "line one line two")]

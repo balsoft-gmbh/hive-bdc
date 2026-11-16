@@ -42,6 +42,61 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _mailFrom = "";
     /// <summary>Whether the service reports a stored mail secret — drives the PasswordBox hint.</summary>
     [ObservableProperty] private bool _mailSecretSet;
+
+    // DocuWare connection (Connections tab). Further connections in the file are kept untouched.
+    public const string DocuWareConnectionId = "docuware";
+    private List<ConnectionConfigDto> _connections = new();
+    [ObservableProperty] private string _docuWareUrl = "";
+    [ObservableProperty] private string _docuWareUserName = "";
+    [ObservableProperty] private bool _docuWareSecretSet;
+    [ObservableProperty] private string _docuWareStatus = "";
+    [ObservableProperty] private bool _docuWareStatusIsError;
+
+    public string DocuWareSecretHint =>
+        DocuWareSecretSet ? "A password is stored; leave blank to keep it." : "No password stored yet.";
+
+    partial void OnDocuWareSecretSetChanged(bool value) => OnPropertyChanged(nameof(DocuWareSecretHint));
+
+    /// <summary>The DocuWare connection as the form shows it now; a blank password means the stored one.</summary>
+    public DocuWareRequestDto CurrentDocuWare(string? password) => new()
+    {
+        Id = DocuWareConnectionId,
+        Url = DocuWareUrl.Trim(),
+        UserName = DocuWareUserName.Trim(),
+        Secret = string.IsNullOrEmpty(password) ? null : password,
+    };
+
+    public DocuWareTargetViewModel CreateDocuWareTarget(string? password, TargetRow? existing)
+        => new(_client, CurrentDocuWare(password), existing);
+
+    public async Task TestDocuWareAsync(string? password)
+    {
+        DocuWareStatus = "Signing in to DocuWare…";
+        DocuWareStatusIsError = false;
+        var res = await _client.TestDocuWareAsync(CurrentDocuWare(password));
+        DocuWareStatusIsError = res.Data?.Ok != true;
+        DocuWareStatus = res.Data?.Message ?? res.Error ?? "DocuWare could not be reached.";
+        AppLog.Info($"Test DocuWare: {(DocuWareStatusIsError ? "failed" : "ok")}");
+    }
+
+    private List<ConnectionConfigDto> BuildConnections(string? docuWarePassword)
+    {
+        var list = _connections.Where(c => !string.Equals(c.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase))
+            .Select(c => new ConnectionConfigDto { Id = c.Id, Kind = c.Kind, Settings = c.Settings })
+            .ToList();
+        bool used = DocumentTypes.Any(t => t.Companies.Any(r => r.Targets.Any(x => x.IsDocuWare)));
+        if (DocuWareUrl.Trim().Length > 0 || DocuWareSecretSet || used)
+            list.Add(new ConnectionConfigDto
+            {
+                Id = DocuWareConnectionId,
+                Kind = TargetRow.DocuWareKind,
+                Settings = new() { ["Url"] = DocuWareUrl.Trim(), ["UserName"] = DocuWareUserName.Trim() },
+                Secret = string.IsNullOrEmpty(docuWarePassword) ? null : docuWarePassword,
+            });
+        return list;
+    }
+
+    private string? _pendingDocuWareSecret;
     /// <summary>
     /// Where documents from a non-production AX go instead of to the partner. One text box
     /// taking either a semicolon-separated list or one address per line, because both are
@@ -113,6 +168,13 @@ public sealed partial class SettingsViewModel : ObservableObject
             MailSecretSet = mail?.SecretSet ?? false;
             MailRedirectTo = string.Join(Environment.NewLine, mail?.RedirectTo ?? new List<string>());
             MailSaveToSentItems = mail?.SaveToSentItems ?? true;
+
+            _connections = c.Connections ?? new();
+            var docuWare = _connections.FirstOrDefault(x => string.Equals(x.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase));
+            DocuWareUrl = docuWare?.Settings?.GetValueOrDefault("Url") ?? "";
+            DocuWareUserName = docuWare?.Settings?.GetValueOrDefault("UserName") ?? "";
+            DocuWareSecretSet = docuWare?.HasSecret ?? false;
+            DocuWareStatus = "";
 
             DocumentTypes.Clear();
             if (c.DocumentTypes is not null)
@@ -312,8 +374,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// from the shared PasswordBox — blank means keep the stored secret. Returns true on success
     /// (caller closes the window); populates <see cref="ValidationErrors"/> and StatusMessage on failure.
     /// </summary>
-    public async Task<bool> SaveAsync(string? newSecret, string? newMailSecret = null)
+    public async Task<bool> SaveAsync(string? newSecret, string? newMailSecret = null, string? newDocuWareSecret = null)
     {
+        _pendingDocuWareSecret = newDocuWareSecret;
         _pendingMailSecret = newMailSecret;
         ValidationErrors.Clear();
         ImportNotes.Clear();
@@ -475,6 +538,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         },
         Mail = BuildMail(_pendingMailSecret),
         DocumentTypes = DocumentTypes.Select(t => t.ToDto()).ToList(),
+        Connections = BuildConnections(_pendingDocuWareSecret),
     };
 
     /// <summary>

@@ -78,6 +78,26 @@ public sealed class LoopbackClient
     public Task<ApiResult<LicenseUploadResult>> UploadLicenseAsync(LicenseUploadRequestDto request, CancellationToken ct = default)
         => PostAsync<LicenseUploadResult>("/license", request, ct);
 
+    /// <summary>POST /config/test-docuware: sign in and list the file cabinets. A blank secret uses the stored one.</summary>
+    public Task<ApiResult<TestDocuWareResult>> TestDocuWareAsync(DocuWareRequestDto request, CancellationToken ct = default)
+        => PostAsync<TestDocuWareResult>("/config/test-docuware", request, ct);
+
+    /// <summary>POST /config/docuware-fields: the fields of one file cabinet, for "Import fields".</summary>
+    public Task<ApiResult<DocuWareFieldsResult>> DocuWareFieldsAsync(DocuWareRequestDto request, CancellationToken ct = default)
+        => PostAsync<DocuWareFieldsResult>("/config/docuware-fields", request, ct);
+
+    /// <summary>GET /history: the steps of one document (by id or number), or the newest steps of all documents.</summary>
+    public Task<ApiResult<HistoryDto>> GetHistoryAsync(string? search, int limit = 500, CancellationToken ct = default)
+        => GetAsync<HistoryDto>($"/history?limit={limit}&search={Uri.EscapeDataString(search ?? "")}", ct);
+
+    /// <summary>GET /history/attention: documents whose last step failed or is waiting.</summary>
+    public Task<ApiResult<HistoryDto>> GetAttentionAsync(int limit = 200, CancellationToken ct = default)
+        => GetAsync<HistoryDto>($"/history/attention?limit={limit}", ct);
+
+    /// <summary>POST /history/retry: put a failed document's files back into its input folder.</summary>
+    public Task<ApiResult<RetryResult>> RetryAsync(string documentId, CancellationToken ct = default)
+        => PostAsync<RetryResult>("/history/retry", new RetryRequestDto { DocumentId = documentId }, ct);
+
     private async Task<ApiResult<T>> GetAsync<T>(string route, CancellationToken ct)
     {
         var endpoint = ReadEndpoint();

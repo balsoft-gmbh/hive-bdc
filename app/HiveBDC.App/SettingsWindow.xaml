@@ -356,6 +356,32 @@
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Border>
+
+                                                <!-- Further targets of this company + type (DocuWare, ...) -->
+                                                <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,14,0,0">
+                                                    <StackPanel>
+                                                        <TextBlock Text="ALSO DELIVER TO" Style="{StaticResource CardTitle}" Margin="0"/>
+                                                        <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                                                   Text="Every document of this type and company also goes here, after SharePoint and before mail. Untick a line to pause it."/>
+                                                        <ListBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" MinHeight="36" Margin="0,8,0,0"
+                                                                 MouseDoubleClick="OnEditTarget">
+                                                            <ListBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                                        <TextBlock Text="{Binding Summary}" VerticalAlignment="Center"/>
+                                                                    </StackPanel>
+                                                                </DataTemplate>
+                                                            </ListBox.ItemTemplate>
+                                                        </ListBox>
+                                                        <WrapPanel Margin="0,8,0,0">
+                                                            <Button Content="Add DocuWare…" Click="OnAddDocuWareTarget" Padding="10,3" Margin="0,0,6,4"
+                                                                    ToolTip="Store every document of this type and company in a DocuWare file cabinet. Set up the DocuWare sign-in on the Connections tab first."/>
+                                                            <Button Content="Edit…" Click="OnEditTarget" Padding="10,3" Margin="0,0,6,4"/>
+                                                            <Button Content="Remove" Command="{Binding RemoveTargetCommand}" Padding="10,3" Margin="0,0,0,4"/>
+                                                        </WrapPanel>
+                                                    </StackPanel>
+                                                </Border>
                                             </StackPanel>
                                         </Border>
                                     </Grid>
@@ -432,6 +458,49 @@
                                         <CheckBox Content="Keep a copy in the sender's Sent Items" Margin="0,10,0,0" IsChecked="{Binding MailSaveToSentItems}"/>
                                     </StackPanel>
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,10,0,10">
+                            <StackPanel>
+                                <TextBlock Text="DOCUWARE" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,-6,0,8"
+                                           Text="Sign-in for storing documents in DocuWare. Which file cabinet a document goes to is set per company entry on the Document types tab (Also deliver to)."/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                        <TextBlock Text="DocuWare address" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Text="{Binding DocuWareUrl, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Style="{StaticResource Hint}" Text="For example https://yourcompany.docuware.cloud. The address from the browser works too."/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                        <TextBlock Text="User name" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Text="{Binding DocuWareUserName, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Text="Password" Style="{StaticResource FieldLabel}"/>
+                                        <PasswordBox x:Name="DocuWareSecretBox"/>
+                                        <TextBlock Text="{Binding DocuWareSecretHint}" Style="{StaticResource Hint}"/>
+                                    </StackPanel>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="Test connection" Click="OnTestDocuWare" Padding="12,4"/>
+                                    <TextBlock Text="{Binding DocuWareStatus}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="560">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#15803D"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DocuWareStatusIsError}" Value="True">
+                                                        <Setter Property="Foreground" Value="#B91C1C"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,6,0,0"
+                                           Text="The DocuWare user must be allowed to sign in with a DocuWare password. A user that may only sign in with Microsoft is refused; ask the DocuWare administrator for an integration user."/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

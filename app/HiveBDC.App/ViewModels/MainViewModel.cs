@@ -36,6 +36,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Full-logs and all-documents view-models for the pop-out windows (shared client).</summary>
     public LogsViewModel CreateLogsViewModel() => new(_client);
+
+    public HistoryViewModel CreateHistoryViewModel() => new(_client);
     public DocumentsViewModel CreateDocumentsViewModel() => new(_client);
 
     /// <summary>Release-notes view-model, sharing the update service (embedded + feed changelog).</summary>

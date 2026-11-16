@@ -229,6 +229,33 @@ public sealed class ExportLedger : IStateStore
         }
     }
 
+    public IReadOnlyList<DocumentEvent> Attention(int limit)
+    {
+        var list = new List<DocumentEvent>();
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT e.id, e.at, e.document_id, e.input, e.step, e.state, e.message, e.document_number, e.document_type, e.data_area_id, e.target
+                FROM events e JOIN (SELECT document_id, MAX(id) AS id FROM events GROUP BY document_id) last ON last.id = e.id
+                WHERE e.state IN ('failed', 'waiting')
+                ORDER BY e.id DESC LIMIT $n
+                """;
+            cmd.Parameters.AddWithValue("$n", Math.Clamp(limit, 1, 1000));
+            using var r = cmd.ExecuteReader();
+            string? Text(int i) => r.IsDBNull(i) ? null : r.GetString(i);
+            while (r.Read())
+                list.Add(new DocumentEvent(r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6),
+                    Text(7), Text(8), Text(9), Text(10), r.GetInt64(0), r.GetString(1)));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Document history read failed.");
+        }
+        return list;
+    }
+
     public IReadOnlyList<DocumentEvent> Events(string? search, int limit)
     {
         var list = new List<DocumentEvent>();

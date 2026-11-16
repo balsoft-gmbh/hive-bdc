@@ -334,6 +334,39 @@ public sealed partial class DocumentProcessor
         return new ScanResult(1, 0, 0);
     }
 
+    /// <summary>
+    /// Puts the files of <paramref name="documentId"/> back from the error folders into their input folder, so the next
+    /// scan processes them again: the JSON and PDF pair ({id}_*.json / .pdf) and a Word document with that id, whose
+    /// error note is removed. Returns the file names moved.
+    /// </summary>
+    public static List<string> PutBackForRetry(BDCOptions opts, string documentId)
+    {
+        var moved = new List<string>();
+        string id = documentId.Trim();
+        if (id.Length == 0 || id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || id.Contains("..")) return moved;
+        foreach (var folder in opts.ScanFolders())
+        {
+            if (!Directory.Exists(folder.ErrorDir)) continue;
+            foreach (var file in Directory.EnumerateFiles(folder.ErrorDir))
+            {
+                string name = Path.GetFileName(file);
+                string ext = Path.GetExtension(name).ToLowerInvariant();
+                bool pair = (ext is ".json" or ".pdf") && name.StartsWith(id + "_", StringComparison.OrdinalIgnoreCase);
+                bool word = ext == ".docx" && string.Equals(WordDocumentId(file), id, StringComparison.OrdinalIgnoreCase);
+                if (!pair && !word) continue;
+                string target = Path.Combine(folder.Path, name);
+                if (File.Exists(target)) continue;
+                File.Move(file, target);
+                moved.Add(name);
+                if (word)
+                {
+                    try { File.Delete(Path.Combine(folder.ErrorDir, name + ".error.txt")); } catch (IOException) { }
+                }
+            }
+        }
+        return moved;
+    }
+
     /// <summary>The company a folder serves, when it serves exactly one; else null.</summary>
     private static string? FolderCompany(ScanFolder folder)
     {

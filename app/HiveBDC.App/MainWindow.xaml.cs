@@ -109,6 +109,9 @@ public partial class MainWindow : Window
     private void DocumentsMenuItem_Click(object sender, RoutedEventArgs e)
         => new DocumentsWindow(_vm.CreateDocumentsViewModel()) { Owner = this }.Show();
 
+    private void HistoryMenuItem_Click(object sender, RoutedEventArgs e)
+        => new HistoryWindow(_vm.CreateHistoryViewModel()) { Owner = this }.Show();
+
     private void ChangelogMenuItem_Click(object sender, RoutedEventArgs e)
         => new ChangelogWindow(_vm.CreateChangelogViewModel()) { Owner = this }.Show();
 

@@ -97,6 +97,27 @@ public sealed class ConfigDto
     [JsonPropertyName("mail")] public MailConfigDto? Mail { get; set; }
     /// <summary>The document types the service dispatches, each with its company entries. Absent on POST => the service keeps its stored list.</summary>
     [JsonPropertyName("documentTypes")] public List<DocumentTypeConfigDto>? DocumentTypes { get; set; }
+    [JsonPropertyName("connections")] public List<ConnectionConfigDto>? Connections { get; set; }
+}
+
+/// <summary>A named sign-in (DocuWare, ...). GET reports only HasSecret; POST sends Secret, blank = keep the stored one.</summary>
+public sealed class ConnectionConfigDto
+{
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("settings")] public Dictionary<string, string>? Settings { get; set; }
+    [JsonPropertyName("hasSecret")] public bool? HasSecret { get; set; }
+    [JsonPropertyName("secret")] public string? Secret { get; set; }
+}
+
+/// <summary>One further target of a company entry. Kinds this dashboard does not edit are sent back unchanged.</summary>
+public sealed class TargetConfigDto
+{
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("connection")] public string? Connection { get; set; }
+    [JsonPropertyName("enabled")] public bool Enabled { get; set; } = true;
+    [JsonPropertyName("settings")] public Dictionary<string, string>? Settings { get; set; }
+    [JsonPropertyName("fields")] public Dictionary<string, string>? Fields { get; set; }
 }
 
 /// <summary>One document type (GET/POST /config). Id is what the ERP writes as documentType.</summary>
@@ -125,6 +146,7 @@ public sealed class RouteConfigDto
     [JsonPropertyName("inputFormat")] public string? InputFormat { get; set; }
     [JsonPropertyName("output")] public string? Output { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
+    [JsonPropertyName("targets")] public List<TargetConfigDto>? Targets { get; set; }
 }
 
 /// <summary>SHARED document mail. SecretSet is read-only (GET); ClientSecret is write-only (POST).</summary>
@@ -218,3 +240,38 @@ public sealed record LicenseUploadResult(
     [property: JsonPropertyName("message")] string? Message,
     [property: JsonPropertyName("customer")] string? Customer,
     [property: JsonPropertyName("expires")] string? Expires);
+
+
+// ── DocuWare and document history ───────────────────────────────────────────
+
+public sealed class DocuWareRequestDto
+{
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("url")] public string? Url { get; set; }
+    [JsonPropertyName("userName")] public string? UserName { get; set; }
+    [JsonPropertyName("secret")] public string? Secret { get; set; }
+    [JsonPropertyName("cabinetId")] public string? CabinetId { get; set; }
+}
+
+public sealed record DocuWareCabinetDto(string? Id, string? Name);
+
+public sealed record TestDocuWareResult(bool Ok, string? Message, List<DocuWareCabinetDto>? Cabinets);
+
+public sealed record DocuWareColumnDto(string? Name, string? DisplayName, string? Type);
+
+public sealed record DocuWareFieldDto(string? Name, string? DisplayName, string? Type, bool Required, int Length, List<DocuWareColumnDto>? Columns);
+
+public sealed record DocuWareFieldsResult(bool Ok, string? Message, string? Cabinet, List<DocuWareFieldDto>? Fields);
+
+public sealed record HistoryEventDto(
+    long Id, string? At, string? DocumentId, string? DocumentNumber, string? DocumentType, string? DataAreaId,
+    string? Input, string? Step, string? Target, string? State, string? Message);
+
+public sealed record HistoryDto(List<HistoryEventDto>? Events);
+
+public sealed class RetryRequestDto
+{
+    [JsonPropertyName("documentId")] public string? DocumentId { get; set; }
+}
+
+public sealed record RetryResult(bool Ok, string? Message, List<string>? Files);

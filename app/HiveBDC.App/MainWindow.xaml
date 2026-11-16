@@ -16,6 +16,7 @@
             <MenuItem Header="_View">
                 <MenuItem Header="All _logs…" Click="LogsMenuItem_Click"/>
                 <MenuItem Header="All _documents…" Click="DocumentsMenuItem_Click"/>
+                <MenuItem Header="Document _history…" Click="HistoryMenuItem_Click"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="Check for updates…" Command="{Binding CheckForUpdatesCommand}"/>

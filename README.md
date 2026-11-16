@@ -681,6 +681,21 @@ keeps the stored ones.
 
 ### DocuWare target
 
+In the dashboard:
+
+1. **Settings > Connections > DocuWare:** address, user name and password, then
+   **Test connection**. It signs in and lists the file cabinets the user can see.
+2. **Settings > Document types >** a type **>** a company entry **> Also deliver to >
+   Add DocuWare…:** choose the file cabinet by name. Its fields are listed with their
+   kind and whether they are required; fill the ones you want with templates. Choose
+   the field that holds the document number under **Never store a document twice**.
+3. **Save.** Every document of that type and company now also goes to DocuWare.
+4. **View > Document history** shows what needs attention (stopped or waiting
+   documents) and every step of one document by its number; **Retry** puts a stopped
+   document back into its input folder.
+
+The settings it writes:
+
 A DocuWare connection is defined once under `Connections` and used by any number of
 targets:
 
@@ -731,7 +746,9 @@ document's reason is written once, not on every scan. Mail addresses are masked,
 line breaks flattened and a line is capped at 2000 characters. The history is pruned
 with the export ledger. The loopback API serves it as
 `GET /history?search=<document id or number>&limit=<n>`; without `search` it returns
-the newest lines of all documents.
+the newest lines of all documents. `GET /history/attention` lists the documents whose
+last line failed or is waiting, and `POST /history/retry` with `{"documentId": "..."}`
+moves that document's files from the error folder back into its input folder.
 
 A failed scan or quarantine operation is logged without blocking other documents
 or folders. Cycle summaries include held documents rather than reporting idle.

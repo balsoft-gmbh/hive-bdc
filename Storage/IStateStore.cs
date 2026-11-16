@@ -24,6 +24,9 @@ public interface IStateStore
     /// </summary>
     IReadOnlyList<DocumentEvent> Events(string? search, int limit);
 
+    /// <summary>The last line of every document whose last step failed or is waiting, newest first.</summary>
+    IReadOnlyList<DocumentEvent> Attention(int limit);
+
     ExportLedger.MetricsSnapshot Metrics(int recent);
 
     int Prune(int retentionDays = ExportLedger.DefaultRetentionDays);

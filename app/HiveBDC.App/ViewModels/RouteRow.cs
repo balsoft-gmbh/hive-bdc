@@ -32,6 +32,11 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
 
     /// <summary>SharePoint column templates (internal column name -> template), editable rows.</summary>
     public ObservableCollection<ColumnRow> Columns { get; } = new();
+
+    /// <summary>Further places this entry delivers to (DocuWare, ...), after SharePoint and before mail.</summary>
+    public ObservableCollection<TargetRow> Targets { get; } = new();
+
+    [ObservableProperty] private TargetRow? _selectedTarget;
     [ObservableProperty] private ColumnRow? _selectedColumn;
 
     /// <summary>First line in the entry list: the company, or a placeholder.</summary>
@@ -50,7 +55,8 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
             string sp = SharePointEnabled
                 ? (string.IsNullOrWhiteSpace(Library) ? "SharePoint on" : "SharePoint: " + Library.Trim())
                 : "no SharePoint";
-            return tail + " · " + sp;
+            int more = Targets.Count(t => t.Enabled);
+            return tail + " · " + sp + (more > 0 ? $" · +{more} more" : "");
         }
     }
 
@@ -76,6 +82,27 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         if (sp?.Fields is not null)
             foreach (var (col, tpl) in sp.Fields)
                 Columns.Add(new ColumnRow(col, tpl));
+        foreach (var t in dto.Targets ?? new())
+            Targets.Add(TargetRow.FromDto(t));
+        Targets.CollectionChanged += (_, _) => OnPropertyChanged(nameof(Summary));
+    }
+
+    /// <summary>Adds <paramref name="target"/>, or puts it in place of <paramref name="replaces"/>.</summary>
+    public void PutTarget(TargetRow target, TargetRow? replaces)
+    {
+        int at = replaces is null ? -1 : Targets.IndexOf(replaces);
+        if (at >= 0) Targets[at] = target; else Targets.Add(target);
+        SelectedTarget = target;
+        OnPropertyChanged(nameof(Summary));
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void RemoveTarget()
+    {
+        if (SelectedTarget is null) return;
+        Targets.Remove(SelectedTarget);
+        SelectedTarget = Targets.FirstOrDefault();
+        OnPropertyChanged(nameof(Summary));
     }
 
     public RouteConfigDto ToDto() => new()
@@ -92,6 +119,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
             Folder = Folder?.Trim() ?? "",
             Fields = CollectColumns(),
         },
+        Targets = Targets.Select(t => t.ToDto()).ToList(),
     };
 
     /// <summary>Collapse the rows to a map, skipping blank column names; last write wins on duplicates.</summary>

@@ -123,6 +123,10 @@ public sealed partial class LocalStatusServer : BackgroundService
                 case ("GET", "/metrics"): Respond(ctx, 200, Metrics(RecentParam(req))); return;
                 case ("GET", "/logs"): Respond(ctx, 200, Logs(TailParam(req))); return;
                 case ("GET", "/history"): Respond(ctx, 200, History(req)); return;
+                case ("GET", "/history/attention"): Respond(ctx, 200, Attention(req)); return;
+                case ("POST", "/history/retry"): PostRetry(ctx, req); return;
+                case ("POST", "/config/test-docuware"): await PostTestDocuWare(ctx, req); return;
+                case ("POST", "/config/docuware-fields"): await PostDocuWareFields(ctx, req); return;
                 case ("GET", "/config"): GetConfig(ctx); return;
                 case ("POST", "/config"): PostConfig(ctx, req); return;
                 case ("POST", "/config/test-sharepoint"): await PostTestSharePoint(ctx, req); return;

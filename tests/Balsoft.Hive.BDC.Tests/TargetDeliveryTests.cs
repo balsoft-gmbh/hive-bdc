@@ -227,6 +227,17 @@ public sealed class TargetDeliveryTests : IDisposable
     }
 
     [Fact]
+    public void ARenamedFileCabinetIsStillTheSameDestination()
+    {
+        var before = new TargetOptions { Kind = "docuware", Connection = "dms", Settings = { ["FileCabinet"] = "c-1", ["FileCabinetName"] = "Invoices" } };
+        var after = new TargetOptions { Kind = "docuware", Connection = "dms", Settings = { ["FileCabinet"] = "c-1", ["FileCabinetName"] = "Outgoing invoices" } };
+        var other = new TargetOptions { Kind = "docuware", Connection = "dms", Settings = { ["FileCabinet"] = "c-2", ["FileCabinetName"] = "Invoices" } };
+
+        Assert.Equal(before.Key, after.Key);
+        Assert.NotEqual(before.Key, other.Key);
+    }
+
+    [Fact]
     public void ASecondSharePointLibraryAsAFurtherTargetNeedsTheUploader()
     {
         var second = new TargetOptions
