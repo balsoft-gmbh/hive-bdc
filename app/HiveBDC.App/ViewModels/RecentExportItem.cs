@@ -12,6 +12,8 @@ public sealed class RecentExportItem
     public required string ExportedAt { get; init; }
     public required string Size { get; init; }
     public string? TargetSite { get; init; }
+    /// <summary>Where the document came from: JSON (ERP export) or Word.</summary>
+    public string Source { get; init; } = "JSON";
     /// <summary>Local path of the produced output (.pdf / .xml) — opened on double-click.</summary>
     public string? OutputFile { get; init; }
 
@@ -25,5 +27,6 @@ public sealed class RecentExportItem
         Size = MainViewModel.HumanSize(e.SizeBytes),
         TargetSite = e.TargetSite,
         OutputFile = e.OutputFile,
+        Source = string.Equals(e.Source, "word", StringComparison.OrdinalIgnoreCase) ? "Word" : "JSON",
     };
 }

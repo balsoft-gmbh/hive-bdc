@@ -45,7 +45,7 @@ public static class InvoiceMapper
     /// <summary>Header keys Hive BDC reads elsewhere or recomputes; not reported as "not used in the e-invoice".</summary>
     private static readonly HashSet<string> NotForTheXml = new[]
     {
-        "amountDue", "grossAmount", "netAmount", "taxAmount",          // recomputed from the lines
+        "amountDue", "grossAmount", "netAmount", "taxAmount", "lineTotalAmount", // recomputed from the lines
         "lineGrossAmount", "lineNetAmount", "lineTaxAmount", "lineId", // line totals recomputed, ids numbered 1..n
         "recipientEmailBcc", "aosInstance", "documentNumber", "party",
     }.Select(InvoiceFieldAliases.Normalize).ToHashSet();
@@ -72,7 +72,7 @@ public static class InvoiceMapper
         // is known. Without a type code, a negative line total means credit note.
         decimal rawTotal = data.LineItems.Sum(i => i.Quantity * i.UnitPrice);
         var type = ResolveInvoiceType(data.InvoiceTypeCode, rawTotal, warn);
-        bool absolute = type != InvoiceTypeCode.CommercialInvoice || rawTotal < 0m;
+        bool absolute = (type != InvoiceTypeCode.CommercialInvoice && !KeepsLineSigns(type)) || rawTotal < 0m;
 
         var inv = new Invoice
         {
@@ -106,7 +106,7 @@ public static class InvoiceMapper
             TaxRegistrationIdentifier = NullIfEmpty(data.SenderTaxId),
             Contact = new Contact
             {
-                Name = NullIfEmpty(data.SenderName),
+                Name = Pick(InvoiceFieldAliases.SellerContactName) ?? NullIfEmpty(data.SenderName),
                 Email = NullIfEmpty(data.SenderEmail),
                 Phone = NullIfEmpty(data.SenderPhone),
             },
@@ -131,8 +131,7 @@ public static class InvoiceMapper
                 CountryCode = buyerCountry,
             },
             VatIdentifier = NullIfEmpty(data.RecipientVatId)?.Trim(),
-            ElectronicAddress = string.IsNullOrWhiteSpace(data.RecipientEmail)
-                ? null : new SchemedIdentifier(data.RecipientEmail.Trim(), ElectronicAddressScheme.Email),
+            ElectronicAddress = BuyerElectronicAddress(Pick(InvoiceFieldAliases.BuyerElectronicAddress) ?? data.RecipientEmail),
         };
         var recipientGln = Gln(data.RecipientGln, "recipientGln", warn);
         if (NullIfEmpty(data.RecipientId) is { } recipientId) inv.Buyer.Identifiers.Add(new SchemedIdentifier(recipientId.Trim()));
@@ -249,6 +248,7 @@ public static class InvoiceMapper
                 BuyerAccountingReference = L(InvoiceFieldAliases.LineAccountingReference),
             };
             line.Item.SellersIdentifier = L(InvoiceFieldAliases.SellersItemId);
+            line.Item.Description = L(InvoiceFieldAliases.ItemDescription);
             line.Item.BuyersIdentifier = L(InvoiceFieldAliases.BuyersItemId);
             if (L(InvoiceFieldAliases.Gtin) is { } gtin)
                 line.Item.StandardIdentifier = new SchemedIdentifier(gtin, IdentifierScheme.Gtin);
@@ -332,7 +332,29 @@ public static class InvoiceMapper
     }
 
     /// <summary>UNTDID 1001 codes the service accepts; anything else falls back to 380 with a warning.</summary>
-    private static readonly HashSet<int> SupportedTypeCodes = new() { 380, 381, 384, 383, 389, 261, 326, 386, 83, 84 };
+    private static readonly HashSet<int> SupportedTypeCodes = new() { 380, 381, 384, 383, 389, 261, 326, 386, 83, 84, 875, 876, 877 };
+
+    /// <summary>
+    /// Construction invoices (875 partial, 876 partial final, 877 final) are invoices like 380: a line that deducts an
+    /// earlier partial invoice stays negative instead of being turned into a charge.
+    /// </summary>
+    private static bool KeepsLineSigns(InvoiceTypeCode type)
+        => type is InvoiceTypeCode.PartialConstructionInvoice or InvoiceTypeCode.PartialFinalConstructionInvoice
+                or InvoiceTypeCode.FinalConstructionInvoice;
+
+    // Leitweg-ID: Grobadressierung (2 to 12 digits), optional Feinadressierung, two check digits, e.g. 991-80032-33.
+    private static readonly System.Text.RegularExpressions.Regex LeitwegId =
+        new(@"^\d{2,12}(-[A-Za-z0-9]{1,30})?-\d{2}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>BT-49: a mail address with scheme EM, a Leitweg-ID (public buyers) with scheme 0204.</summary>
+    internal static SchemedIdentifier? BuyerElectronicAddress(string? value)
+    {
+        string v = (value ?? "").Trim();
+        if (v.Length == 0) return null;
+        return !v.Contains('@') && LeitwegId.IsMatch(v)
+            ? new SchemedIdentifier(v, ElectronicAddressScheme.LeitwegId)
+            : new SchemedIdentifier(v, ElectronicAddressScheme.Email);
+    }
 
     private static InvoiceTypeCode ResolveInvoiceType(string? code, decimal rawTotal, Action<string>? warn)
     {

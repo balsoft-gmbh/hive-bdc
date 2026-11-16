@@ -184,6 +184,41 @@ Missing PDFs, incomplete writes, unresolved company routes, unavailable required
 delivery clients and missing license features remain pending in the input folder.
 They resume automatically after the input or configuration is repaired.
 
+## Word input (filled Word invoices instead of an ERP export)
+
+A company entry can take **Word documents** instead of ERP export pairs (**Settings, Document types, company entry,
+Input: Word documents (.docx)**, or `InputFormat: "Word"` on the entry). Hive BDC then reads every `.docx` in the
+input folder, builds the same JSON an ERP export would drop, renders the PDF itself and runs the normal pipeline:
+XRechnung or ZUGFeRD, SharePoint, mail, ledger. Local folders and network shares work the same way as for JSON (a
+share needs the service under a domain account).
+
+**Template.** Every value sits in a Word content control whose **Tag** is its EN 16931 business term (`BT-1`, `BT-44`,
+`BT-153`, ...) or a key of the ERP JSON (`documentType`, `recipientEmail`, `emailSubject`, ...). Nothing is read by
+position or label. The invoice lines are a **repeating section** tagged `lines`; each item holds the line tags
+(`BT-126`, `BT-153`, `BT-154`, `BT-129`, `BT-130`, `BT-146`, `BT-152`, `BT-131`). The control tagged `eInvoiceType`
+(a drop-down with the values `xrechnung` and `zugferd`) decides the format; without it, XRechnung is produced, as for
+a JSON without `eInvoiceType`. Date pickers deliver their ISO date; typed dates are read as `dd.MM.yyyy`. Amounts are
+read in German notation (`721.613,72 EUR`, `19,0 %`). A control that still shows its placeholder counts as empty.
+**Word template...** in Settings saves a generic template; **Check a Word file...** shows what Hive BDC reads from a
+file, the totals check and a PDF preview, without touching the service.
+
+**Checks before anything is produced.** BT-1, BT-2, BT-44 and one line are required; XRechnung also needs BT-10 and
+BT-49. When the document prints totals (`BT-109`, `BT-110`, `BT-112`), they must equal the sums of the lines to the
+cent, or the document is not converted.
+
+**PDF.** A PDF with the same name next to the `.docx` is used as it is. Otherwise Hive BDC renders the document with
+its own renderer (PDFsharp): page size and margins, header and footer, paragraphs with tab stops and line spacing,
+tables including nested tables, merged cells, borders and shading, inline images, content controls, `PAGE` and
+`NUMPAGES`. Text boxes, shapes, floating images, text columns, lists and embedded objects are not drawn: such a
+document goes to `error\` unless a PDF is saved with it. Fonts come from the server's font folder; a font that is not
+installed is replaced by Arial and logged. Word's AutoFit column widths are not recalculated; the table grid stored in
+the document is used.
+
+**Folders.** A Word file is read once it is closed and has not changed for 10 seconds; Word's `~$` lock files are
+skipped. The `.docx`, the JSON read from it and the PDF move together to `processed\` or `error\`. A failed file gets
+`<name>.docx.error.txt` next to it (German and English), because the people who type invoices may not see the
+dashboard. A `.doc` (Word 97-2003) cannot carry the fields and goes to `error\` with that reason.
+
 ## Companies (per `dataAreaId`, inside each document type)
 
 The service serves several AX companies at once, and the routing is defined
@@ -525,6 +560,10 @@ HiveBDC.exe --test-sharepoint
 HiveBDC.exe --test-mail     # verify the mail app registration + sender mailbox (sends nothing)
 HiveBDC.exe --test-license  # verify the licence (signature, tenant, expiry, features)
 HiveBDC.exe --dump-embedded <zugferd.pdf>
+HiveBDC.exe --word-read <invoice.docx>             # the JSON, totals and problems Hive BDC reads from a Word invoice
+HiveBDC.exe --word-pdf <invoice.docx> [out.pdf]    # render a Word invoice with the built-in renderer
+HiveBDC.exe --word-layout <invoice.docx>           # print the layout (paragraph and row heights) for support
+HiveBDC.exe --word-template <out.docx>             # write the generic Word invoice template
 HiveBDC.exe install | uninstall           # interactive, elevated
 HiveBDC.exe install --quiet [--account DOMAIN\user] [--password ***]
 ```

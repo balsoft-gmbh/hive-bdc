@@ -265,6 +265,35 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Save the generic Hive BDC Word invoice template (German labels, every value a content control tagged with its
+    /// BT number, E-Rechnung drop-down). Template authors copy their layout into it or add the same tags to their own.
+    /// </summary>
+    [RelayCommand]
+    private void SaveWordTemplate()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = "Save the Hive BDC Word invoice template",
+            Filter = "Word document (*.docx)|*.docx",
+            FileName = "HiveBDC-Rechnungsvorlage.docx",
+        };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            using (var fs = File.Create(dlg.FileName)) Documents.Word.WordTemplateBuilder.Write(fs);
+            AppLog.Info($"Saved the Word invoice template to {Path.GetFileName(dlg.FileName)}.");
+            StatusMessage = $"Template saved: {Path.GetFileName(dlg.FileName)}. Fill it in Word, then check it with \"Check a Word file…\".";
+            StatusIsError = false;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Save Word template to {dlg.FileName} failed: {ex.Message}");
+            StatusMessage = "Could not save the template: " + ex.Message;
+            StatusIsError = true;
+        }
+    }
+
     // ── Global file / folder pickers ──────────────────────────────────────────
 
     [RelayCommand] private void BrowseLogDir() => LogDir = PickFolder(LogDir) ?? LogDir;

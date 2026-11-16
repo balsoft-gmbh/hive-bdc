@@ -258,6 +258,12 @@
                                                 <TextBlock Text="Company (AX dataAreaId)" Style="{StaticResource FieldLabel}"/>
                                                 <TextBox Width="180" HorizontalAlignment="Left" Text="{Binding DataAreaId, UpdateSourceTrigger=PropertyChanged}"/>
 
+                                                <TextBlock Text="Input" Style="{StaticResource FieldLabel}"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <RadioButton Content="ERP export: JSON + PDF" IsChecked="{Binding IsJson}" Margin="0,0,20,0"/>
+                                                    <RadioButton Content="Word documents (.docx)" IsChecked="{Binding IsWord}"/>
+                                                </StackPanel>
+
                                                 <TextBlock Text="Input folder" Style="{StaticResource FieldLabel}"/>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -269,7 +275,19 @@
                                                             Command="{Binding DataContext.BrowseInputCommand, RelativeSource={RelativeSource AncestorType=Border, AncestorLevel=2}}"/>
                                                 </Grid>
                                                 <TextBlock Style="{StaticResource Hint}"
+                                                           Visibility="{Binding IsJson, Converter={StaticResource BoolToVis}}"
                                                            Text="Where the ERP drops this type's {documentId}_xxx.json + .pdf pairs. Several types may share one folder; a folder used by one type alone implies that type."/>
+                                                <StackPanel Visibility="{Binding IsWord, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Style="{StaticResource Hint}"
+                                                               Text="Every .docx with Hive BDC fields is read when it is closed, and turned into a PDF by Hive BDC; a PDF with the same name next to it is used instead. XRechnung or ZUGFeRD comes from the document's E-Rechnung field. Failed files go to the error folder with a reason file."/>
+                                                    <WrapPanel Margin="0,6,0,0">
+                                                        <Button Content="Word template…" Padding="10,3" Margin="0,0,6,4"
+                                                                Command="{Binding DataContext.SaveWordTemplateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                ToolTip="Save the Hive BDC Word invoice template: every field a content control tagged with its BT number"/>
+                                                        <Button Content="Check a Word file…" Padding="10,3" Margin="0,0,0,4" Click="OnCheckWordFile"
+                                                                ToolTip="Open a filled .docx and see what Hive BDC reads from it, before it goes into the folder"/>
+                                                    </WrapPanel>
+                                                </StackPanel>
 
                                                 <TextBlock Text="Output folder (blank = input\out\type)" Style="{StaticResource FieldLabel}"/>
                                                 <Grid>

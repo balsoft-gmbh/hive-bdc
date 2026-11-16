@@ -17,7 +17,7 @@ namespace Balsoft.Hive.BDC.Documents;
 /// Missing license features, unresolved routes, incomplete input, and unavailable required
 /// delivery clients HOLD the pair in the input folder for a later scan.
 /// </summary>
-public sealed class DocumentProcessor
+public sealed partial class DocumentProcessor
 {
     private readonly ILogger _log;
     private readonly DocumentTypeRegistry _registry;
@@ -72,6 +72,9 @@ public sealed class DocumentProcessor
             _log.LogError("scan [{Tag}] {Input}: folder is not usable — {Message}", tag, folder.Path, ex.Message);
             return new ScanResult(0, 1, 0);
         }
+
+        if (folder.AcceptsWord)
+            result += ScanWordDocuments(opts, folder, license, uploader, mailer);
 
         var jsonFiles = Directory.EnumerateFiles(folder.Path, "*.json", SearchOption.TopDirectoryOnly)
                                  .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
@@ -143,7 +146,7 @@ public sealed class DocumentProcessor
     }
 
     private ScanResult ProcessPair(BDCOptions opts, ScanFolder folder, LicenseResult license,
-        string jsonPath, string pdfPath, string documentId, SharePointUploader? uploader, MailSender? mailer)
+        string jsonPath, string pdfPath, string documentId, SharePointUploader? uploader, MailSender? mailer, string source = "json")
     {
         // One parse per pair: the DTO and the SharePoint column templates both read this document.
         using var json = ReadDocument(jsonPath);
@@ -274,7 +277,7 @@ public sealed class DocumentProcessor
             try
             {
                 _ledger.Record(documentId, type.Id, output.Format, output.File, targetSite,
-                    new FileInfo(output.File).Length, area);
+                    new FileInfo(output.File).Length, area, source);
             }
             catch (Exception mex)
             {

@@ -68,7 +68,8 @@ public sealed record RecentExportDto(
     string? TargetSite,
     long SizeBytes,
     string? ExportedAt,
-    string? DataAreaId = null);
+    string? DataAreaId = null,
+    string? Source = null);
 
 /// <summary>GET /logs?tail=N.</summary>
 public sealed record LogsDto(
@@ -120,6 +121,8 @@ public sealed class RouteConfigDto
 {
     [JsonPropertyName("dataAreaId")] public string? DataAreaId { get; set; }
     [JsonPropertyName("input")] public string? Input { get; set; }
+    /// <summary>"Json" (ERP export pairs) or "Word" (filled Word invoices).</summary>
+    [JsonPropertyName("inputFormat")] public string? InputFormat { get; set; }
     [JsonPropertyName("output")] public string? Output { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
 }

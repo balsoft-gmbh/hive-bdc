@@ -107,6 +107,7 @@ public static class SettingsFile
         {
             ["DataAreaId"] = r.DataAreaId,
             ["Input"] = r.Input,
+            ["InputFormat"] = r.InputFormat,
             ["Output"] = r.Output,
             ["SharePoint"] = new JsonObject
             {

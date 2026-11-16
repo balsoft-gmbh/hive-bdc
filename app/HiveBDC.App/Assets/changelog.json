@@ -2,6 +2,17 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.4.0",
+      "date": "2026-11-11",
+      "changes": [
+        "Word input: a company entry can take filled Word invoices (.docx) instead of ERP export pairs (Settings, Document types, company entry, Input). Every value is a Word content control tagged with its EN 16931 business term, the lines are a repeating section, and the document's E-Rechnung field chooses XRechnung or ZUGFeRD. Hive BDC builds the same JSON an ERP export writes, makes the PDF itself and delivers as usual.",
+        "Built-in Word to PDF renderer: header and footer, paragraphs, nested tables, borders, images and page numbers, without Microsoft Office or Microsoft 365. A PDF saved with the same name next to the .docx is used instead. Documents with text boxes, shapes or other elements the renderer does not draw go to the error folder with the reason.",
+        "Word invoices are checked before anything is produced: required fields, and printed totals against the sums of the lines to the cent. A failed file goes to the error folder with a reason file in German and English.",
+        "Settings: Word template... saves a generic Word invoice template; Check a Word file... shows the fields, lines, totals check and a PDF preview of a .docx. The documents lists show where each document came from (JSON or Word).",
+        "Construction invoices: the invoice types 875, 876 and 877 are accepted (they were written as 380) and keep a deduction line negative. A Leitweg-ID as buyer electronic address (BT-49) is written with scheme 0204. BT-41 (seller contact) and BT-154 (item description) can be set from the export."
+      ]
+    },
+    {
       "version": "1.3.4",
       "date": "2026-11-02",
       "changes": [

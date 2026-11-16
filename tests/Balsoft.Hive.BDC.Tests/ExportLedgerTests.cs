@@ -24,6 +24,29 @@ public sealed class ExportLedgerTests : IDisposable
         Assert.Equal(2, m.Total);
     }
 
+    [Fact]
+    public void LedgerFromBeforeWordInputGainsTheSourceColumnAndOldRowsReadAsJson()
+    {
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_db}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE exports (id INTEGER PRIMARY KEY AUTOINCREMENT, dedupe_key TEXT NOT NULL UNIQUE, document_id TEXT NOT NULL,
+                    document_type TEXT NOT NULL, format TEXT NOT NULL, output_file TEXT NOT NULL, target_site TEXT,
+                    size_bytes INTEGER NOT NULL, exported_at TEXT NOT NULL, data_area_id TEXT);
+                INSERT INTO exports (dedupe_key, document_id, document_type, format, output_file, size_bytes, exported_at)
+                VALUES ('k', '2026000001', 'SalesInvoice', 'xrechnung', 'a.xml', 1, '2026-11-01 10:00:00');
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        var ledger = ExportLedger.CreateIfMissing(NullLogger.Instance, _db);
+        ledger.Record("RE-1", "SalesInvoice", "xrechnung", "b.xml", null, 2, "1000", "word");
+        var recent = ledger.Metrics(10).Recent;
+        Assert.Equal("word", recent[0].Source);
+        Assert.Equal("json", recent[1].Source);
+    }
+
     public void Dispose()
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();

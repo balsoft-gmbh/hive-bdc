@@ -16,6 +16,15 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     [ObservableProperty] private string _dataAreaId = "";
     [ObservableProperty] private string _input = "";
     [ObservableProperty] private string _output = "";
+    /// <summary>The input folder receives filled Word invoices instead of ERP export pairs.</summary>
+    [ObservableProperty] private bool _isWord;
+
+    /// <summary>The other radio button of the input choice.</summary>
+    public bool IsJson
+    {
+        get => !IsWord;
+        set { if (value) IsWord = false; }
+    }
     [ObservableProperty] private bool _sharePointEnabled;
     [ObservableProperty] private string _siteUrl = "";
     [ObservableProperty] private string _library = "";
@@ -37,6 +46,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
             int cut = folder.LastIndexOfAny(new[] { '\\', '/' });
             string tail = cut >= 0 ? folder[(cut + 1)..] : folder;
             if (tail.Length == 0) tail = "no input folder";
+            if (IsWord) tail = "Word: " + tail;
             string sp = SharePointEnabled
                 ? (string.IsNullOrWhiteSpace(Library) ? "SharePoint on" : "SharePoint: " + Library.Trim())
                 : "no SharePoint";
@@ -46,6 +56,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
 
     partial void OnDataAreaIdChanged(string value) => OnPropertyChanged(nameof(Label));
     partial void OnInputChanged(string value) => OnPropertyChanged(nameof(Summary));
+    partial void OnIsWordChanged(bool value) { OnPropertyChanged(nameof(IsJson)); OnPropertyChanged(nameof(Summary)); }
     partial void OnSharePointEnabledChanged(bool value) => OnPropertyChanged(nameof(Summary));
     partial void OnLibraryChanged(string value) => OnPropertyChanged(nameof(Summary));
 
@@ -55,6 +66,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     {
         DataAreaId = dto.DataAreaId ?? "";
         Input = dto.Input ?? "";
+        IsWord = InputFormats.IsWord(dto.InputFormat);
         Output = dto.Output ?? "";
         var sp = dto.SharePoint;
         SharePointEnabled = sp?.Enabled ?? false;
@@ -70,6 +82,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     {
         DataAreaId = DataAreaId?.Trim() ?? "",
         Input = Input?.Trim() ?? "",
+        InputFormat = IsWord ? InputFormats.Word : InputFormats.Json,
         Output = Output?.Trim() ?? "",
         SharePoint = new CompanySharePointConfigDto
         {

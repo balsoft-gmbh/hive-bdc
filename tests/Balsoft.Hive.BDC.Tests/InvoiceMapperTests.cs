@@ -289,6 +289,61 @@ public class InvoiceMapperTests
         Assert.Equal(2m, discount.Percent);
     }
 
+    // ── 1.4.0: construction invoices, seller contact, item description, Leitweg-ID ──
+
+    [Theory]
+    [InlineData("875")]
+    [InlineData("876")]
+    [InlineData("877")]
+    public void ConstructionInvoiceKeepsADeductionLineNegative(string code)
+    {
+        var warnings = new List<string>();
+        var mapped = InvoiceMapper.Map(Invoice($""", "invoiceTypeCode": "{code}" """, """
+            [ { "description": "Abschlag", "quantity": "1", "unitPrice": "1000" },
+              { "description": "abzüglich 1. Abschlag", "quantity": "1", "unitPrice": "-200" } ]
+            """), warnings.Add);
+        Assert.Equal(code, mapped.TypeCode.ToCode());
+        Assert.Equal(800m, mapped.CalculateTotals().LineNetTotal);
+        Assert.Equal(-1m, mapped.Lines.Single(l => l.Item.Name.StartsWith("abzüglich")).Quantity);
+        Assert.DoesNotContain(warnings, w => w.Contains("not a supported"));
+    }
+
+    [Fact]
+    public void SellerContactNameComesFromBt41AndFallsBackToTheSellerName()
+    {
+        var withContact = InvoiceMapper.Map(Invoice(""", "BT-41": "Erika Muster" """));
+        Assert.Equal("Erika Muster", withContact.Seller.Contact!.Name);
+        Assert.Equal("Muster Lieferant", withContact.Seller.Name);
+        Assert.Equal("Muster Lieferant", InvoiceMapper.Map(Invoice()).Seller.Contact!.Name);
+    }
+
+    [Fact]
+    public void ItemDescriptionComesFromBt154()
+    {
+        var mapped = InvoiceMapper.Map(Invoice("", """
+            [ { "description": "Modulgebäude", "BT-154": "9 Gebäude\nje 40 Module", "quantity": "1", "unitPrice": "100" } ]
+            """));
+        var line = mapped.Lines.Single();
+        Assert.Equal("Modulgebäude", line.Item.Name);
+        Assert.Equal("9 Gebäude\nje 40 Module", line.Item.Description);
+    }
+
+    [Theory]
+    [InlineData("991-80032-33", "0204")]
+    [InlineData("04011000-1234512345-06", "0204")]
+    [InlineData("rechnung@example.org", "EM")]
+    [InlineData("12345", "EM")]
+    public void BuyerElectronicAddressSchemeFollowsTheValue(string value, string scheme)
+    {
+        var fromKey = InvoiceMapper.Map(Invoice($""", "recipientEmail": "mail@example.org", "BT-49": "{value}" """));
+        Assert.Equal(value, fromKey.Buyer.ElectronicAddress!.Value);
+        Assert.Equal(scheme, fromKey.Buyer.ElectronicAddress.Scheme);
+
+        var mapped = InvoiceMapper.Map(Invoice($""", "recipientEmail": "{value}" """));
+        Assert.Equal(value, mapped.Buyer.ElectronicAddress!.Value);
+        Assert.Equal(scheme, mapped.Buyer.ElectronicAddress.Scheme);
+    }
+
     private static AxDocument Invoice(string extraJson = "", string lines = """
         [ { "description": "A", "quantity": "2", "unit": "piece", "unitPrice": "150.00" } ]
         """) => AxDocument.Parse($$"""
@@ -332,6 +387,9 @@ public class InvoiceMapperTests
     [InlineData("380", InvoiceTypeCode.CommercialInvoice)]
     [InlineData("381", InvoiceTypeCode.CreditNote)]
     [InlineData("84", InvoiceTypeCode.DebitNoteFinancialAdjustments)]
+    [InlineData("875", InvoiceTypeCode.PartialConstructionInvoice)]
+    [InlineData("876", InvoiceTypeCode.PartialFinalConstructionInvoice)]
+    [InlineData("877", InvoiceTypeCode.FinalConstructionInvoice)]
     public void TypeCodeIsMapped(string code, InvoiceTypeCode expected)
         => Assert.Equal(expected, InvoiceMapper.Map(Invoice($""", "invoiceTypeCode": "{code}" """)).TypeCode);
 

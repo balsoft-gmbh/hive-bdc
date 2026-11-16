@@ -60,6 +60,7 @@ public sealed partial class LocalStatusServer
                 {
                     dataAreaId = r.DataAreaId,
                     input = r.Input,
+                    inputFormat = r.InputFormat,
                     output = r.Output,
                     sharePoint = new
                     {
@@ -225,6 +226,7 @@ public sealed partial class LocalStatusServer
                     {
                         DataAreaId = r.DataAreaId!.Trim(),
                         Input = r.Input?.Trim() ?? "",
+                        InputFormat = InputFormats.IsWord(r.InputFormat) ? InputFormats.Word : InputFormats.Json,
                         Output = r.Output?.Trim() ?? "",
                         SharePoint = new SharePointTargetOptions
                         {
@@ -327,6 +329,7 @@ public sealed partial class LocalStatusServer
     {
         public string? DataAreaId { get; set; }
         public string? Input { get; set; }
+        public string? InputFormat { get; set; }
         public string? Output { get; set; }
         public CompanySpDto? SharePoint { get; set; }
     }

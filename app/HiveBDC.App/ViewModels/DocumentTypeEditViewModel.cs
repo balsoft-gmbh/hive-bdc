@@ -38,6 +38,7 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
     public string Detail =>
         $"{(string.IsNullOrWhiteSpace(Id) ? "no id yet" : Id.Trim())} · {Party} · {(Handler == "EInvoice" ? "e-invoice" : "PDF")}"
         + $" · {Companies.Count} compan{(Companies.Count == 1 ? "y" : "ies")}"
+        + (Companies.Any(c => c.IsWord) ? " · Word" : "")
         + (Enabled ? "" : " · disabled") + (Discovered ? " · auto-registered" : "");
 
     partial void OnIdChanged(string value) { OnPropertyChanged(nameof(Label)); OnPropertyChanged(nameof(Detail)); }
@@ -48,7 +49,12 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
 
     public DocumentTypeEditViewModel()
     {
-        Companies.CollectionChanged += (_, _) => OnPropertyChanged(nameof(Detail));
+        Companies.CollectionChanged += (_, e) =>
+        {
+            foreach (var row in e.NewItems?.OfType<RouteRow>() ?? Enumerable.Empty<RouteRow>())
+                row.PropertyChanged += (_, p) => { if (p.PropertyName == nameof(RouteRow.IsWord)) OnPropertyChanged(nameof(Detail)); };
+            OnPropertyChanged(nameof(Detail));
+        };
     }
 
     public DocumentTypeEditViewModel(DocumentTypeConfigDto dto) : this()

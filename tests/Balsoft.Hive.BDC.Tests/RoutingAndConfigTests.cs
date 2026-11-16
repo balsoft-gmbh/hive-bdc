@@ -84,6 +84,39 @@ public class RoutingAndConfigTests
     }
 
     [Fact]
+    public void WordInputSurvivesTheSettingsFileAndOldEntriesStayJson()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "hivebdc-settings-" + Guid.NewGuid() + ".json");
+        try
+        {
+            var word = Route("A", @"C:\word");
+            word.InputFormat = InputFormats.Word;
+            var invoice = new DocumentTypeOptions
+            {
+                Id = "SalesInvoice", Handler = DocumentHandlerKind.EInvoice, Companies = { word, Route("B", @"C:\json") },
+            };
+            SettingsFile.Update(path, section =>
+            {
+                section["DocumentTypes"] = new JsonArray(SettingsFile.DocumentTypeNode(invoice));
+                return true;
+            });
+            Assert.DoesNotContain("IsWord", File.ReadAllText(path));
+
+            var reloaded = new ConfigurationBuilder()
+                .AddJsonFile(path).Build().GetSection(SettingsFile.Section).Get<BDCOptions>()!;
+            reloaded.Normalize();
+            var companies = Assert.Single(reloaded.DocumentTypes).Companies;
+            Assert.True(companies.Single(c => c.DataAreaId == "A").IsWord);
+            Assert.Equal(InputFormats.Json, companies.Single(c => c.DataAreaId == "B").InputFormat);
+
+            var scan = ScanFolder.Build(reloaded.DocumentTypes);
+            Assert.True(scan.Single(f => f.Path == @"C:\word").AcceptsWord);
+            Assert.False(scan.Single(f => f.Path == @"C:\json").AcceptsWord);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void LegacyCompanyListIsMigratedUnderEveryType()
     {
         var o = new BDCOptions();

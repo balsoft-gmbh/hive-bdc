@@ -7,3 +7,4 @@ global using Balsoft.Hive.BDC.EInvoice;
 global using Balsoft.Hive.BDC.Hosting;
 global using Balsoft.Hive.BDC.Licensing;
 global using Balsoft.Hive.BDC.Storage;
+global using Balsoft.Hive.BDC.Documents.Word;

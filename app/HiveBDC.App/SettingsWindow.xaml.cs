@@ -65,6 +65,17 @@ public partial class SettingsWindow : Window
     private async void OnTestMail(object sender, RoutedEventArgs e)
         => await _vm.TestMailAsync(MailSecretBox.Password);
 
+    private void OnCheckWordFile(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Check a Word invoice",
+            Filter = "Word document (*.docx)|*.docx",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        new WordCheckWindow(dlg.FileName) { Owner = this }.Show();
+    }
+
     private void OnCancel(object sender, RoutedEventArgs e)
         => Close();
 

@@ -198,6 +198,7 @@ public sealed partial class LocalStatusServer : BackgroundService
             documentId = e.DocumentId,
             documentType = e.DocumentType,
             format = e.Format,
+            source = e.Source,
             outputFile = e.OutputFile,
             targetSite = e.TargetSite,
             sizeBytes = e.SizeBytes,

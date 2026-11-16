@@ -6,7 +6,7 @@ namespace Balsoft.Hive.BDC.Storage;
 /// <summary>One recorded export, as returned by <see cref="ExportLedger.Metrics"/>.</summary>
 public sealed record ExportRecord(
     string DocumentId, string DocumentType, string Format, string OutputFile, string? TargetSite, long SizeBytes,
-    string ExportedAt, string? DataAreaId);
+    string ExportedAt, string? DataAreaId, string Source = "json");
 
 /// <summary>Exports per document type for one period, as returned by <see cref="ExportLedger.Metrics"/>.</summary>
 public sealed record TypeCount(string DocumentType, int Count);
@@ -71,6 +71,7 @@ public sealed class ExportLedger
             // The 2.0 schema lives in a new %ProgramData%\HiveBDC folder, so no 1.x rows
             // are migrated; the guard stays for future columns.
             EnsureColumn(conn, "exports", "data_area_id", "TEXT");
+            EnsureColumn(conn, "exports", "source", "TEXT");
         }
         catch (Exception ex)
         {
@@ -89,7 +90,7 @@ public sealed class ExportLedger
     /// propagated to the pipeline.
     /// </summary>
     public void Record(string documentId, string documentType, string format, string outputFile, string? targetSite,
-        long sizeBytes, string? dataAreaId = null)
+        long sizeBytes, string? dataAreaId = null, string source = "json")
     {
         try
         {
@@ -113,8 +114,8 @@ public sealed class ExportLedger
             cmd.CommandText = """
                 DELETE FROM exports WHERE dedupe_key = $key;
                 INSERT INTO exports
-                    (dedupe_key, document_id, document_type, format, output_file, target_site, size_bytes, exported_at, data_area_id)
-                VALUES ($key, $id, $type, $format, $out, $site, $size, $at, $area);
+                    (dedupe_key, document_id, document_type, format, output_file, target_site, size_bytes, exported_at, data_area_id, source)
+                VALUES ($key, $id, $type, $format, $out, $site, $size, $at, $area, $source);
                 """;
             cmd.Parameters.AddWithValue("$key", key);
             cmd.Parameters.AddWithValue("$id", documentId);
@@ -125,6 +126,7 @@ public sealed class ExportLedger
             cmd.Parameters.AddWithValue("$size", sizeBytes);
             cmd.Parameters.AddWithValue("$at", DateTime.Now.ToString(StampFormat));
             cmd.Parameters.AddWithValue("$area", (object?)dataAreaId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$source", source);
             cmd.ExecuteNonQuery();
 
             if (isNew)
@@ -244,7 +246,7 @@ public sealed class ExportLedger
         var list = new List<ExportRecord>();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT document_id, document_type, format, output_file, target_site, size_bytes, exported_at, data_area_id
+            SELECT document_id, document_type, format, output_file, target_site, size_bytes, exported_at, data_area_id, source
             FROM exports ORDER BY id DESC LIMIT $n
             """;
         cmd.Parameters.AddWithValue("$n", Math.Clamp(n, 1, 5000));
@@ -253,7 +255,7 @@ public sealed class ExportLedger
             list.Add(new ExportRecord(
                 r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3),
                 r.IsDBNull(4) ? null : r.GetString(4), r.GetInt64(5), r.GetString(6),
-                r.IsDBNull(7) ? null : r.GetString(7)));
+                r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? "json" : r.GetString(8)));
         return list;
     }
 

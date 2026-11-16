@@ -93,6 +93,12 @@ public sealed class DocumentRoute
     /// <summary>Folder scanned for {documentId}_xxx.json + matching .pdf pairs.</summary>
     public string Input { get; set; } = "";
 
+    /// <summary>What the input folder receives: <see cref="InputFormats.Json"/> (ERP export pairs, the default) or
+    /// <see cref="InputFormats.Word"/> (filled Word invoices, read and rendered by Hive BDC).</summary>
+    public string InputFormat { get; set; } = InputFormats.Json;
+
+    public bool IsWord => InputFormats.IsWord(InputFormat);
+
     /// <summary>Output folder. Blank = &lt;Input&gt;\out\{documentType}.</summary>
     public string Output { get; set; } = "";
 
@@ -107,6 +113,7 @@ public sealed class DocumentRoute
         DataAreaId = DataAreaId?.Trim() ?? "";
         Input = Input?.Trim() ?? "";
         Output = Output?.Trim() ?? "";
+        InputFormat = InputFormats.IsWord(InputFormat) ? InputFormats.Word : InputFormats.Json;
         SharePoint ??= new SharePointTargetOptions();
         SharePoint.Normalize();
     }
@@ -116,6 +123,7 @@ public sealed class DocumentRoute
     {
         DataAreaId = DataAreaId,
         Input = Input,
+        InputFormat = InputFormat,
         Output = "",   // the output default is per type (…\out\{type}); a copied explicit output would mix types
         SharePoint = new SharePointTargetOptions
         {
@@ -207,6 +215,10 @@ public static class DocumentTypeCatalog
 public sealed record ScanFolder(string Path, IReadOnlyList<(DocumentTypeOptions Type, DocumentRoute Route)> Routes)
 {
     public string ProcessedDir => System.IO.Path.Combine(Path, "processed");
+    public string WorkDir => System.IO.Path.Combine(Path, "work");
+
+    /// <summary>True when a company entry using this folder takes Word documents.</summary>
+    public bool AcceptsWord => Routes.Any(r => r.Route.IsWord);
     public string ErrorDir => System.IO.Path.Combine(Path, "error");
 
     public string? ImpliedTypeId

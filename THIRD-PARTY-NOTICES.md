@@ -11,7 +11,8 @@ grant for these components.
 |---|---|---|---|---|
 | Balsoft.Hive.EInvoice, Balsoft.Hive.EInvoice.Pdf | 1.1.0 | EN 16931 e-invoice model, XRechnung and ZUGFeRD writer | Copyright (c) Balsoft GmbH | Apache-2.0 |
 | Balsoft.Hive.Installer.Windows | 1.1.0 | Setup.exe and the uninstaller | Copyright (c) Balsoft GmbH | Apache-2.0 |
-| PDFsharp | 6.2.4 | PDF/A-3 handling for ZUGFeRD | Copyright (c) empira Software GmbH | MIT |
+| PDFsharp | 6.2.4 | PDF/A-3 handling for ZUGFeRD, Word to PDF rendering | Copyright (c) empira Software GmbH | MIT |
+| DocumentFormat.OpenXml, DocumentFormat.OpenXml.Framework | 3.5.1 | reading Word invoices (.docx) and writing the Word template | Copyright (c) Microsoft Corporation | MIT |
 | Serilog, Serilog.Extensions.Hosting, Serilog.Extensions.Logging, Serilog.Sinks.Console, Serilog.Sinks.File | 4.3.0, 10.0.0, 10.0.0, 6.1.1, 7.0.0 | logging | Copyright (c) Serilog Contributors | Apache-2.0 |
 | Microsoft.Data.Sqlite, Microsoft.Data.Sqlite.Core | 10.0.10 | export ledger | Copyright (c) .NET Foundation and Contributors | MIT |
 | SQLitePCLRaw (bundle_e_sqlite3, core, lib.e_sqlite3, provider.e_sqlite3) | 2.1.12 | SQLite binding | Copyright 2014-2024 SourceGear, LLC | Apache-2.0 |

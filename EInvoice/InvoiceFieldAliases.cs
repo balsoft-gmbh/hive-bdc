@@ -20,6 +20,8 @@ public static class InvoiceFieldAliases
     // ── document level ──────────────────────────────────────────────────────
     public static readonly Term BuyerReference = new("BT-10", "Buyer reference");
     public static readonly Term ProjectReference = new("BT-11", "Project reference");
+    public static readonly Term SellerContactName = new("BT-41", "Seller contact point");
+    public static readonly Term BuyerElectronicAddress = new("BT-49", "Buyer electronic address");
     // No EN 16931 term: the CII project name next to BT-11 (SpecifiedProcuringProject/Name).
     public static readonly Term ProjectName = new("BT-11 name", "Project name");
     public static readonly Term ContractReference = new("BT-12", "Contract reference");
@@ -53,6 +55,7 @@ public static class InvoiceFieldAliases
     public static readonly Term PriceBaseQuantity = new("BT-149", "Item price base quantity");
     public static readonly Term OrderLineReference = new("BT-132", "Referenced purchase order line reference");
     public static readonly Term LineAccountingReference = new("BT-133", "Invoice line buyer accounting reference");
+    public static readonly Term ItemDescription = new("BT-154", "Item description");
     public static readonly Term SellersItemId = new("BT-155", "Item seller's identifier");
     public static readonly Term BuyersItemId = new("BT-156", "Item buyer's identifier");
     public static readonly Term Gtin = new("BT-157", "Item standard identifier (GTIN)");
@@ -63,6 +66,8 @@ public static class InvoiceFieldAliases
         [BuyerReference] = new[] { "buyerReference", "leitwegId", "leitweg", "käuferreferenz", "kaeuferreferenz", "BT-10" },
         [ProjectReference] = new[] { "projectReference", "projectNumber", "projektnummer", "projektreferenz", "BT-11" },
         [ProjectName] = new[] { "projectName", "projektname", "projektbezeichnung" },
+        [BuyerElectronicAddress] = new[] { "buyerElectronicAddress", "buyerEndpoint", "eRechnungsadresse", "BT-49" },
+        [SellerContactName] = new[] { "sellerContactName", "senderContactName", "contactPerson", "ansprechpartner", "BT-41" },
         [DocumentChargeAmount] = new[] { "chargeTotalAmount", "headerChargeAmount", "documentChargeAmount", "markupTotalAmount", "zuschlaege", "zuschläge", "BT-99" },
         [DocumentChargeReason] = new[] { "chargeReason", "headerChargeReason", "documentChargeReason", "BT-104" },
         [ContractReference] = new[] { "contractReference", "contractNumber", "vertragsnummer", "BT-12" },
@@ -96,6 +101,7 @@ public static class InvoiceFieldAliases
         [PriceBaseQuantity] = new[] { "priceUnit", "priceBaseQuantity", "basisQuantity", "preiseinheit", "BT-149" },
         [OrderLineReference] = new[] { "orderLineReference", "purchaseOrderLine", "purchaseOrderLineReference", "bestellposition", "BT-132" },
         [LineAccountingReference] = new[] { "lineAccountingReference", "buyerAccountingReference", "costCenter", "kostenstelle", "BT-133" },
+        [ItemDescription] = new[] { "itemDescription", "longDescription", "positionsbeschreibung", "BT-154" },
         [SellersItemId] = new[] { "itemId", "itemNumber", "sellerItemId", "sellersItemId", "sellersItemIdentifier", "artikelnummer", "BT-155" },
         [BuyersItemId] = new[] { "buyersItemIdentifier", "buyerItemId", "customerItemId", "externalItemId", "kundenartikelnummer", "BT-156" },
         [Gtin] = new[] { "gtin", "ean", "eanCode", "barcode", "BT-157" },

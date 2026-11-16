@@ -14,6 +14,9 @@ using Serilog;
 //                        HiveBDC --test-sharepoint   (verify SharePoint AUTH and the first configured company target)
 //                        HiveBDC --test-mail         (verify the mail app registration and sender mailbox; sends nothing)
 //                        HiveBDC --test-license      (verify the license file: signature, tenant binding, expiry)
+//                        HiveBDC --word-read <file.docx>            (print the JSON and problems Hive BDC reads from a Word invoice)
+//                        HiveBDC --word-pdf <file.docx> [out.pdf]   (render a Word invoice to PDF with the built-in renderer)
+//                        HiveBDC --word-template <out.docx>         (write the generic Hive BDC Word invoice template)
 //   Service setup:       HiveBDC install   [--dry-run]   (elevated, interactive)
 //                        HiveBDC uninstall                (elevated, interactive)
 //   Unattended setup:    HiveBDC install --quiet [--input <dir>] [--output <dir>]
@@ -45,6 +48,8 @@ bool anyCommand = Has("install") || Has("--install") || Has("uninstall") || Has(
                || once || makeSample || Has("--dump-embedded") || testSharePoint || testLicense;
 if (looksLikeSetup && !anyCommand && !WindowsServiceHelpers.IsWindowsService())
     return Installer.RunInstall(args);
+
+if (WordTools.TryRun(args) is { } wordExit) return wordExit;
 
 if (Has("install") || Has("--install")) return Installer.RunInstall(args);
 if (Has("uninstall") || Has("--uninstall")) return Installer.RunUninstall(args);
