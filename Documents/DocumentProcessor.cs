@@ -21,7 +21,8 @@ public sealed partial class DocumentProcessor
 {
     private readonly ILogger _log;
     private readonly DocumentTypeRegistry _registry;
-    private readonly ExportLedger? _ledger;
+    private readonly IStateStore? _ledger;
+    private readonly ConnectorRegistry _connectors;
 
     /// <summary>Type ids already warned about for a missing license feature, so a held folder does not repeat the warning every poll.</summary>
     private readonly HashSet<string> _featureWarned = new(StringComparer.OrdinalIgnoreCase);
@@ -30,11 +31,25 @@ public sealed partial class DocumentProcessor
     private readonly Dictionary<string, DateTime> _pendingLoggedUtc = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan PendingReminder = TimeSpan.FromMinutes(15);
 
-    public DocumentProcessor(ILogger log, DocumentTypeRegistry registry, ExportLedger? ledger)
+    /// <summary>What the history already knows about an input that is being worked on (key: input path).</summary>
+    private sealed class HistoryState
+    {
+        public string? LastWaiting;
+        public readonly HashSet<string> ReadLines = new(StringComparer.Ordinal);
+        public string? DocumentNumber;
+        public string? DocumentType;
+        public string? DataAreaId;
+        public bool TargetFailed;
+    }
+
+    private readonly Dictionary<string, HistoryState> _history = new(StringComparer.OrdinalIgnoreCase);
+
+    public DocumentProcessor(ILogger log, DocumentTypeRegistry registry, IStateStore? ledger, ConnectorRegistry? connectors = null)
     {
         _log = log;
         _registry = registry;
         _ledger = ledger;
+        _connectors = connectors ?? ConnectorRegistry.BuiltIn();
     }
 
     /// <summary>Outcome of one scan: converted+delivered, routed to error\, and held for a missing license feature.</summary>
@@ -97,6 +112,7 @@ public sealed partial class DocumentProcessor
                 _log.LogDebug("[{Tag}] re-checking held {File}", tag, Path.GetFileName(jsonPath));
             else
                 _log.LogInformation("[{Tag}] processing {File}", tag, Path.GetFileName(jsonPath));
+            NoteReceived(jsonPath, documentId, folder.Path);
 
             try
             {
@@ -123,6 +139,7 @@ public sealed partial class DocumentProcessor
                 else
                     _log.LogDebug("{Base}: still pending: {Reason}", baseName, ex.Message);
                 _pending[jsonPath] = ex.Message;
+                Note(jsonPath, documentId, EventSteps.Waiting, EventStates.Waiting, ex.Message);
             }
             catch (Exception ex)
             {
@@ -130,6 +147,7 @@ public sealed partial class DocumentProcessor
                 _pendingLoggedUtc.Remove(jsonPath);
                 result += new ScanResult(0, 1, 0);
                 _log.LogError(ex, "{Base}: failed - {Message}", baseName, ex.Message);
+                NoteFailed(jsonPath, documentId, ex.Message);
                 try
                 {
                     MoveToFolder(jsonPath, folder.ErrorDir);
@@ -146,8 +164,10 @@ public sealed partial class DocumentProcessor
     }
 
     private ScanResult ProcessPair(BDCOptions opts, ScanFolder folder, LicenseResult license,
-        string jsonPath, string pdfPath, string documentId, SharePointUploader? uploader, MailSender? mailer, string source = "json")
+        string jsonPath, string pdfPath, string documentId, SharePointUploader? uploader, MailSender? mailer, string source = "json",
+        string? inputPath = null)
     {
+        string input = inputPath ?? jsonPath;
         // One parse per pair: the DTO and the SharePoint column templates both read this document.
         using var json = ReadDocument(jsonPath);
         var data = AxDocument.FromElement(json.RootElement);
@@ -197,6 +217,13 @@ public sealed partial class DocumentProcessor
             type.Handler == DocumentHandlerKind.EInvoice
                 ? " eInvoiceType=" + (string.IsNullOrWhiteSpace(data.EInvoiceType) ? "(default->xrechnung)" : data.EInvoiceType)
                 : "");
+        var known = HistoryOf(input);
+        known.DocumentNumber = documentNumber;
+        known.DocumentType = type.Id;
+        known.DataAreaId = area;
+        Note(input, documentId, EventSteps.Read, EventStates.Ok,
+            $"Read as {type.EffectiveDisplayName} {documentNumber} for company {area}" +
+            (type.Handler == DocumentHandlerKind.EInvoice ? $", e-invoice format {(data.IsZugferd ? "ZUGFeRD" : "XRechnung")}." : "."));
 
         // ── 2. may it be processed? ───────────────────────────────────────
         if (!type.Enabled)
@@ -213,60 +240,63 @@ public sealed partial class DocumentProcessor
                     tag, documentId, handler.RequiredFeature, type.Id);
             else
                 _log.LogDebug("[{Tag}] {Id}: held — license lacks '{Feature}'.", tag, documentId, handler.RequiredFeature);
+            Note(input, documentId, EventSteps.Waiting, EventStates.Waiting,
+                $"Waiting for a licence with the '{handler.RequiredFeature}' feature, which {type.EffectiveDisplayName} needs. " +
+                "It is processed as soon as such a licence is installed.");
             return new ScanResult(0, 0, 1);
         }
 
         // ── 3. produce the output file ────────────────────────────────────
         // Missing clients are a recoverable configuration problem, not successful
         // delivery. Hold before any side effects so repairing settings resumes work.
-        var spUploader = route.SharePoint.Enabled
-            ? uploader ?? throw new PendingDocumentException("SharePoint is enabled but its connection is unavailable.")
-            : null;
-        if (type.Mail && opts.Mail.Enabled && mailer is null)
-            throw new PendingDocumentException("Mail is enabled but its connection is unavailable.");
+        var deliveries = ResolveTargets(opts, route, type, uploader, mailer);
+        foreach (var (options, target) in deliveries)
+            if (target.Unavailable(options) is { } unavailable)
+                throw new PendingDocumentException(unavailable);
         if ((type.Handler == DocumentHandlerKind.Pdf || data.IsZugferd) && !File.Exists(pdfPath))
             throw new PendingDocumentException("Waiting for the sibling PDF.");
         if (File.Exists(pdfPath)) EnsureReadable(pdfPath);
         var ctx = new DocumentContext(route, type, data, jsonPath, pdfPath, documentId, documentNumber,
             route.OutputDirFor(type), Warn, _log);
         var output = handler.Produce(ctx);
+        var produced = DocumentFile.FromPath(output.File);
+        Note(input, documentId, EventSteps.Produced, EventStates.Ok,
+            $"Produced {FormatLabel(output.Format)} {produced.Name} ({SizeLabel(new FileInfo(output.File).Length)}).");
 
-        // ── 4a. SharePoint ────────────────────────────────────────────────
-        // Upload BEFORE the inputs move to processed\ — an upload failure throws, routes the
-        // pair to error\, and the next drop-in retry regenerates cleanly.
-        string? targetSite = null;
-        if (spUploader is null)
-        {
+        // ── 4. deliver ────────────────────────────────────────────────────
+        // Every target of the company entry gets the file, mail last. A failure throws, routes
+        // the pair to error\, and the next drop-in retry regenerates cleanly: a target that
+        // replaces by name simply runs again, any other target is handed the id of its earlier
+        // delivery from the ledger and updates that document.
+        if (!route.SharePoint.Enabled)
             _log.LogInformation("[{Tag}] {Id}: SharePoint upload skipped: SharePoint is off for {Type} / company {Area} (Settings > Document types).",
                 tag, documentId, type.Id, route.DataAreaId);
-        }
-        else
+
+        string? targetSite = null;
+        string deliveryKey = $"{area}|{type.Id}|{documentId}|{Path.GetFileName(output.File)}";
+        foreach (var (options, target) in deliveries)
         {
-            var sp = route.SharePoint;
-            var target = sp.ResolveTarget(out var reason);
-            if (target is null)
-                throw new InvalidOperationException($"SharePoint upload for '{type.Id}' / company '{route.DataAreaId}': {reason} " +
-                    "Set the site URL and library on that company entry in Settings > Document types.");
-
-            var fields = SharePointFieldTemplate.Resolve(json.RootElement, sp.Fields, Warn);
-            var empty = sp.Fields.Keys.Where(k => !fields.ContainsKey(k)).ToList();
-            if (empty.Count > 0)
-                _log.LogInformation("[sharepoint] {Id}: column(s) left empty because the document has no value for them: {Columns}",
-                    documentId, string.Join(", ", empty));
-            spUploader.Upload(output.File, target, fields);
-            targetSite = target.SiteUrl;
-            _log.LogInformation("[sharepoint] {Id} ({Type}, {Area}) -> {Site}/{Library}/{Folder}{Name} ({Fields} column(s) requested)",
-                documentId, type.Id, route.DataAreaId, target.SiteUrl, target.Library,
-                string.IsNullOrWhiteSpace(target.Folder) ? "" : target.Folder.TrimEnd('/') + "/",
-                Path.GetFileName(output.File), fields.Count);
+            string? previous = target.ReplacesOnRepeat ? null : _ledger?.DeliveryRemoteId(deliveryKey, options.Key);
+            DeliveryResult delivered;
+            try
+            {
+                delivered = target.Deliver(new DeliveryContext(route, type, options, data, json.RootElement,
+                    documentId, documentNumber, produced, previous, tag, Warn, _log));
+            }
+            catch (Exception ex)
+            {
+                known.TargetFailed = true;
+                Note(input, documentId, EventSteps.Delivered, EventStates.Failed, $"{TargetLabel(options.Kind)}: {ex.Message}", options.Kind);
+                throw;
+            }
+            Note(input, documentId, EventSteps.Delivered, EventStates.Ok,
+                delivered.Summary ?? $"Delivered to {TargetLabel(options.Kind)}.", options.Kind);
+            if (options.Kind == TargetKinds.Mail) continue;
+            targetSite ??= delivered.Location;
+            _ledger?.RecordDelivery(deliveryKey, options.Key, options.Kind, delivered.Location, delivered.RemoteId);
         }
 
-        // ── 4b. mail ──────────────────────────────────────────────────────
-        // Failures throw, so the pair lands in error\ and can be retried by dropping it back
-        // in, rather than being metered as a finished export that nobody ever received.
-        if (type.Mail)
-            SendDocumentMail(mailer, type, data, documentId, documentNumber, output.File, tag);
-        else
+        if (!type.Mail)
             _log.LogInformation("[{Tag}] {Id}: mail skipped: mail is off for document type {Type}.", tag, documentId, type.Id);
 
         // ── 5. meter + move ───────────────────────────────────────────────
@@ -288,6 +318,7 @@ public sealed partial class DocumentProcessor
         if (File.Exists(pdfPath)) MoveToFolder(pdfPath, folder.ProcessedDir);
         MoveToFolder(jsonPath, folder.ProcessedDir);
         _log.LogInformation("[{Tag}] {Id}: done — inputs moved to {Processed}", tag, documentId, folder.ProcessedDir);
+        Note(input, documentId, EventSteps.Done, EventStates.Ok, "Finished. The input files are in the processed folder.");
         return new ScanResult(1, 0, 0);
     }
 
@@ -333,73 +364,87 @@ public sealed partial class DocumentProcessor
     }
 
     /// <summary>
-    /// Mail the produced file, when mail is configured and the document names a recipient.
-    ///
-    /// The environment stamped by the ERP decides who receives it: a production document goes
-    /// to the customer/vendor, anything else (including a document whose JSON carries no
-    /// environment) goes to the redirect list from the settings. A document with no recipient
-    /// at all is not an error — plenty are printed or posted rather than mailed — so it is
-    /// logged and skipped.
+    /// The targets one document goes to: the entry's SharePoint block, its further targets, then
+    /// mail when the type mails. A kind this version does not know holds the document with a
+    /// reason, so a settings file from a newer version stops that entry only.
     /// </summary>
-    private void SendDocumentMail(MailSender? mailer, DocumentTypeOptions type, AxDocument data,
-        string documentId, string documentNumber, string outFile, string tag)
+    private List<(TargetOptions Options, IDocumentTarget Target)> ResolveTargets(BDCOptions opts, DocumentRoute route,
+        DocumentTypeOptions type, SharePointUploader? uploader, MailSender? mailer)
     {
-        if (mailer is null)
+        var runtime = new TargetRuntime(opts, uploader, mailer, _log);
+        var wanted = route.EffectiveTargets().ToList();
+        if (type.Mail) wanted.Add(new TargetOptions { Kind = TargetKinds.Mail });
+
+        var list = new List<(TargetOptions, IDocumentTarget)>();
+        foreach (var options in wanted)
         {
-            _log.LogInformation("[{Tag}] {Id}: mail skipped: document mail is not enabled.", tag, documentId);
-            return;
+            var target = _connectors.Target(options.Kind, runtime)
+                ?? throw new PendingDocumentException(
+                    $"Document type '{type.Id}' / company '{route.DataAreaId}' has a target of kind '{options.Kind}', which this version of Hive BDC does not know. " +
+                    "Update Hive BDC or remove that target from the company entry; the pair remains pending.");
+            list.Add((options, target));
         }
-
-        var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc);
-        string partyLabel = type.Party == DocumentParty.Vendor ? "vendor" : "customer";
-
-        if (plan.Redirected && string.IsNullOrWhiteSpace(data.Environment))
-            _log.LogWarning(
-                "[{Tag}] {Id}: the JSON carries no 'environment' — treating it as NOT production and redirecting the mail. " +
-                "Update the AX export (BDCEnvironmentHelper) so production documents reach the {Party}.", tag, documentId, partyLabel);
-
-        if (plan.To.Count == 0)
-        {
-            if (plan.Redirected)
-                throw new InvalidOperationException(
-                    $"Mail is enabled and this document came from a '{plan.Environment}' system, but no redirect " +
-                    "recipients are configured. Add them in Settings > Connections > Document mail > Test recipients.");
-
-            _log.LogWarning("[{Tag}] {Id}: no recipient e-mail in the document — mail skipped.", tag, documentId);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(data.EmailBody))
-            _log.LogWarning("[{Tag}] {Id}: the JSON has no emailBody — sending with an empty body.", tag, documentId);
-
-        string subject = MailSender.BuildSubject(data.EmailSubject, type.EffectiveDisplayName, documentNumber, plan);
-        var body = MailSender.BuildBody(data.EmailBody, type.EffectiveDisplayName, documentNumber, partyLabel, plan);
-
-        try
-        {
-            mailer.Send(plan, subject, body, outFile);
-        }
-        catch (Exception ex)
-        {
-            // Production and upload already succeeded, so name the document and the step
-            // rather than letting the bare Graph error stand on its own.
-            throw new InvalidOperationException(
-                $"The {type.EffectiveDisplayName} was produced and uploaded, but mailing it failed: {ex.Message} " +
-                "Fix the mail settings, then drop the pair back into the input folder to retry.", ex);
-        }
-
-        if (plan.Redirected)
-            _log.LogInformation(
-                "[mail] {Id} ({Type}) REDIRECTED — environment={Env}, sent to {To} instead of {Original}; {Kind} body, attachment {File}",
-                documentId, type.Id, plan.Environment, MaskAddresses(plan.To),
-                plan.OriginalTo.Count > 0 ? MaskAddresses(plan.OriginalTo) : "(none)", body.IsHtml ? "HTML" : "text", Path.GetFileName(outFile));
-        else
-            _log.LogInformation(
-                "[mail] {Id} ({Type}) -> {To}{Cc}; from {From}, {Kind} body, attachment {File}",
-                documentId, type.Id, MaskAddresses(plan.To),
-                plan.Cc.Count > 0 ? " cc " + MaskAddresses(plan.Cc) : "",
-                mailer.From, body.IsHtml ? "HTML" : "text", Path.GetFileName(outFile));
+        return list;
     }
+
+    private HistoryState HistoryOf(string input)
+    {
+        if (!_history.TryGetValue(input, out var state)) _history[input] = state = new HistoryState();
+        return state;
+    }
+
+    /// <summary>
+    /// One line of the document's history. A waiting document is read again on every scan, so its read lines and an
+    /// unchanged waiting reason are written once per arrival, not on every scan; the facts read
+    /// from the document (number, type, company) are added to every later line of the same input.
+    /// </summary>
+    private void Note(string input, string documentId, string step, string state, string message, string? target = null)
+    {
+        if (_ledger is null) return;
+        var known = HistoryOf(input);
+        if (step == EventSteps.Read && !known.ReadLines.Add(message)) return;
+        if (step == EventSteps.Waiting)
+        {
+            if (known.LastWaiting == message) return;
+            known.LastWaiting = message;
+        }
+        _ledger.RecordEvent(new DocumentEvent(documentId, Path.GetFileName(input), step, state, message,
+            known.DocumentNumber, known.DocumentType, known.DataAreaId, target));
+        if (step is EventSteps.Done or EventSteps.Failed) _history.Remove(input);
+    }
+
+    /// <summary>The first line of an arrival; a document that is already being worked on (waiting) gets no second one.</summary>
+    private void NoteReceived(string input, string documentId, string folder)
+    {
+        if (_ledger is null || _history.ContainsKey(input)) return;
+        Note(input, documentId, EventSteps.Received, EventStates.Ok, $"Received {Path.GetFileName(input)} in {folder}.");
+    }
+
+    private void NoteFailed(string input, string documentId, string reason)
+    {
+        bool afterTarget = _history.TryGetValue(input, out var known) && known.TargetFailed;
+        Note(input, documentId, EventSteps.Failed, EventStates.Failed, afterTarget
+            ? "Stopped after the failed delivery above. The input files are in the error folder; put them back into the input folder to retry. Targets that already received the document are not sent a second copy."
+            : reason + " The input files are in the error folder; put them back into the input folder to retry.");
+    }
+
+    internal static string FormatLabel(string format) => format switch
+    {
+        "xrechnung" => "XRechnung XML",
+        "zugferd" => "ZUGFeRD PDF",
+        "pdf" => "PDF",
+        _ => format,
+    };
+
+    internal static string TargetLabel(string kind) => kind switch
+    {
+        TargetKinds.SharePoint => "SharePoint",
+        TargetKinds.Mail => "Mail",
+        _ => kind.Length == 0 ? kind : char.ToUpperInvariant(kind[0]) + kind[1..],
+    };
+
+    internal static string SizeLabel(long bytes) => bytes < 1024 ? $"{bytes} bytes"
+        : bytes < 1024 * 1024 ? $"{bytes / 1024.0:0.#} KB" : $"{bytes / (1024.0 * 1024):0.#} MB";
 
     /// <summary>Log form of mail addresses: first character of the local part and the domain ("m***@contoso.com").</summary>
     internal static string MaskAddresses(IEnumerable<string> addresses) => string.Join(", ", addresses.Select(MaskAddress));

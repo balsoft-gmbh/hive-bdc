@@ -588,8 +588,11 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               DocumentTypeRegistry (auto-registration), SharePointFieldTemplate
   EInvoice/                   InvoiceMapper (JSON -> EN 16931), EInvoiceGenerator, PdfRepair
   Delivery/                   MailSender (Graph), SharePointUploader (Graph)
+  Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint and mail
+                              targets, DocumentFile (a produced file as name, content type and content)
   Licensing/                  LicenseValidator (offline, cached per file version)
-  Storage/                    ExportLedger (SQLite), SecretProtector (DPAPI)
+  Storage/                    IStateStore, ExportLedger (SQLite: exports, deliveries, document history),
+                              SecretProtector (DPAPI)
   Hosting/                    Worker, LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
@@ -660,8 +663,31 @@ If SharePoint is enabled for the route, or mail is enabled globally and for the
 type, an unavailable delivery client holds the document before generating or
 sending anything. Correcting the connection settings resumes processing on the
 next scan. Explicitly disabled delivery remains optional. Network errors during
-an actual delivery still go to `error` for operator-managed retry; successful
-external deliveries are not yet tracked as independently resumable steps.
+an actual delivery still go to `error` for operator-managed retry. Each successful
+delivery is recorded per target, so a target that creates a new document on every
+call (a document management system) is handed the id of its earlier delivery on a
+retry and updates that document instead of storing a second one.
+
+### Targets
+
+A company entry delivers to its SharePoint block (when on), then to every enabled
+entry of its `Targets` list, then by mail when the document type mails. A target has
+a `Kind`, an optional `Connection`, `Settings` for the kind and `Fields` with the same
+templates as the SharePoint columns. A kind the installed version does not know holds
+only that company entry with a message; every other entry keeps running. An entry
+without further targets is saved without the `Targets` key, so the file stays
+readable by earlier versions, and a save from a dashboard that does not send targets
+keeps the stored ones.
+
+### Document history
+
+Every document gets a history in `hive.db` (table `events`): received, read,
+produced, one line per target, waiting, failed and done, in plain words. A waiting
+document's reason is written once, not on every scan. Mail addresses are masked,
+line breaks flattened and a line is capped at 2000 characters. The history is pruned
+with the export ledger. The loopback API serves it as
+`GET /history?search=<document id or number>&limit=<n>`; without `search` it returns
+the newest lines of all documents.
 
 A failed scan or quarantine operation is logged without blocking other documents
 or folders. Cycle summaries include held documents rather than reporting idle.

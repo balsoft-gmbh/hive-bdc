@@ -70,6 +70,14 @@ public sealed partial class LocalStatusServer
                         folder = r.SharePoint.Folder,
                         fields = r.SharePoint.Fields,
                     },
+                    targets = r.Targets.Select(x => new
+                    {
+                        kind = x.Kind,
+                        connection = x.Connection,
+                        enabled = x.Enabled,
+                        settings = x.Settings,
+                        fields = x.Fields,
+                    }).ToArray(),
                 }).ToArray(),
             }).ToArray(),
         };
@@ -236,8 +244,22 @@ public sealed partial class LocalStatusServer
                             Folder = SharePointTargetOptions.CleanFolder(r.SharePoint?.Folder),
                             Fields = r.SharePoint?.Fields ?? new(),
                         },
+                        Targets = r.Targets?.Select(x => new TargetOptions
+                        {
+                            Kind = x.Kind ?? "",
+                            Connection = x.Connection ?? "",
+                            Enabled = x.Enabled ?? true,
+                            Settings = x.Settings ?? new(),
+                            Fields = x.Fields ?? new(),
+                        }).ToList() ?? new(),
                     }).ToList(),
                 };
+                // A dashboard that does not send targets (every version before the target
+                // list) must not delete the ones the settings file has.
+                var posted = t.Companies ?? new();
+                for (int i = 0; i < opt.Companies.Count; i++)
+                    if (posted[i].Targets is null)
+                        opt.Companies[i].Targets = SettingsFile.StoredTargets(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
                 arr.Add(SettingsFile.DocumentTypeNode(opt));
             }
             typesNode = arr;
@@ -332,6 +354,17 @@ public sealed partial class LocalStatusServer
         public string? InputFormat { get; set; }
         public string? Output { get; set; }
         public CompanySpDto? SharePoint { get; set; }
+        public List<TargetPostDto>? Targets { get; set; }
+    }
+
+    /// <summary>One further target of a company entry on POST. Absent list = keep the stored targets.</summary>
+    private sealed class TargetPostDto
+    {
+        public string? Kind { get; set; }
+        public string? Connection { get; set; }
+        public bool? Enabled { get; set; }
+        public Dictionary<string, string>? Settings { get; set; }
+        public Dictionary<string, string>? Fields { get; set; }
     }
 
     /// <summary>Shared mail config on POST. ClientSecret is optional; blank/absent => keep the stored one.</summary>

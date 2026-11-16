@@ -105,6 +105,19 @@ public sealed class DocumentRoute
     /// <summary>SharePoint target (site/library/folder), column templates and the Enabled toggle.</summary>
     public SharePointTargetOptions SharePoint { get; set; } = new();
 
+    /// <summary>Further targets next to the SharePoint block, of any kind the installed version knows.</summary>
+    public List<TargetOptions> Targets { get; set; } = new();
+
+    /// <summary>What this entry delivers to, in order: the SharePoint block when it is on, then every enabled further target.</summary>
+    public IEnumerable<TargetOptions> EffectiveTargets()
+    {
+        if (SharePoint.Enabled) yield return TargetOptions.FromSharePoint(SharePoint);
+        foreach (var t in Targets)
+            if (t.Enabled) yield return t;
+    }
+
+    public bool DeliversTo(string kind) => EffectiveTargets().Any(t => t.Kind == TargetKinds.Clean(kind));
+
     public string OutputDirFor(DocumentTypeOptions type)
         => string.IsNullOrWhiteSpace(Output) ? Path.Combine(Input, "out", type.Id) : Output;
 
@@ -116,6 +129,10 @@ public sealed class DocumentRoute
         InputFormat = InputFormats.IsWord(InputFormat) ? InputFormats.Word : InputFormats.Json;
         SharePoint ??= new SharePointTargetOptions();
         SharePoint.Normalize();
+        Targets ??= new();
+        Targets.RemoveAll(t => t is null);
+        foreach (var t in Targets) t.Normalize();
+        Targets.RemoveAll(t => t.Kind.Length == 0);
     }
 
     /// <summary>A copy for another document type (same company, same folders, same target).</summary>
@@ -133,6 +150,7 @@ public sealed class DocumentRoute
             Folder = SharePoint.Folder,
             Fields = new Dictionary<string, string>(SharePoint.Fields),
         },
+        Targets = Targets.Select(t => t.Clone()).ToList(),
     };
 }
 

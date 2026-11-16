@@ -255,23 +255,27 @@ public sealed partial class MailSender
     [System.Text.RegularExpressions.GeneratedRegex(@"<\s*body\b[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex BodyTag();
 
-    public void Send(MailPlan plan, string subject, MailBody body, string attachmentPath)
-        => SendAsync(plan, subject, body, attachmentPath).GetAwaiter().GetResult();
+    public void Send(MailPlan plan, string subject, MailBody body, DocumentFile attachment)
+        => SendAsync(plan, subject, body, attachment).GetAwaiter().GetResult();
+
+    public Task SendAsync(MailPlan plan, string subject, MailBody body, string attachmentPath)
+    {
+        if (!File.Exists(attachmentPath))
+            throw new FileNotFoundException($"Attachment '{attachmentPath}' does not exist.", attachmentPath);
+        return SendAsync(plan, subject, body, DocumentFile.FromPath(attachmentPath));
+    }
 
     /// <summary>
     /// Send one document mail with the produced file attached. Throws on any Graph
     /// failure, so the caller can route the pair to error\ and retry it later rather than
     /// recording an export that never reached anyone.
     /// </summary>
-    public async Task SendAsync(MailPlan plan, string subject, MailBody body, string attachmentPath)
+    public async Task SendAsync(MailPlan plan, string subject, MailBody body, DocumentFile attachment)
     {
         if (plan.To.Count == 0)
             throw new InvalidOperationException("The mail has no recipients.");
-        if (!File.Exists(attachmentPath))
-            throw new FileNotFoundException($"Attachment '{attachmentPath}' does not exist.", attachmentPath);
-
-        byte[] bytes = await File.ReadAllBytesAsync(attachmentPath);
-        string fileName = Path.GetFileName(attachmentPath);
+        byte[] bytes = attachment.ReadAllBytes();
+        string fileName = attachment.Name;
         string contentType = ContentTypeFor(fileName);
 
         if (bytes.Length <= InlineAttachmentLimit)

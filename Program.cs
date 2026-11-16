@@ -104,6 +104,7 @@ builder.Services.Configure<BDCOptions>(builder.Configuration.GetSection(sectionN
 builder.Services.AddWindowsService(o => o.ServiceName = "HiveBDC");
 builder.Services.AddSingleton(sp =>
     ExportLedger.CreateIfMissing(sp.GetRequiredService<ILoggerFactory>().CreateLogger("ExportLedger")));
+builder.Services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<ExportLedger>());
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 builder.Services.AddSingleton(sp =>
     new DocumentTypeRegistry(settingsPath, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
@@ -128,7 +129,7 @@ if (OperatingSystem.IsWindows())
 var appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
 builder.Services.AddSingleton<IHostedService>(sp => new LocalStatusServer(
     sp.GetRequiredService<IOptionsMonitor<BDCOptions>>(),
-    sp.GetRequiredService<ExportLedger>(),
+    sp.GetRequiredService<IStateStore>(),
     sp.GetRequiredService<ILogger<LocalStatusServer>>(),
     resolvedLogDir, appVersion, settingsPath));
 

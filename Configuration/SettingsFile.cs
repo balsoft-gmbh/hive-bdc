@@ -103,7 +103,7 @@ public static class SettingsFile
     {
         var fields = new JsonObject();
         foreach (var (k, v) in r.SharePoint.Fields) fields[k] = v ?? "";
-        return new JsonObject
+        var node = new JsonObject
         {
             ["DataAreaId"] = r.DataAreaId,
             ["Input"] = r.Input,
@@ -117,6 +117,66 @@ public static class SettingsFile
                 ["Folder"] = r.SharePoint.Folder,
                 ["Fields"] = fields,
             },
+        };
+        // Written only when there is one, so an entry without further targets keeps the shape
+        // every earlier version wrote and reads.
+        if (r.Targets.Count > 0)
+        {
+            var targets = new JsonArray();
+            foreach (var t in r.Targets) targets.Add(TargetNode(t));
+            node["Targets"] = targets;
+        }
+        return node;
+    }
+
+    /// <summary>
+    /// The further targets the settings file holds for one company entry (type, company, input
+    /// folder), read from the product section as it is on disk. Empty when there are none.
+    /// </summary>
+    public static List<TargetOptions> StoredTargets(JsonObject? section, string typeId, string dataAreaId, string input)
+    {
+        static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+        static string Folder(string p) => p.Trim().TrimEnd('\\', '/');
+
+        var result = new List<TargetOptions>();
+        if (section?["DocumentTypes"] is not JsonArray types) return result;
+        var type = types.OfType<JsonObject>().FirstOrDefault(t => DocumentTypeCatalog.SameId(Text(t["Id"]), typeId));
+        var entry = (type?["Companies"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c =>
+            string.Equals(Text(c["DataAreaId"]).Trim(), dataAreaId.Trim(), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Folder(Text(c["Input"])), Folder(input), StringComparison.OrdinalIgnoreCase));
+        if (entry?["Targets"] is not JsonArray targets) return result;
+
+        foreach (var node in targets.OfType<JsonObject>())
+        {
+            var target = new TargetOptions
+            {
+                Kind = Text(node["Kind"]),
+                Connection = Text(node["Connection"]),
+                Enabled = node["Enabled"] is not JsonValue e || !e.TryGetValue<bool>(out var on) || on,
+            };
+            if (node["Settings"] is JsonObject settings)
+                foreach (var (k, v) in settings) target.Settings[k] = Text(v);
+            if (node["Fields"] is JsonObject fields)
+                foreach (var (k, v) in fields) target.Fields[k] = Text(v);
+            target.Normalize();
+            if (target.Kind.Length > 0) result.Add(target);
+        }
+        return result;
+    }
+
+    public static JsonObject TargetNode(TargetOptions t)
+    {
+        var settings = new JsonObject();
+        foreach (var (k, v) in t.Settings) settings[k] = v ?? "";
+        var fields = new JsonObject();
+        foreach (var (k, v) in t.Fields) fields[k] = v ?? "";
+        return new JsonObject
+        {
+            ["Kind"] = t.Kind,
+            ["Connection"] = t.Connection,
+            ["Enabled"] = t.Enabled,
+            ["Settings"] = settings,
+            ["Fields"] = fields,
         };
     }
 }

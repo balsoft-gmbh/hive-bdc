@@ -184,10 +184,10 @@ public sealed class BDCOptions
     /// is needed). A disabled type never delivers, so its SharePoint flag must not pull up the
     /// Graph client or report "SharePoint on".
     /// </summary>
-    public bool AnySharePointEnabled() => ActiveRoutes().Any(r => r.SharePoint.Enabled);
+    public bool AnySharePointEnabled() => ActiveRoutes().Any(r => r.DeliversTo(TargetKinds.SharePoint));
 
     /// <summary>Company entries of enabled types that upload to SharePoint.</summary>
-    public int SharePointEntryCount() => ActiveRoutes().Count(r => r.SharePoint.Enabled);
+    public int SharePointEntryCount() => ActiveRoutes().Count(r => r.DeliversTo(TargetKinds.SharePoint));
 }
 
 /// <summary>

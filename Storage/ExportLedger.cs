@@ -17,7 +17,7 @@ public sealed record TypeCount(string DocumentType, int Count);
 /// the single-file exe. Purely additive: metering never affects conversion output,
 /// so every write is best-effort and swallows its own errors.
 /// </summary>
-public sealed class ExportLedger
+public sealed class ExportLedger : IStateStore
 {
     private const string StampFormat = "yyyy-MM-dd HH:mm:ss";
 
@@ -65,6 +65,33 @@ public sealed class ExportLedger
                 -- Lifetime counters survive detail-row pruning (see Prune), so the usage
                 -- 'total exported' stays accurate even after old rows are dropped.
                 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+                -- One row per document and target: where it went and the id the target gave it.
+                CREATE TABLE IF NOT EXISTS deliveries (
+                    document_key TEXT NOT NULL,
+                    target_key   TEXT NOT NULL,
+                    kind         TEXT NOT NULL,
+                    location     TEXT,
+                    remote_id    TEXT,
+                    delivered_at TEXT NOT NULL,
+                    PRIMARY KEY (document_key, target_key)
+                );
+                -- The history of every document: one row per step and per target.
+                CREATE TABLE IF NOT EXISTS events (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    at              TEXT NOT NULL,
+                    document_id     TEXT NOT NULL,
+                    input           TEXT NOT NULL,
+                    step            TEXT NOT NULL,
+                    state           TEXT NOT NULL,
+                    message         TEXT NOT NULL,
+                    document_number TEXT,
+                    document_type   TEXT,
+                    data_area_id    TEXT,
+                    target          TEXT
+                );
+                CREATE INDEX IF NOT EXISTS ix_events_document ON events(document_id);
+                CREATE INDEX IF NOT EXISTS ix_events_number ON events(document_number);
+                CREATE INDEX IF NOT EXISTS ix_events_at ON events(at);
                 """;
             cmd.ExecuteNonQuery();
 
@@ -146,6 +173,116 @@ public sealed class ExportLedger
         }
     }
 
+    /// <summary>Note that a document reached a target. Best-effort, like <see cref="Record"/>.</summary>
+    public void RecordDelivery(string documentKey, string targetKey, string kind, string? location, string? remoteId)
+    {
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO deliveries (document_key, target_key, kind, location, remote_id, delivered_at)
+                VALUES ($doc, $target, $kind, $location, $remote, $at)
+                ON CONFLICT(document_key, target_key) DO UPDATE SET
+                    kind = excluded.kind, location = excluded.location,
+                    remote_id = COALESCE(excluded.remote_id, deliveries.remote_id), delivered_at = excluded.delivered_at;
+                """;
+            cmd.Parameters.AddWithValue("$doc", documentKey);
+            cmd.Parameters.AddWithValue("$target", targetKey);
+            cmd.Parameters.AddWithValue("$kind", kind);
+            cmd.Parameters.AddWithValue("$location", (object?)location ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$remote", (object?)remoteId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$at", DateTime.Now.ToString(StampFormat));
+            cmd.ExecuteNonQuery();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Delivery ledger write failed for {Key} ({Kind}); delivery is unaffected.", documentKey, kind);
+        }
+    }
+
+    public void RecordEvent(DocumentEvent entry)
+    {
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO events (at, document_id, input, step, state, message, document_number, document_type, data_area_id, target)
+                VALUES ($at, $id, $input, $step, $state, $message, $number, $type, $area, $target);
+                """;
+            cmd.Parameters.AddWithValue("$at", DateTime.Now.ToString(StampFormat));
+            cmd.Parameters.AddWithValue("$id", entry.DocumentId);
+            cmd.Parameters.AddWithValue("$input", entry.Input);
+            cmd.Parameters.AddWithValue("$step", entry.Step);
+            cmd.Parameters.AddWithValue("$state", entry.State);
+            cmd.Parameters.AddWithValue("$message", EventText.Clean(entry.Message));
+            cmd.Parameters.AddWithValue("$number", (object?)entry.DocumentNumber ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$type", (object?)entry.DocumentType ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$area", (object?)entry.DataAreaId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$target", (object?)entry.Target ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Document history write failed for {Id} ({Step}); processing is unaffected.", entry.DocumentId, entry.Step);
+        }
+    }
+
+    public IReadOnlyList<DocumentEvent> Events(string? search, int limit)
+    {
+        var list = new List<DocumentEvent>();
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            string columns = "id, at, document_id, input, step, state, message, document_number, document_type, data_area_id, target";
+            if (string.IsNullOrWhiteSpace(search))
+                cmd.CommandText = $"SELECT {columns} FROM (SELECT {columns} FROM events ORDER BY id DESC LIMIT $n) ORDER BY id";
+            else
+            {
+                // A search names one document: its id from the file name or its ERP number. Every arrival of that
+                // document is returned, oldest step first.
+                cmd.CommandText = $"""
+                    SELECT {columns} FROM events
+                    WHERE document_id IN (SELECT document_id FROM events WHERE document_id = $s OR document_number = $s)
+                    ORDER BY id LIMIT $n
+                    """;
+                cmd.Parameters.AddWithValue("$s", search.Trim());
+            }
+            cmd.Parameters.AddWithValue("$n", Math.Clamp(limit, 1, 5000));
+            using var r = cmd.ExecuteReader();
+            string? Text(int i) => r.IsDBNull(i) ? null : r.GetString(i);
+            while (r.Read())
+                list.Add(new DocumentEvent(r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6),
+                    Text(7), Text(8), Text(9), Text(10), r.GetInt64(0), r.GetString(1)));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Document history read failed.");
+        }
+        return list;
+    }
+
+    /// <summary>The id a target gave this document on an earlier delivery, or null.</summary>
+    public string? DeliveryRemoteId(string documentKey, string targetKey)
+    {
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT remote_id FROM deliveries WHERE document_key = $doc AND target_key = $target";
+            cmd.Parameters.AddWithValue("$doc", documentKey);
+            cmd.Parameters.AddWithValue("$target", targetKey);
+            return cmd.ExecuteScalar() as string;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Delivery ledger read failed for {Key}.", documentKey);
+            return null;
+        }
+    }
+
     /// <summary>Everything the dashboard's metrics card needs, read on ONE connection.</summary>
     public sealed record MetricsSnapshot(int Today, int Month, long Total, IReadOnlyList<TypeCount> MonthByType, IReadOnlyList<ExportRecord> Recent);
 
@@ -215,6 +352,12 @@ public sealed class ExportLedger
             del.Parameters.AddWithValue("$cutoff",
                 DateTime.Now.AddDays(-Math.Abs(retentionDays)).ToString(StampFormat));
             int deleted = del.ExecuteNonQuery();
+            using (var old = conn.CreateCommand())
+            {
+                old.CommandText = "DELETE FROM deliveries WHERE delivered_at < $cutoff; DELETE FROM events WHERE at < $cutoff;";
+                old.Parameters.AddWithValue("$cutoff", DateTime.Now.AddDays(-Math.Abs(retentionDays)).ToString(StampFormat));
+                old.ExecuteNonQuery();
+            }
             if (deleted > 0)
             {
                 using var vac = conn.CreateCommand();

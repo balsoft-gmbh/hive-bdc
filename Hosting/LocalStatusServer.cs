@@ -35,7 +35,7 @@ public sealed partial class LocalStatusServer : BackgroundService
     private const string LegacySettingsSection = SettingsFile.LegacySection;   // 1.x section, migrated on write
 
     private readonly IOptionsMonitor<BDCOptions> _optsMonitor;
-    private readonly ExportLedger _ledger;
+    private readonly IStateStore _ledger;
     private readonly ILogger<LocalStatusServer> _log;
     private readonly string? _logDir;
     private readonly string _version;
@@ -47,7 +47,7 @@ public sealed partial class LocalStatusServer : BackgroundService
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     public LocalStatusServer(
-        IOptionsMonitor<BDCOptions> opts, ExportLedger ledger, ILogger<LocalStatusServer> log,
+        IOptionsMonitor<BDCOptions> opts, IStateStore ledger, ILogger<LocalStatusServer> log,
         string? logDir, string version, string settingsPath)
     {
         _optsMonitor = opts;
@@ -122,6 +122,7 @@ public sealed partial class LocalStatusServer : BackgroundService
                 case ("GET", "/status"): Respond(ctx, 200, Status()); return;
                 case ("GET", "/metrics"): Respond(ctx, 200, Metrics(RecentParam(req))); return;
                 case ("GET", "/logs"): Respond(ctx, 200, Logs(TailParam(req))); return;
+                case ("GET", "/history"): Respond(ctx, 200, History(req)); return;
                 case ("GET", "/config"): GetConfig(ctx); return;
                 case ("POST", "/config"): PostConfig(ctx, req); return;
                 case ("POST", "/config/test-sharepoint"): await PostTestSharePoint(ctx, req); return;
@@ -228,6 +229,35 @@ public sealed partial class LocalStatusServer : BackgroundService
             _log.LogWarning(ex, "Local API: reading the log for the dashboard failed.");
             return new { lines = Array.Empty<string>(), error = "log read failed" };
         }
+    }
+
+    /// <summary>
+    /// GET /history?search=&amp;limit=: the steps of one document (search by its id or number), or the newest steps of
+    /// all documents when search is blank.
+    /// </summary>
+    private object History(HttpListenerRequest req)
+    {
+        string? search = req.QueryString["search"];
+        int limit = int.TryParse(req.QueryString["limit"], out var n) ? Math.Clamp(n, 1, 5000) : 500;
+        var events = _ledger.Events(search, limit);
+        return new
+        {
+            search = search ?? "",
+            events = events.Select(e => new
+            {
+                id = e.Id,
+                at = e.At,
+                documentId = e.DocumentId,
+                documentNumber = e.DocumentNumber,
+                documentType = e.DocumentType,
+                dataAreaId = e.DataAreaId,
+                input = e.Input,
+                step = e.Step,
+                target = e.Target,
+                state = e.State,
+                message = e.Message,
+            }).ToArray(),
+        };
     }
 
     /// <summary>Last <paramref name="count"/> lines of a UTF-8 text file, read from the end.</summary>

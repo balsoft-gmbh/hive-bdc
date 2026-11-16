@@ -21,7 +21,7 @@ public sealed class Worker : BackgroundService
 {
     private readonly IOptionsMonitor<BDCOptions> _optsMonitor;
     private readonly ILogger<Worker> _log;
-    private readonly ExportLedger _ledger;
+    private readonly IStateStore _ledger;
     private readonly DocumentProcessor _processor;
     private LicenseState? _lastLicenseState;
     private int _lastDocumentTypeCount = -1;
@@ -33,7 +33,7 @@ public sealed class Worker : BackgroundService
     private DateTime _lastLogCleanupUtc = DateTime.MinValue;
     private DateTime _lastLicenseHoldLogUtc = DateTime.MinValue;
 
-    public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, ExportLedger ledger, DocumentTypeRegistry registry)
+    public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, IStateStore ledger, DocumentTypeRegistry registry)
     {
         _optsMonitor = opts;
         _log = log;
@@ -78,6 +78,9 @@ public sealed class Worker : BackgroundService
                 string fields = string.Join(";",
                     sp.Fields.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value));
                 parts.Add(string.Join("~", t.Id, t.Enabled, r.DataAreaId, sp.Enabled, sp.SiteUrl, sp.Library, sp.Folder, fields));
+                foreach (var target in r.Targets)
+                    parts.Add(string.Join("~", "target", target.Enabled, target.Key,
+                        string.Join(";", target.Fields.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value))));
             }
         return string.Join("|", parts);
     }

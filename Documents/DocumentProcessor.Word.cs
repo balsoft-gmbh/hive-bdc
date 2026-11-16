@@ -39,6 +39,7 @@ public sealed partial class DocumentProcessor
             string? siblingPdf = SiblingPdf(docx);
             string workJson = Path.Combine(folder.WorkDir, documentId + "_word.json");
             string workPdf = Path.Combine(folder.WorkDir, documentId + "_word.pdf");
+            NoteReceived(docx, documentId, folder.Path);
             try
             {
                 if (Path.GetExtension(docx).Equals(".doc", StringComparison.OrdinalIgnoreCase))
@@ -75,7 +76,10 @@ public sealed partial class DocumentProcessor
                     tag, name, invoice.Fields.Count, invoice.Lines.Count, invoice.Format,
                     invoice.Totals?.Net, invoice.Totals?.Tax, invoice.Totals?.Gross);
 
-                var pair = ProcessPair(opts, folder, license, workJson, workPdf, documentId, uploader, mailer, "word");
+                Note(docx, documentId, EventSteps.Read, EventStates.Ok,
+                    $"Read the Word document: {invoice.Fields.Count} field(s), {invoice.Lines.Count} line(s); " +
+                    (siblingPdf is not null ? $"the PDF saved with it ({Path.GetFileName(siblingPdf)}) is used." : "the PDF was made by Hive BDC."));
+                var pair = ProcessPair(opts, folder, license, workJson, workPdf, documentId, uploader, mailer, "word", docx);
                 if (pair.Held > 0)
                 {
                     DeleteQuietly(workJson, workPdf);   // rebuilt on the next scan
@@ -97,6 +101,7 @@ public sealed partial class DocumentProcessor
                 if (!known) _log.LogWarning("{File}: pending: {Reason}", name, ex.Message);
                 else _log.LogDebug("{File}: still pending: {Reason}", name, ex.Message);
                 _pending[docx] = ex.Message;
+                Note(docx, documentId, EventSteps.Waiting, EventStates.Waiting, ex.Message);
             }
             catch (Exception ex)
             {
@@ -104,6 +109,7 @@ public sealed partial class DocumentProcessor
                 _pendingLoggedUtc.Remove(docx);
                 result += new ScanResult(0, 1, 0);
                 _log.LogError("{File}: failed - {Message}", name, ex.Message);
+                NoteFailed(docx, documentId, ex.Message);
                 try
                 {
                     Directory.CreateDirectory(folder.ErrorDir);

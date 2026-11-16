@@ -97,20 +97,23 @@ public sealed class SharePointUploader
         }
     }
 
-    public void Upload(string filePath, SharePointTarget target, IReadOnlyDictionary<string, string> fields)
-        => UploadAsync(filePath, target, fields).GetAwaiter().GetResult();
+    public void Upload(DocumentFile file, SharePointTarget target, IReadOnlyDictionary<string, string> fields)
+        => UploadAsync(file, target, fields).GetAwaiter().GetResult();
 
-    public async Task UploadAsync(string filePath, SharePointTarget target, IReadOnlyDictionary<string, string> fields)
+    public Task UploadAsync(string filePath, SharePointTarget target, IReadOnlyDictionary<string, string> fields)
+        => UploadAsync(DocumentFile.FromPath(filePath), target, fields);
+
+    public async Task UploadAsync(DocumentFile file, SharePointTarget target, IReadOnlyDictionary<string, string> fields)
     {
         string driveId = await GetDriveIdAsync(target);
         await EnsureFolderAsync(driveId, target.Folder);
 
-        string fileName = Path.GetFileName(filePath);
+        string fileName = file.Name;
         string itemPath = string.IsNullOrWhiteSpace(target.Folder)
             ? EscapePath(fileName)
             : EscapePath(target.Folder.Trim('/', '\\')) + "/" + EscapePath(fileName);
 
-        byte[] bytes = await File.ReadAllBytesAsync(filePath);
+        byte[] bytes = file.ReadAllBytes();
         string itemId;
         if (bytes.Length <= SimpleUploadLimit)
         {
