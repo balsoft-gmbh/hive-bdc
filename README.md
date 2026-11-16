@@ -738,6 +738,40 @@ it, so a document is never stored twice. A refused sign-in or an unreachable
 DocuWare keeps the document waiting and is tried again on the next scan. The
 target needs the licence feature `sharepoint`.
 
+### Import from DocuWare
+
+**Settings > Imports > Add import from DocuWare…** sets up a flow that runs on every
+scan: documents in a file cabinet whose field (for example `STATUS`) has the ready
+value become a CSV file in the folder the ERP reads, and the field is then set to
+the done value, so a document is imported once. The document's file can be saved
+next to the CSV (`{FilePath}` is its path). Columns are named as the ERP expects;
+**Columns from a CSV file…** takes them from the first line of a file the ERP
+already reads. Each column is filled from a template: `{FIELD}` (a DocuWare field by
+its database name), `{TABLE.COLUMN}` (a column of the current table row when the rows
+come from a table field), `{DWDOCID}` and `{FilePath}`. With a table chosen, every
+table row becomes a CSV row with the other columns repeated.
+
+The CSV is UTF-8 with a byte order mark, separated by `;` unless set otherwise,
+with numbers and dates in German (`1234,5`, `31.12.2026`), English (US) or ISO
+format, quoted per RFC 4180 where a value holds the separator, a quote or a line
+break, and written under a temporary name first. DocuWare dates are read in German
+time, so a date stored at midnight is not moved to the day before. A column naming
+a field the document lacks stops that document with the column named and nothing
+written; it is tried again after an hour or after the flow is saved. If the done
+mark cannot be written, the next scan only repeats the mark. Settings:
+
+```json
+"Flows": [
+  { "Id": "purchase-requisitions", "Name": "Purchase requisitions from DocuWare", "Enabled": true,
+    "Source": { "Kind": "docuware", "Connection": "docuware",
+      "Settings": { "FileCabinet": "<id>", "ReadyField": "STATUS", "ReadyValue": "Released", "DoneValue": "Imported" } },
+    "Produce": { "Kind": "csv",
+      "Settings": { "Delimiter": ";", "Culture": "de-DE", "RowsFrom": "ITEMS", "FileName": "{DWDOCID}.csv" },
+      "Columns": [ { "Name": "DWDOCID", "Value": "{DWDOCID}" }, { "Name": "ItemId", "Value": "{ITEMS.ITEM_NUMBER}" } ] },
+    "Targets": [ { "Kind": "folder", "Settings": { "Folder": "\\\\server\\erp\\pending", "SaveFile": "true" } } ] }
+]
+```
+
 ### Document history
 
 Every document gets a history in `hive.db` (table `events`): received, read,

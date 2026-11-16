@@ -47,6 +47,7 @@ public sealed partial class LocalStatusServer
                 redirectTo = opts.Mail.CleanRedirectTo(),
                 saveToSentItems = opts.Mail.SaveToSentItems,
             },
+            flows = opts.Flows,
             connections = opts.Connections.Select(c => new
             {
                 id = c.Id,
@@ -307,6 +308,7 @@ public sealed partial class LocalStatusServer
         };
 
         section["Connections"] = ConnectionsNode(dto.Connections, prevSection);
+        section["Flows"] = dto.Flows?.DeepClone() ?? prevSection?["Flows"]?.DeepClone() ?? new JsonArray();
 
         root.Remove(LegacySettingsSection);      // migrate away from the 1.x section on write
         root[SettingsSection] = section;
@@ -377,6 +379,8 @@ public sealed partial class LocalStatusServer
         public List<DocumentTypePostDto>? DocumentTypes { get; set; }
         /// <summary>Absent => keep the stored connections untouched. A blank secret keeps the stored one.</summary>
         public List<ConnectionPostDto>? Connections { get; set; }
+        /// <summary>Absent => keep the stored flows untouched. Stored as sent; the service validates them when it runs them.</summary>
+        public JsonArray? Flows { get; set; }
     }
 
     private sealed class ConnectionPostDto

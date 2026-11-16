@@ -84,7 +84,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         var list = _connections.Where(c => !string.Equals(c.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase))
             .Select(c => new ConnectionConfigDto { Id = c.Id, Kind = c.Kind, Settings = c.Settings })
             .ToList();
-        bool used = DocumentTypes.Any(t => t.Companies.Any(r => r.Targets.Any(x => x.IsDocuWare)));
+        bool used = DocumentTypes.Any(t => t.Companies.Any(r => r.Targets.Any(x => x.IsDocuWare))) || Flows.Any(f => f.IsDocuWare);
         if (DocuWareUrl.Trim().Length > 0 || DocuWareSecretSet || used)
             list.Add(new ConnectionConfigDto
             {
@@ -97,6 +97,41 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     private string? _pendingDocuWareSecret;
+
+    // Imports tab
+    public System.Collections.ObjectModel.ObservableCollection<ImportFlowRow> Flows { get; } = new();
+    [ObservableProperty] private ImportFlowRow? _selectedFlow;
+
+    public ImportFlowViewModel CreateImportFlow(string? password, ImportFlowRow? existing)
+        => new(_client, CurrentDocuWare(password), existing);
+
+    /// <summary>Adds the edited flow, or puts it in place of the one it was edited from; ids stay unique.</summary>
+    public void PutFlow(ImportFlowViewModel edited, ImportFlowRow? replaces)
+    {
+        string id = replaces?.Id is { Length: > 0 } kept ? kept : UniqueFlowId(edited.Name);
+        var row = new ImportFlowRow(edited.ToJson(id));
+        int at = replaces is null ? -1 : Flows.IndexOf(replaces);
+        if (at >= 0) Flows[at] = row; else Flows.Add(row);
+        SelectedFlow = row;
+    }
+
+    private string UniqueFlowId(string name)
+    {
+        string slug = new string(name.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        if (slug.Length == 0) slug = "import";
+        string id = slug;
+        for (int n = 2; Flows.Any(f => f.Id.Equals(id, StringComparison.OrdinalIgnoreCase)); n++) id = $"{slug}-{n}";
+        return id;
+    }
+
+    [RelayCommand]
+    private void RemoveFlow()
+    {
+        if (SelectedFlow is null) return;
+        Flows.Remove(SelectedFlow);
+        SelectedFlow = Flows.FirstOrDefault();
+    }
     /// <summary>
     /// Where documents from a non-production AX go instead of to the partner. One text box
     /// taking either a semicolon-separated list or one address per line, because both are
@@ -168,6 +203,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             MailSecretSet = mail?.SecretSet ?? false;
             MailRedirectTo = string.Join(Environment.NewLine, mail?.RedirectTo ?? new List<string>());
             MailSaveToSentItems = mail?.SaveToSentItems ?? true;
+
+            Flows.Clear();
+            foreach (var f in (c.Flows ?? new()).OfType<System.Text.Json.Nodes.JsonObject>())
+                Flows.Add(new ImportFlowRow((System.Text.Json.Nodes.JsonObject)f.DeepClone()));
+            SelectedFlow = Flows.FirstOrDefault();
 
             _connections = c.Connections ?? new();
             var docuWare = _connections.FirstOrDefault(x => string.Equals(x.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase));
@@ -539,6 +579,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         Mail = BuildMail(_pendingMailSecret),
         DocumentTypes = DocumentTypes.Select(t => t.ToDto()).ToList(),
         Connections = BuildConnections(_pendingDocuWareSecret),
+        Flows = new System.Text.Json.Nodes.JsonArray(Flows.Select(f => (System.Text.Json.Nodes.JsonNode)f.ToJson()).ToArray()),
     };
 
     /// <summary>

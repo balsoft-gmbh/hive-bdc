@@ -113,6 +113,10 @@ public sealed class DocuWareClient
 
     /// <summary>The id of a document whose <paramref name="field"/> equals <paramref name="value"/>, or null.</summary>
     public async Task<string?> FindAsync(string cabinetId, string field, string value)
+        => (await QueryIdsAsync(cabinetId, field, value, 2)).FirstOrDefault();
+
+    /// <summary>The ids of up to <paramref name="count"/> documents whose <paramref name="field"/> equals <paramref name="value"/>.</summary>
+    public async Task<IReadOnlyList<string>> QueryIdsAsync(string cabinetId, string field, string value, int count)
     {
         string dialog = await SearchDialogAsync(cabinetId);
         var body = new JsonObject
@@ -122,11 +126,130 @@ public sealed class DocuWareClient
         };
         using var content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
         using var doc = await SendAsync(HttpMethod.Post,
-            $"/FileCabinets/{Uri.EscapeDataString(cabinetId)}/Query/DialogExpression?dialogId={Uri.EscapeDataString(dialog)}&count=2",
+            $"/FileCabinets/{Uri.EscapeDataString(cabinetId)}/Query/DialogExpression?dialogId={Uri.EscapeDataString(dialog)}&count={Math.Clamp(count, 1, 500)}",
             content, "search the file cabinet");
-        if (!doc.RootElement.TryGetProperty("Items", out var items)) return null;
-        foreach (var item in items.EnumerateArray()) return item.TryGetProperty("Id", out var id) ? id.ToString() : null;
-        return null;
+        var ids = new List<string>();
+        if (doc.RootElement.TryGetProperty("Items", out var items))
+            foreach (var item in items.EnumerateArray())
+                if (item.TryGetProperty("Id", out var id)) ids.Add(id.ToString());
+        return ids;
+    }
+
+    /// <summary>One stored document's index values: single values typed (string, decimal, int, DateTime, keyword list) and table rows.</summary>
+    public async Task<SourceRecord> RecordAsync(string cabinetId, string documentId)
+    {
+        using var doc = await SendAsync(HttpMethod.Get,
+            $"/FileCabinets/{Uri.EscapeDataString(cabinetId)}/Documents/{Uri.EscapeDataString(documentId)}", null, "read the document");
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var tables = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
+        if (doc.RootElement.TryGetProperty("Fields", out var fields))
+            foreach (var f in fields.EnumerateArray())
+            {
+                string name = Text(f, "FieldName");
+                if (name.Length == 0) continue;
+                if (f.TryGetProperty("Item", out var item) && item.ValueKind == JsonValueKind.Object
+                    && Text(item, "$type") == "DocumentIndexFieldTable")
+                {
+                    var rows = new List<IReadOnlyDictionary<string, object?>>();
+                    if (item.TryGetProperty("Row", out var rowList))
+                        foreach (var row in rowList.EnumerateArray())
+                        {
+                            var cells = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                            if (row.TryGetProperty("ColumnValue", out var colList))
+                                foreach (var c in colList.EnumerateArray()) cells[Text(c, "FieldName")] = IndexValue(c);
+                            rows.Add(cells);
+                        }
+                    tables[name] = rows;
+                    continue;
+                }
+                values[name] = IndexValue(f);
+            }
+        return new SourceRecord(documentId, values, tables);
+    }
+
+    /// <summary>The document's file as stored (one file, or DocuWare's merged PDF when it has several).</summary>
+    public async Task<(byte[] Content, string FileName, string ContentType)> DownloadAsync(string cabinetId, string documentId)
+    {
+        string token = await TokenAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{_platform}/FileCabinets/{Uri.EscapeDataString(cabinetId)}/Documents/{Uri.EscapeDataString(documentId)}/FileDownload?targetFileType=Auto&keepAnnotations=false");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        HttpResponseMessage response;
+        try { response = await _http.SendAsync(request); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { throw new DocuWareException($"DocuWare could not be reached to download the file: {ex.Message}", retryLater: true); }
+        using (response)
+        {
+            byte[] bytes = await response.Content.ReadAsByteArrayAsync();
+            if (!response.IsSuccessStatusCode)
+                throw new DocuWareException($"DocuWare refused to download the file ({(int)response.StatusCode}): {ErrorText(Encoding.UTF8.GetString(bytes))}",
+                    (int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.Unauthorized);
+            string name = response.Content.Headers.ContentDisposition?.FileNameStar ?? response.Content.Headers.ContentDisposition?.FileName ?? "";
+            string type = response.Content.Headers.ContentType?.MediaType ?? "application/pdf";
+            return (bytes, name.Trim('"'), type);
+        }
+    }
+
+    /// <summary>Writes one field's value, e.g. the status after a record was handed over.</summary>
+    public Task SetFieldAsync(string cabinetId, string documentId, string field, string value)
+        => UpdateFieldsAsync(cabinetId, documentId, new JsonArray(new JsonObject
+        {
+            ["FieldName"] = field,
+            ["Item"] = value,
+            ["ItemElementName"] = "String",
+        }));
+
+    /// <summary>
+    /// The time zone DocuWare dates are read in. A date stored at German midnight arrives as 23:00 UTC of the day before,
+    /// so taking the UTC date would put it one day early.
+    /// </summary>
+    internal static readonly TimeZoneInfo BusinessTimeZone = FindZone("W. Europe Standard Time", "Europe/Berlin");
+
+    private static TimeZoneInfo FindZone(params string[] ids)
+    {
+        foreach (var id in ids)
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException) { }
+        }
+        return TimeZoneInfo.Local;
+    }
+
+    /// <summary>An index value as .NET value: DocuWare sends dates as "/Date(ms)/" or ISO text, keywords as a list.</summary>
+    internal static object? IndexValue(JsonElement field)
+    {
+        if (field.TryGetProperty("IsNull", out var isNull) && isNull.ValueKind == JsonValueKind.True) return null;
+        if (!field.TryGetProperty("Item", out var item)) return null;
+        string kind = Text(field, "ItemElementName");
+        switch (item.ValueKind)
+        {
+            case JsonValueKind.Null or JsonValueKind.Undefined:
+                return null;
+            case JsonValueKind.Number:
+                return kind is "Int" && item.TryGetInt64(out var whole) ? whole : item.GetDecimal();
+            case JsonValueKind.Object when Text(item, "$type") == "DocumentIndexFieldKeywords":
+                return item.TryGetProperty("Keyword", out var list)
+                    ? list.EnumerateArray().Select(k => k.GetString() ?? "").Where(k => k.Length > 0).ToList()
+                    : new List<string>();
+            case JsonValueKind.String:
+                string text = item.GetString() ?? "";
+                if (kind is "Date" or "DateTime")
+                {
+                    var ms = System.Text.RegularExpressions.Regex.Match(text, @"^/Date\((-?\d+)(?:[+-]\d{4})?\)/$");
+                    if (ms.Success)
+                    {
+                        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(ms.Groups[1].Value)), BusinessTimeZone).DateTime;
+                        return kind == "Date" ? local.Date : local;
+                    }
+                    if (DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var date))
+                        return date;
+                }
+                if (kind == "Decimal" && decimal.TryParse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var number))
+                    return number;
+                return text;
+            default:
+                return item.ToString();
+        }
     }
 
     private async Task<string> SearchDialogAsync(string cabinetId)

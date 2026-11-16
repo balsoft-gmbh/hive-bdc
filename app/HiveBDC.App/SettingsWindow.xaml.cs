@@ -98,6 +98,34 @@ public partial class SettingsWindow : Window
         await EditDocuWareTarget(row, target);
     }
 
+    private async void OnAddImport(object sender, RoutedEventArgs e) => await EditImport(null);
+
+    private async void OnEditImport(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedFlow is not { } flow) return;
+        if (!flow.IsDocuWare)
+        {
+            MessageBox.Show(this, "This import was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        await EditImport(flow);
+    }
+
+    private async Task EditImport(ViewModels.ImportFlowRow? existing)
+    {
+        if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))
+        {
+            MessageBox.Show(this, "Set up the DocuWare sign-in on the Connections tab first (address, user name, password), then add the import.",
+                "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var vm = _vm.CreateImportFlow(DocuWareSecretBox.Password, existing);
+        var dialog = new ImportFlowWindow(vm) { Owner = this };
+        await Task.Yield();
+        if (dialog.ShowDialog() == true) _vm.PutFlow(vm, existing);
+    }
+
     private async Task EditDocuWareTarget(ViewModels.RouteRow row, ViewModels.TargetRow? existing)
     {
         if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))

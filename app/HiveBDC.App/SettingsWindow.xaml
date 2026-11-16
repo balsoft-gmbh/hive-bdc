@@ -508,6 +508,40 @@
             </TabItem>
 
             <!-- ── 3. Service: poll, logs, licence ────────────────────────────────── -->
+            <TabItem Header="Imports">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,8">
+                    <StackPanel>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="IMPORT INTO THE ERP" Style="{StaticResource CardTitle}"/>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,-6,0,8"
+                                           Text="Documents that are ready in DocuWare become a CSV file in the folder the ERP reads, then get marked as imported in DocuWare. Set up the DocuWare sign-in on the Connections tab first."/>
+                                <ListBox ItemsSource="{Binding Flows}" SelectedItem="{Binding SelectedFlow}" MinHeight="80" MouseDoubleClick="OnEditImport">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Summary}" Foreground="#6B7280" FontSize="12"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="Add import from DocuWare…" Click="OnAddImport" Padding="10,3" Margin="0,0,6,4"/>
+                                    <Button Content="Edit…" Click="OnEditImport" Padding="10,3" Margin="0,0,6,4"/>
+                                    <Button Content="Remove" Command="{Binding RemoveFlowCommand}" Padding="10,3" Margin="0,0,0,4"/>
+                                </WrapPanel>
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="Every step of every imported document is in View > Document history, searchable by the DocuWare document id."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="Service">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,8">
                     <Border Style="{StaticResource Card}">

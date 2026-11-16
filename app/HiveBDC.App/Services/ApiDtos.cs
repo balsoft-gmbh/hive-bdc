@@ -98,6 +98,8 @@ public sealed class ConfigDto
     /// <summary>The document types the service dispatches, each with its company entries. Absent on POST => the service keeps its stored list.</summary>
     [JsonPropertyName("documentTypes")] public List<DocumentTypeConfigDto>? DocumentTypes { get; set; }
     [JsonPropertyName("connections")] public List<ConnectionConfigDto>? Connections { get; set; }
+    /// <summary>Import flows as the service stores them; kept as JSON so unknown properties survive a save.</summary>
+    [JsonPropertyName("flows")] public System.Text.Json.Nodes.JsonArray? Flows { get; set; }
 }
 
 /// <summary>A named sign-in (DocuWare, ...). GET reports only HasSecret; POST sends Secret, blank = keep the stored one.</summary>

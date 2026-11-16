@@ -39,6 +39,9 @@ public sealed class BDCOptions
     /// <summary>Named sign-ins to outside systems (DocuWare, ...), used by targets through their Connection id.</summary>
     public List<ConnectionOptions> Connections { get; set; } = new();
 
+    /// <summary>Flows that start outside the ERP, such as documents ready in DocuWare that become a CSV for the ERP.</summary>
+    public List<FlowOptions> Flows { get; set; } = new();
+
     public ConnectionOptions? Connection(string? id)
         => Connections.FirstOrDefault(c => string.Equals(c.Id, id?.Trim(), StringComparison.OrdinalIgnoreCase));
 
@@ -116,6 +119,10 @@ public sealed class BDCOptions
         Connections ??= new();
         Connections.RemoveAll(c => c is null);
         foreach (var c in Connections) c.Normalize();
+        Flows ??= new();
+        Flows.RemoveAll(f => f is null);
+        foreach (var f in Flows) f.Normalize();
+        Flows.RemoveAll(f => f.Id.Length == 0);
         NormalizeDocumentTypes();
         MigrateCompaniesIntoTypes();
     }

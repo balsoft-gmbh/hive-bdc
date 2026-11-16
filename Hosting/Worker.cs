@@ -23,6 +23,8 @@ public sealed class Worker : BackgroundService
     private readonly ILogger<Worker> _log;
     private readonly IStateStore _ledger;
     private readonly DocumentProcessor _processor;
+    private readonly ImportProcessor _imports;
+    private string _flowsSignature = "";
     private LicenseState? _lastLicenseState;
     private int _lastDocumentTypeCount = -1;
 
@@ -39,6 +41,7 @@ public sealed class Worker : BackgroundService
         _log = log;
         _ledger = ledger;
         _processor = new DocumentProcessor(log, registry, ledger);
+        _imports = new ImportProcessor(log, ledger);
     }
 
     /// <summary>A snapshot of the current options, normalized (idempotent) for use this cycle.</summary>
@@ -189,6 +192,9 @@ public sealed class Worker : BackgroundService
                     // Scan every company's input folder. A per-company uploader is passed
                     // only when that company has SharePoint enabled.
                     var total = _processor.ScanOnce(opts, license, uploader, mailer);
+                    string flows = System.Text.Json.JsonSerializer.Serialize(opts.Flows);
+                    if (flows != _flowsSignature) { _flowsSignature = flows; _imports.SettingsChanged(); }
+                    total += _imports.RunOnce(opts, license);
                     if (total.Processed > 0 || total.Errors > 0 || total.Held > 0)
                         _log.LogInformation("cycle: processed={Processed} errors={Errors} held={Held}", total.Processed, total.Errors, total.Held);
                     else
