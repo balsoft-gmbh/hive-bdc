@@ -47,6 +47,13 @@ public sealed partial class LocalStatusServer
                 redirectTo = opts.Mail.CleanRedirectTo(),
                 saveToSentItems = opts.Mail.SaveToSentItems,
             },
+            connections = opts.Connections.Select(c => new
+            {
+                id = c.Id,
+                kind = c.Kind,
+                settings = c.Settings,
+                hasSecret = c.Secret.Length > 0,
+            }).ToArray(),
             documentTypes = opts.DocumentTypes.Select(t => new
             {
                 id = t.Id,
@@ -299,6 +306,8 @@ public sealed partial class LocalStatusServer
             ["DocumentTypes"] = typesNode,
         };
 
+        section["Connections"] = ConnectionsNode(dto.Connections, prevSection);
+
         root.Remove(LegacySettingsSection);      // migrate away from the 1.x section on write
         root[SettingsSection] = section;
 
@@ -323,6 +332,40 @@ public sealed partial class LocalStatusServer
     // ── request DTOs (camelCase JSON, case-insensitive binding) ─────────────
 
     /// <summary>POST /config body — the settings payload (same shape as GET /config).</summary>
+    /// <summary>
+    /// The Connections array to store: the posted list with new secrets protected and blank ones taken from the stored
+    /// connection of the same id, or the stored list unchanged when the dashboard sent none.
+    /// </summary>
+    internal static JsonNode ConnectionsNode(IReadOnlyList<ConnectionPostDtoView>? posted, JsonObject? stored)
+    {
+        if (posted is null) return stored?["Connections"]?.DeepClone() ?? new JsonArray();
+        var previous = (stored?["Connections"] as JsonArray)?.OfType<JsonObject>().ToList() ?? new List<JsonObject>();
+        var result = new JsonArray();
+        foreach (var c in posted)
+        {
+            string id = c.Id?.Trim() ?? "";
+            if (id.Length == 0) continue;
+            string secret = !string.IsNullOrWhiteSpace(c.Secret)
+                ? SecretProtector.Protect(c.Secret)
+                : previous.FirstOrDefault(p => string.Equals((string?)p["Id"], id, StringComparison.OrdinalIgnoreCase))?["Secret"]?.GetValue<string>() ?? "";
+            var settings = new JsonObject();
+            foreach (var (k, v) in c.Settings ?? new()) settings[k] = v ?? "";
+            result.Add(new JsonObject
+            {
+                ["Id"] = id,
+                ["Kind"] = TargetKinds.Clean(c.Kind),
+                ["Settings"] = settings,
+                ["Secret"] = secret,
+            });
+        }
+        return result;
+    }
+
+    private static JsonNode ConnectionsNode(List<ConnectionPostDto>? posted, JsonObject? stored)
+        => ConnectionsNode(posted?.Select(c => new ConnectionPostDtoView(c.Id, c.Kind, c.Settings, c.Secret)).ToList(), stored);
+
+    internal sealed record ConnectionPostDtoView(string? Id, string? Kind, Dictionary<string, string>? Settings, string? Secret);
+
     private sealed class ConfigPostDto
     {
         public int? PollSeconds { get; set; }
@@ -332,6 +375,16 @@ public sealed partial class LocalStatusServer
         public MailPostDto? Mail { get; set; }
         /// <summary>Absent => keep the stored document types untouched.</summary>
         public List<DocumentTypePostDto>? DocumentTypes { get; set; }
+        /// <summary>Absent => keep the stored connections untouched. A blank secret keeps the stored one.</summary>
+        public List<ConnectionPostDto>? Connections { get; set; }
+    }
+
+    private sealed class ConnectionPostDto
+    {
+        public string? Id { get; set; }
+        public string? Kind { get; set; }
+        public Dictionary<string, string>? Settings { get; set; }
+        public string? Secret { get; set; }
     }
 
     /// <summary>One document type on POST (same shape as GET /config documentTypes[]).</summary>

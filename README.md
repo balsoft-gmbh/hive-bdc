@@ -679,6 +679,50 @@ without further targets is saved without the `Targets` key, so the file stays
 readable by earlier versions, and a save from a dashboard that does not send targets
 keeps the stored ones.
 
+### DocuWare target
+
+A DocuWare connection is defined once under `Connections` and used by any number of
+targets:
+
+```json
+"Connections": [
+  { "Id": "docuware-main", "Kind": "docuware",
+    "Settings": { "Url": "https://yourcompany.docuware.cloud", "UserName": "integration-user" },
+    "Secret": "" }
+]
+```
+
+The address may be copied from the browser (the web client address works). The
+password is entered in the dashboard and stored protected on the machine; the
+settings API never returns it. Hive BDC signs in through DocuWare's identity
+service, which is the only sign-in the DocuWare platform still accepts, and the
+DocuWare user must be allowed to sign in with a DocuWare password.
+
+A target of kind `docuware` names the connection and the file cabinet:
+
+```json
+{ "Kind": "docuware", "Connection": "docuware-main",
+  "Settings": { "FileCabinet": "<file cabinet id>", "MatchField": "DOCUMENT_NUMBER" },
+  "Fields": {
+    "DOCUMENT_NUMBER": "{documentNumber}",
+    "DOCUMENT_DATE": "{invoiceDate}",
+    "NET_AMOUNT": "{netAmount}",
+    "DELIVERY_NOTES": "{deliveryNoteNumbers}",
+    "ITEMS.QUANTITY": "{lines.quantity}" } }
+```
+
+Field names are the cabinet's database names. Values are typed by the cabinet's
+own field list: text (length checked), numbers in German or English notation,
+dates, keyword fields (values separated by `;` or line breaks) and table fields,
+where `TABLE.COLUMN = {list.property}` adds one row per element of that list in the
+document. A field the cabinet does not have, a value that does not fit, or a
+required field without a value stops the delivery with the field named, and
+nothing is stored. `MatchField` (optional) names the field that holds the document
+number: before storing, Hive BDC looks for a document with that value and updates
+it, so a document is never stored twice. A refused sign-in or an unreachable
+DocuWare keeps the document waiting and is tried again on the next scan. The
+target needs the licence feature `sharepoint`.
+
 ### Document history
 
 Every document gets a history in `hive.db` (table `events`): received, read,

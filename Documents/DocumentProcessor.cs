@@ -40,6 +40,7 @@ public sealed partial class DocumentProcessor
         public string? DocumentType;
         public string? DataAreaId;
         public bool TargetFailed;
+        public readonly HashSet<string> DeliveredTargets = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private readonly Dictionary<string, HistoryState> _history = new(StringComparer.OrdinalIgnoreCase);
@@ -251,8 +252,13 @@ public sealed partial class DocumentProcessor
         // delivery. Hold before any side effects so repairing settings resumes work.
         var deliveries = ResolveTargets(opts, route, type, uploader, mailer);
         foreach (var (options, target) in deliveries)
+        {
+            if (target.RequiredFeature is { } feature && !license.HasFeature(feature))
+                throw new PendingDocumentException(
+                    $"The {TargetLabel(options.Kind)} target needs the '{feature}' licence feature, which the installed licence does not have.");
             if (target.Unavailable(options) is { } unavailable)
                 throw new PendingDocumentException(unavailable);
+        }
         if ((type.Handler == DocumentHandlerKind.Pdf || data.IsZugferd) && !File.Exists(pdfPath))
             throw new PendingDocumentException("Waiting for the sibling PDF.");
         if (File.Exists(pdfPath)) EnsureReadable(pdfPath);
@@ -276,6 +282,7 @@ public sealed partial class DocumentProcessor
         string deliveryKey = $"{area}|{type.Id}|{documentId}|{Path.GetFileName(output.File)}";
         foreach (var (options, target) in deliveries)
         {
+            if (known.DeliveredTargets.Contains(options.Key)) continue;
             string? previous = target.ReplacesOnRepeat ? null : _ledger?.DeliveryRemoteId(deliveryKey, options.Key);
             DeliveryResult delivered;
             try
@@ -283,12 +290,17 @@ public sealed partial class DocumentProcessor
                 delivered = target.Deliver(new DeliveryContext(route, type, options, data, json.RootElement,
                     documentId, documentNumber, produced, previous, tag, Warn, _log));
             }
+            catch (DocuWareException ex) when (ex.RetryLater)
+            {
+                throw new PendingDocumentException($"{TargetLabel(options.Kind)}: {ex.Message} Hive BDC tries again on the next scan.");
+            }
             catch (Exception ex)
             {
                 known.TargetFailed = true;
                 Note(input, documentId, EventSteps.Delivered, EventStates.Failed, $"{TargetLabel(options.Kind)}: {ex.Message}", options.Kind);
                 throw;
             }
+            known.DeliveredTargets.Add(options.Key);
             Note(input, documentId, EventSteps.Delivered, EventStates.Ok,
                 delivered.Summary ?? $"Delivered to {TargetLabel(options.Kind)}.", options.Kind);
             if (options.Kind == TargetKinds.Mail) continue;
@@ -440,6 +452,7 @@ public sealed partial class DocumentProcessor
     {
         TargetKinds.SharePoint => "SharePoint",
         TargetKinds.Mail => "Mail",
+        ConnectionKinds.DocuWare => "DocuWare",
         _ => kind.Length == 0 ? kind : char.ToUpperInvariant(kind[0]) + kind[1..],
     };
 

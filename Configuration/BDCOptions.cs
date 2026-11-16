@@ -36,6 +36,12 @@ public sealed class BDCOptions
     /// <summary>The document types the service dispatches, each with its company entries. The built-ins are seeded by <see cref="Normalize"/> only when none is configured.</summary>
     public List<DocumentTypeOptions> DocumentTypes { get; set; } = new();
 
+    /// <summary>Named sign-ins to outside systems (DocuWare, ...), used by targets through their Connection id.</summary>
+    public List<ConnectionOptions> Connections { get; set; } = new();
+
+    public ConnectionOptions? Connection(string? id)
+        => Connections.FirstOrDefault(c => string.Equals(c.Id, id?.Trim(), StringComparison.OrdinalIgnoreCase));
+
     // ── LEGACY members (older schemas), folded into DocumentTypes by Normalize ─────────
 
     /// <summary>LEGACY (1.4 to 2.0.2): company-level folders + target. Migrated into every type's Companies.</summary>
@@ -107,6 +113,9 @@ public sealed class BDCOptions
             PollSeconds = 1;
         Mail ??= new MailOptions();
         Mail.Normalize();
+        Connections ??= new();
+        Connections.RemoveAll(c => c is null);
+        foreach (var c in Connections) c.Normalize();
         NormalizeDocumentTypes();
         MigrateCompaniesIntoTypes();
     }

@@ -43,6 +43,9 @@ public interface IDocumentTarget
     /// </summary>
     bool ReplacesOnRepeat { get; }
 
+    /// <summary>The licence feature this target needs, or null when it needs none beyond the document's own.</summary>
+    string? RequiredFeature => null;
+
     /// <summary>The reason this target cannot deliver right now (no connection), or null. Checked before anything is produced.</summary>
     string? Unavailable(TargetOptions target);
 
