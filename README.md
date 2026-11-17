@@ -270,6 +270,12 @@ Hive eInvoice) is rejected with a clear message; Balsoft issues a Hive BDC licen
 Install or renew the licence from the dashboard (**Renew licence…**) — the `.lic`
 Balsoft emails you is safe to email (it is useless on any other tenant).
 
+A local install checks the tenant against the SharePoint app's tenant in the
+settings. An Azure instance checks it against the tenant of its own identity (the
+`tid` of its managed identity's access token), which the settings cannot change;
+while that tenant cannot be determined, the instance takes no documents and a
+tenant-bound licence is not accepted.
+
 ## Updates
 
 The dashboard checks a public update feed (**Help → Check for updates**),
@@ -591,7 +597,8 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
   Delivery/                   MailSender (Graph), SharePointUploader (Graph)
   Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint and mail
                               targets, DocumentFile (a produced file as name, content type and content)
-  Licensing/                  LicenseValidator (offline, cached per file version)
+  Licensing/                  LicenseValidator (offline, cached per file version), LicenseTenant (the tenant a
+                              licence must name: the settings locally, the instance identity in Azure)
   Storage/                    IStateStore, ExportLedger (SQLite: exports, deliveries, document history),
                               TableStateStore (the same in Azure Table Storage, for the Azure run mode;
                               AzureTableRows behind ITableRows), SecretProtector (DPAPI locally, "kv:" Key Vault
@@ -845,7 +852,8 @@ changes, then every 5 minutes):
   folder, an inbound flow that writes to a folder, or a secret kept in the settings
   instead of a `kv:` reference. Each is named with its type and company or flow;
 - Table Storage cannot be reached;
-- Key Vault cannot be reached (asked at most once a minute).
+- Key Vault cannot be reached (asked at most once a minute);
+- the tenant of the instance, which the licence is bound to, cannot be determined.
 
 Without a table endpoint or connection string, or with an unknown run mode, the
 program does not start (exit code 3); `--once` exits with 2 while it would wait.

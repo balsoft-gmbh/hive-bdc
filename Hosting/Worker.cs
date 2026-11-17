@@ -39,14 +39,16 @@ public sealed class Worker : BackgroundService
     private string? _lastHold;
     private DateTime _lastHoldLogUtc = DateTime.MinValue;
     private static readonly TimeSpan HoldLogEvery = TimeSpan.FromMinutes(5);
+    private readonly ILicenseTenant _licenseTenant;
 
     public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, IStateStore ledger, DocumentTypeRegistry registry,
-        IProcessingGate? gate = null)
+        IProcessingGate? gate = null, ILicenseTenant? licenseTenant = null)
     {
         _optsMonitor = opts;
         _log = log;
         _ledger = ledger;
         _gate = gate ?? new LocalProcessingGate();
+        _licenseTenant = licenseTenant ?? new SettingsLicenseTenant();
         _processor = new DocumentProcessor(log, registry, ledger);
         _imports = new ImportProcessor(log, ledger);
         _blobs = new BlobStager(log, ledger);
@@ -195,7 +197,7 @@ public sealed class Worker : BackgroundService
                 // Re-check the license every cycle (cheap) so expiry/renewal is picked up
                 // without a service restart. Log only when the state changes to avoid spam.
                 var license = LicenseValidator.Validate(
-                    opts.License.File, opts.SharePointAuth.TenantId, DateOnly.FromDateTime(DateTime.Today));
+                    opts.License.File, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
                 if (license.State != _lastLicenseState)
                 {
                     LicenseLogging.Report(_log, license);

@@ -111,8 +111,12 @@ var azureRun = builder.Configuration.GetSection($"{sectionName}:Azure").Get<Azur
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 ISettingsDocument settingsDocument = new FileSettingsDocument(settingsPath);
 BlobSettingsProvider? settingsBlob = null;
+ILicenseTenant licenseTenant = new SettingsLicenseTenant();
 if (runMode == RunModes.Azure)
 {
+    // The licence is bound to the tenant of the instance's own identity, never to a tenant typed into the settings.
+    var instanceTenant = InstanceTenant.FromHostIdentity();
+    licenseTenant = instanceTenant;
     if (azureRun.TableEndpoint.Trim().Length == 0 && azureRun.StorageConnection.Trim().Length == 0)
     {
         Console.Error.WriteLine("Run mode azure needs HiveBDC:Azure:TableEndpoint (or StorageConnection) for its state in Table Storage.");
@@ -142,7 +146,7 @@ if (runMode == RunModes.Azure)
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("TableStateStore"), azureRun.TablePrefix.Trim()));
     builder.Services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<TableStateStore>());
     builder.Services.AddSingleton<IProcessingGate>(sp => new AzureProcessingGate(
-        sp.GetRequiredService<TableStateStore>(), SecretProtector.Current, () => settingsBlob?.Problem));
+        sp.GetRequiredService<TableStateStore>(), SecretProtector.Current, () => settingsBlob?.Problem, instanceTenant));
 }
 else if (runMode == RunModes.Local)
 {
@@ -156,6 +160,7 @@ else
     Console.Error.WriteLine($"Unknown run mode '{runMode}'; use local or azure.");
     return 3;
 }
+builder.Services.AddSingleton(licenseTenant);
 builder.Services.AddSingleton(sp =>
     new DocumentTypeRegistry(settingsDocument, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
 builder.Services.AddHostedService<Worker>();
@@ -206,6 +211,7 @@ if (runMode == RunModes.Azure)
     else
         log.LogInformation("Settings from {Blob}{Problem}.", settingsDocument.Where,
             settingsBlob.Problem is { } p ? ", which cannot be read now (" + p + ")" : "");
+    log.LogInformation("Licence tenant {Tenant}, from the identity of this instance.", licenseTenant.For(opts));
     foreach (var problem in AzureSettingsCheck.Problems(opts))
         log.LogWarning("Not usable in Azure: {Problem}", problem);
 }
@@ -218,7 +224,7 @@ if (legacySection)
 // The service Worker re-checks this each cycle; here we log the startup status
 // and handle --test-license / --once. A valid license is always required — a
 // missing/invalid/expired-past-grace license stops processing.
-var license = LicenseValidator.Validate(opts.License.File, opts.SharePointAuth.TenantId, DateOnly.FromDateTime(DateTime.Today));
+var license = LicenseValidator.Validate(opts.License.File, licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
 LicenseLogging.Report(log, license);
 if (testLicense)
     return license.Blocked ? 1 : 0;

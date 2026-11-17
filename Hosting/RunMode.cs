@@ -97,20 +97,24 @@ public sealed class LocalProcessingGate : IProcessingGate
 
 /// <summary>
 /// The Azure run mode takes nothing from a source while its settings blob cannot be read, the settings use what only a
-/// local install has (case 18), Table Storage cannot be reached (case 37) or Key Vault cannot be reached (case 17). The
-/// documents stay where they are and are taken once the reason is gone.
+/// local install has (case 18), Table Storage cannot be reached (case 37), Key Vault cannot be reached (case 17) or the
+/// tenant of the instance, which the licence is bound to, cannot be determined. The documents stay where they are and
+/// are taken once the reason is gone.
 /// </summary>
 public sealed class AzureProcessingGate : IProcessingGate
 {
     private readonly TableStateStore _state;
     private readonly SecretResolver _secrets;
     private readonly Func<string?> _settingsProblem;
+    private readonly InstanceTenant? _tenant;
 
-    public AzureProcessingGate(TableStateStore state, SecretResolver secrets, Func<string?>? settingsProblem = null)
+    public AzureProcessingGate(TableStateStore state, SecretResolver secrets, Func<string?>? settingsProblem = null,
+        InstanceTenant? tenant = null)
     {
         _state = state;
         _secrets = secrets;
         _settingsProblem = settingsProblem ?? (() => null);
+        _tenant = tenant;
     }
 
     public string? Hold(BDCOptions opts)
@@ -124,6 +128,8 @@ public sealed class AzureProcessingGate : IProcessingGate
             return "Table Storage cannot be reached: " + stateProblem;
         if (_secrets.UsesVault && !_secrets.VaultReachable(out var vaultProblem))
             return "Key Vault cannot be reached: " + vaultProblem;
+        if (_tenant is not null && !_tenant.Resolve(out _, out var tenantProblem))
+            return "the tenant of this instance cannot be determined: " + tenantProblem;
         return null;
     }
 }
