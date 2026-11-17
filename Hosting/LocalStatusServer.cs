@@ -43,6 +43,9 @@ public sealed partial class LocalStatusServer : BackgroundService
     private readonly string _version;
     private readonly string _settingsPath;
     private readonly string _endpointDir;
+    private readonly ISettingsDocument _settings;
+    private readonly ILicenseStore _licenseStore;
+    private readonly ILicenseTenant _licenseTenant;
 
     private readonly string _token = Base64Url(RandomNumberGenerator.GetBytes(32));
 
@@ -50,7 +53,8 @@ public sealed partial class LocalStatusServer : BackgroundService
 
     public LocalStatusServer(
         IOptionsMonitor<BDCOptions> opts, IStateStore ledger, ILogger<LocalStatusServer> log,
-        string? logDir, string version, string settingsPath, string? endpointDir = null)
+        string? logDir, string version, string settingsPath, string? endpointDir = null,
+        ISettingsDocument? settings = null, ILicenseStore? licenseStore = null, ILicenseTenant? licenseTenant = null)
     {
         _optsMonitor = opts;
         _ledger = ledger;
@@ -59,6 +63,9 @@ public sealed partial class LocalStatusServer : BackgroundService
         _version = version;
         _settingsPath = settingsPath;
         _endpointDir = endpointDir ?? Path.GetDirectoryName(ExportLedger.DefaultDbPath)!;
+        _settings = settings ?? new FileSettingsDocument(settingsPath);
+        _licenseStore = licenseStore ?? new FileLicenseStore();
+        _licenseTenant = licenseTenant ?? new SettingsLicenseTenant();
     }
 
     /// <summary>Current options snapshot, normalized (idempotent) for display.</summary>
@@ -126,6 +133,20 @@ public sealed partial class LocalStatusServer : BackgroundService
                     Encoding.UTF8.GetBytes(auth["Bearer ".Length..]), Encoding.UTF8.GetBytes(_token)))
             { Respond(call, 401, new { error = "unauthorized" }); return; }
 
+            await Route(call);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Local API {Request} failed.", ForLog($"{call.Method} {call.Path}"));
+            try { Respond(call, 500, new { error = "internal error" }); } catch { /* ignore */ }
+        }
+    }
+
+    /// <summary>The API itself, once the caller is allowed in (token on loopback locally, sign-in and role in Azure).</summary>
+    internal async Task Route(ApiCall call)
+    {
+        try
+        {
             switch ((call.Method, call.Path))
             {
                 case ("GET", "/status"): Respond(call, 200, Status()); return;
@@ -163,8 +184,7 @@ public sealed partial class LocalStatusServer : BackgroundService
     private object Status()
     {
         var opts = Snapshot();
-        var lic = LicenseValidator.Validate(
-            opts.License.File, opts.SharePointAuth.TenantId, DateOnly.FromDateTime(DateTime.Today));
+        var lic = _licenseStore.Check(opts, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
         return new
         {
             running = true,
@@ -314,15 +334,6 @@ public sealed partial class LocalStatusServer : BackgroundService
     }
 
     // ── settings I/O ────────────────────────────────────────────────────────
-
-    /// <summary>Parse the current appsettings.json (tolerant of // comments), or null if absent/unreadable.</summary>
-    private JsonObject? ReadRoot()
-    {
-        var root = SettingsFile.ReadRoot(_settingsPath);
-        if (root is null && File.Exists(_settingsPath))
-            _log.LogError("{Path} exists but could not be read as JSON; settings changes start from an empty file.", _settingsPath);
-        return root;
-    }
 
     private static int TailParam(ApiCall call)
         => int.TryParse(call.Query("tail"), out var n) ? n : 200;

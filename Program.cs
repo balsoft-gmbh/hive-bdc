@@ -120,11 +120,13 @@ ISettingsDocument settingsDocument = new FileSettingsDocument(settingsPath);
 BlobSettingsProvider? settingsBlob = null;
 ILicenseTenant licenseTenant = new SettingsLicenseTenant();
 ILicenseStore licenseStore = new FileLicenseStore();
+InstanceTenant? azureTenant = null;
 if (runMode == RunModes.Azure)
 {
     // The licence is bound to the tenant of the instance's own identity, never to a tenant typed into the settings.
     var instanceTenant = InstanceTenant.FromHostIdentity();
     licenseTenant = instanceTenant;
+    azureTenant = instanceTenant;
     if (azureRun.TableEndpoint.Trim().Length == 0 && azureRun.StorageConnection.Trim().Length == 0)
     {
         Console.Error.WriteLine("Run mode azure needs HiveBDC:Azure:TableEndpoint (or StorageConnection) for its state in Table Storage.");
@@ -200,6 +202,18 @@ if (runMode == RunModes.Local)
         sp.GetRequiredService<IStateStore>(),
         sp.GetRequiredService<ILogger<LocalStatusServer>>(),
         resolvedLogDir, appVersion, settingsPath));
+else
+{
+    // Azure: the same API handlers, with the instance's settings blob, licence blob and tenant, served by the web host
+    // behind App Service authentication instead of the loopback listener.
+    builder.Services.AddSingleton(sp => new LocalStatusServer(
+        sp.GetRequiredService<IOptionsMonitor<BDCOptions>>(),
+        sp.GetRequiredService<IStateStore>(),
+        sp.GetRequiredService<ILogger<LocalStatusServer>>(),
+        resolvedLogDir, appVersion, settingsPath, settings: settingsDocument, licenseStore: licenseStore, licenseTenant: licenseTenant));
+    builder.Services.AddSingleton<IHostedService>(sp => new AzureWebHost(
+        sp.GetRequiredService<LocalStatusServer>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("AzureWebHost"), appVersion, azureTenant));
+}
 
 using var host = builder.Build();
 

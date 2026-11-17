@@ -613,7 +613,8 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               AzureTableRows behind ITableRows), SecretProtector (DPAPI locally, "kv:" Key Vault
                               references in Azure; KeyVaultSecretVault), SettingsBlob (settings of an
                               Azure instance: AzureETagBlob, BlobSettingsDocument, BlobSettingsProvider)
-  Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate),
+  Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate), AzureWebHost
+                              (Azure: App Service sign-in, roles, health),
                               LocalStatusServer (+ .Config, .Probes; Kestrel on 127.0.0.1), ApiCall, LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
@@ -909,7 +910,22 @@ on that version. A missing blob means empty settings. Without a settings blob th
 package's `appsettings.json` is used; it is read-only in Azure, so a type the service
 registers lasts for that run only.
 
-In Azure there is no loopback API for the Windows app. The service takes no document
+In Azure there is no loopback API for the Windows app. Instead the service runs a web
+host on the port App Service gives (`PORT`, default 8080), behind App Service
+authentication with Microsoft Entra ID:
+
+- `/healthz` answers without sign-in (`{"status":"ok","version":...}`);
+- everything else is served only while App Service authentication is on
+  (`WEBSITE_AUTH_ENABLED`); otherwise the answer is 503, whatever the request says;
+- the signed-in user (the `X-MS-CLIENT-PRINCIPAL` header, which only App Service
+  can set) must belong to the instance's own tenant and hold an app role of the
+  instance's app registration: `Viewer` reads, `Operator` may also retry a document,
+  `Administrator` may change settings, connections and the licence;
+- the calls are the same as the local API's (`/status`, `/config`, `/history`, ...);
+  settings are saved into the settings blob, secrets into Key Vault, and every change
+  is logged with the user who made it.
+
+The service takes no document
 from a source while one of these holds, and says why in the log (when the reason
 changes, then every 5 minutes):
 

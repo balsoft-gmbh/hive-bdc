@@ -112,17 +112,16 @@ public sealed partial class LocalStatusServer
         catch (Exception ex) { Respond(call, 400, new { ok = false, errors = new[] { "Invalid JSON: " + ex.Message } }); return; }
         dto ??= new ConfigPostDto();
 
-        // Stored (on-disk) shared secret — reused when the POST omits/blanks clientSecret.
-        var root = ReadRoot();
-        if (root is null && File.Exists(_settingsPath))
+        // Stored shared secret — reused when the POST omits/blanks clientSecret.
+        JsonObject? prevSection;
+        try { prevSection = _settings.ReadSection(); }
+        catch (InvalidOperationException ex)
         {
-            // Never replace an unreadable settings file with a near-empty one: everything
-            // not in this POST (and any hand edits) would be lost without a trace.
-            Respond(call, 500, new { ok = false, errors = new[] { "appsettings.json could not be read, so it was not overwritten. Fix or restore the file, then save again." } });
+            // Never replace unreadable settings with near-empty ones: everything not in this
+            // POST (and any hand edits) would be lost without a trace.
+            Respond(call, 500, new { ok = false, errors = new[] { ex.Message } });
             return;
         }
-        root ??= new JsonObject();
-        var prevSection = SettingsFile.SectionOf(root);
         string storedSecret = (prevSection?["SharePointAuth"] as JsonObject)?["ClientSecret"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(storedSecret))   // legacy single-config kept it under SharePoint:ClientSecret
             storedSecret = (prevSection?["SharePoint"] as JsonObject)?["ClientSecret"]?.GetValue<string>() ?? "";
@@ -234,7 +233,7 @@ public sealed partial class LocalStatusServer
 
         // ── build the new HiveBDC section ─────────────────────────────
         string secretToStore = !string.IsNullOrWhiteSpace(postedSecret)
-            ? SecretProtector.Protect(postedSecret)
+            ? SecretProtector.Protect(postedSecret, "sharepoint-client-secret")
             : storedSecret;
 
         JsonNode? typesNode;
@@ -316,7 +315,7 @@ public sealed partial class LocalStatusServer
                 ["TenantId"] = mail?.TenantId ?? "",
                 ["ClientId"] = mail?.ClientId ?? "",
                 ["ClientSecret"] = !string.IsNullOrWhiteSpace(postedMailSecret)
-                    ? SecretProtector.Protect(postedMailSecret)
+                    ? SecretProtector.Protect(postedMailSecret, "mail-client-secret")
                     : storedMailSecret,
                 ["From"] = mail?.From ?? "",
                 ["RedirectTo"] = new JsonArray(MailAddresses.Clean(mail?.RedirectTo)
@@ -329,12 +328,19 @@ public sealed partial class LocalStatusServer
         section["Connections"] = ConnectionsNode(dto.Connections, prevSection);
         section["Flows"] = dto.Flows?.DeepClone() ?? prevSection?["Flows"]?.DeepClone() ?? new JsonArray();
 
-        root.Remove(LegacySettingsSection);      // migrate away from the 1.x section on write
-        root[SettingsSection] = section;
-
-        try { SettingsFile.AtomicWrite(_settingsPath, root); }
+        // The product section is replaced as a whole (a legacy 1.x section is renamed on the way); the rest of the
+        // file or blob stays as it is.
+        try
+        {
+            _settings.Update(stored =>
+            {
+                stored.Clear();
+                foreach (var (key, value) in section) stored[key] = value?.DeepClone();
+                return true;
+            });
+        }
         catch (Exception ex)
-        { Respond(call, 500, new { ok = false, errors = new[] { "Failed to write appsettings.json: " + ex.Message } }); return; }
+        { Respond(call, 500, new { ok = false, errors = new[] { $"Failed to write the settings ({_settings.Where}): " + ex.Message } }); return; }
 
         bool secretChanged = !string.IsNullOrWhiteSpace(postedSecret);
         string mailSummary = mail?.Enabled == true
@@ -367,7 +373,7 @@ public sealed partial class LocalStatusServer
             string id = c.Id?.Trim() ?? "";
             if (id.Length == 0) continue;
             string secret = !string.IsNullOrWhiteSpace(c.Secret)
-                ? SecretProtector.Protect(c.Secret)
+                ? SecretProtector.Protect(c.Secret, "connection-" + id)
                 : previous.FirstOrDefault(p => string.Equals((string?)p["Id"], id, StringComparison.OrdinalIgnoreCase))?["Secret"]?.GetValue<string>() ?? "";
             var settings = new JsonObject();
             foreach (var (k, v) in c.Settings ?? new()) settings[k] = v ?? "";

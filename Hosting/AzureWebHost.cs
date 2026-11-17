@@ -1,0 +1,198 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace Balsoft.Hive.BDC.Hosting;
+
+/// <summary>The app roles of an Azure instance (app roles of the instance's Entra app registration).</summary>
+public static class ApiRoles
+{
+    public const string Viewer = "Viewer";
+    public const string Operator = "Operator";
+    public const string Administrator = "Administrator";
+
+    /// <summary>Reading needs Viewer, a retry Operator, every other change Administrator (failure case 28).</summary>
+    public static string Needed(ApiCall call)
+        => call.Method == "GET" ? Viewer : call.Path == "/history/retry" ? Operator : Administrator;
+
+    public static bool Allows(IReadOnlyCollection<string> roles, string needed)
+    {
+        bool Has(string role) => roles.Contains(role, StringComparer.OrdinalIgnoreCase);
+        return needed switch
+        {
+            Viewer => Has(Viewer) || Has(Operator) || Has(Administrator),
+            Operator => Has(Operator) || Has(Administrator),
+            _ => Has(Administrator),
+        };
+    }
+}
+
+/// <summary>
+/// The signed-in user as App Service authentication hands it to the app: the X-MS-CLIENT-PRINCIPAL header, Base64 JSON
+/// with auth_typ, name_typ, role_typ and claims. External requests cannot set the header; only App Service does.
+/// </summary>
+public sealed record AppServicePrincipal(string Name, string? TenantId, IReadOnlyList<string> Roles)
+{
+    private const string LongRoleClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
+    private const string LongTenantClaim = "http://schemas.microsoft.com/identity/claims/tenantid";
+
+    public static AppServicePrincipal? Parse(string? header)
+    {
+        if (string.IsNullOrWhiteSpace(header)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(Convert.FromBase64String(header.Trim()));
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || Text(root, "auth_typ").Length == 0
+                || !root.TryGetProperty("claims", out var claims) || claims.ValueKind != JsonValueKind.Array)
+                return null;
+            string roleType = Text(root, "role_typ"), nameType = Text(root, "name_typ");
+            var list = claims.EnumerateArray()
+                .Where(c => c.ValueKind == JsonValueKind.Object)
+                .Select(c => (Type: Text(c, "typ"), Value: Text(c, "val")))
+                .Where(c => c.Value.Length > 0)
+                .ToList();
+            var roles = list.Where(c => c.Type == "roles" || c.Type == LongRoleClaim || (roleType.Length > 0 && c.Type == roleType))
+                .Select(c => c.Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            string name = list.FirstOrDefault(c => (nameType.Length > 0 && c.Type == nameType) || c.Type is "name" or "preferred_username").Value ?? "";
+            string? tenant = list.FirstOrDefault(c => c.Type is "tid" or LongTenantClaim).Value;
+            return new AppServicePrincipal(name.Length > 0 ? name : "signed-in user", tenant, roles);
+        }
+        catch (Exception ex) when (ex is FormatException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string Text(JsonElement element, string name)
+        => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
+}
+
+/// <summary>
+/// The web host of an Azure instance: Kestrel on the port App Service gives (PORT, default 8080), behind App Service
+/// authentication. /healthz answers without sign-in; everything else is served only while App Service authentication is
+/// on (failure case 25: never without sign-in), to a signed-in user of the instance's tenant with the role the call
+/// needs (case 28). The calls themselves are the same handlers as the local API (<see cref="LocalStatusServer.Route"/>).
+/// Every change is logged with the user who made it.
+/// </summary>
+public sealed class AzureWebHost : BackgroundService
+{
+    private readonly LocalStatusServer _api;
+    private readonly ILogger _log;
+    private readonly InstanceTenant? _tenant;
+    private readonly Func<bool> _signInEnabled;
+    private readonly IPEndPoint _listen;
+    private readonly string _version;
+    private bool _warnedSignInOff;
+
+    public AzureWebHost(LocalStatusServer api, ILogger log, string version, InstanceTenant? tenant = null,
+        Func<bool>? signInEnabled = null, IPEndPoint? listen = null)
+    {
+        _api = api;
+        _log = log;
+        _version = version;
+        _tenant = tenant;
+        _signInEnabled = signInEnabled ?? (() => string.Equals(Environment.GetEnvironmentVariable("WEBSITE_AUTH_ENABLED"), "True", StringComparison.OrdinalIgnoreCase));
+        _listen = listen ?? new IPEndPoint(IPAddress.Any, int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var port) ? port : 8080);
+    }
+
+    /// <summary>The port Kestrel bound, once started (tests ask for port 0).</summary>
+    public int BoundPort { get; private set; }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        WebApplication app;
+        try
+        {
+            var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
+            builder.WebHost.UseKestrelCore().ConfigureKestrel(k =>
+            {
+                k.Listen(_listen);
+                k.Limits.MaxRequestBodySize = 50 * 1024 * 1024;
+            });
+            app = builder.Build();
+            app.Run(Serve);
+            await app.StartAsync(stoppingToken);
+            BoundPort = new Uri(app.Urls.First().Replace("0.0.0.0", "127.0.0.1").Replace("[::]", "127.0.0.1")).Port;
+        }
+        catch (Exception ex)
+        {
+            _log.LogCritical(ex, "The web host could not start on {Endpoint}.", _listen);
+            return;
+        }
+        _log.LogInformation("Web host listening on port {Port}; sign-in through App Service authentication is {State}.",
+            BoundPort, _signInEnabled() ? "on" : "OFF, so nothing but /healthz is served");
+        try { await Task.Delay(Timeout.Infinite, stoppingToken); }
+        catch (OperationCanceledException) { /* shutting down */ }
+        await app.StopAsync(CancellationToken.None);
+        await app.DisposeAsync();
+    }
+
+    private async Task Serve(HttpContext http)
+    {
+        string path = (http.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant();
+        if (path == "/healthz")
+        {
+            await Write(http, 200, new { status = "ok", version = _version });
+            return;
+        }
+        if (!_signInEnabled())
+        {
+            if (!_warnedSignInOff)
+            {
+                _warnedSignInOff = true;
+                _log.LogCritical("App Service authentication is off; the web host serves nothing but /healthz until it is on.");
+            }
+            await Write(http, 503, new { error = "Sign-in is not set up for this instance, so nothing is served." });
+            return;
+        }
+        var user = AppServicePrincipal.Parse(http.Request.Headers["X-MS-CLIENT-PRINCIPAL"].ToString());
+        if (user is null)
+        {
+            await Write(http, 401, new { error = "Sign in first." });
+            return;
+        }
+        if (user.TenantId is { } userTenant && _tenant is not null && _tenant.Resolve(out var instanceTenant, out _)
+            && !string.Equals(userTenant, instanceTenant, StringComparison.OrdinalIgnoreCase))
+        {
+            _log.LogWarning("Web host: {User} from tenant {Tenant} was refused; this instance belongs to {Instance}.", LocalStatusServer.ForLog(user.Name), userTenant, instanceTenant);
+            await Write(http, 403, new { error = "This instance belongs to another organisation." });
+            return;
+        }
+
+        string body;
+        using (var reader = new StreamReader(http.Request.Body, Encoding.UTF8))
+            body = await reader.ReadToEndAsync(http.RequestAborted);
+        var query = http.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        var call = new ApiCall(http.Request.Method, http.Request.Path.Value ?? "", query, body);
+        string needed = ApiRoles.Needed(call);
+        if (!ApiRoles.Allows(user.Roles, needed))
+        {
+            _log.LogWarning("Web host: {User} has no role for {Method} {Path} (needs {Role}).", LocalStatusServer.ForLog(user.Name), call.Method, LocalStatusServer.ForLog(call.Path), needed);
+            await Write(http, 403, new { error = $"This needs the role {needed}." });
+            return;
+        }
+
+        await _api.Route(call);
+        if (call.Method != "GET")
+            _log.LogInformation("Web host: {User} {Method} {Path} answered {Status}.", LocalStatusServer.ForLog(user.Name), call.Method, LocalStatusServer.ForLog(call.Path), call.Status);
+        http.Response.StatusCode = call.Status;
+        http.Response.ContentType = "application/json";
+        http.Response.ContentLength = call.Answer.Length;
+        await http.Response.Body.WriteAsync(call.Answer, http.RequestAborted);
+    }
+
+    private static async Task Write(HttpContext http, int status, object body)
+    {
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(body);
+        http.Response.StatusCode = status;
+        http.Response.ContentType = "application/json";
+        http.Response.ContentLength = bytes.Length;
+        await http.Response.Body.WriteAsync(bytes, http.RequestAborted);
+    }
+}

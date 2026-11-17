@@ -110,6 +110,20 @@ public sealed class BlobSettingsDocument(IETagBlob blob) : ISettingsDocument
 
     public string Where => blob.Where;
 
+    public JsonObject? ReadSection()
+    {
+        var current = blob.Read();
+        if (current is null) return null;
+        try
+        {
+            return SettingsFile.SectionOf(SettingsFile.Parse(Encoding.UTF8.GetString(current.Value.Content)));
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"{blob.Where} could not be read as JSON, so it was not overwritten.", ex);
+        }
+    }
+
     public bool Update(Func<JsonObject, bool> mutate)
     {
         for (int attempt = 0; attempt < Attempts; attempt++)

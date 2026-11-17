@@ -230,6 +230,9 @@ public interface ISettingsDocument
 
     /// <summary>Read-modify-write of the product section; false when <c>mutate</c> changed nothing, so nothing was written.</summary>
     bool Update(Func<JsonObject, bool> mutate);
+
+    /// <summary>The product section as stored, or null when there are no settings yet; throws when they cannot be read.</summary>
+    JsonObject? ReadSection();
 }
 
 /// <summary>appsettings.json next to the service, written atomically (<see cref="SettingsFile"/>).</summary>
@@ -238,4 +241,12 @@ public sealed class FileSettingsDocument(string path) : ISettingsDocument
     public string Where => path;
 
     public bool Update(Func<JsonObject, bool> mutate) => SettingsFile.Update(path, mutate);
+
+    public JsonObject? ReadSection()
+    {
+        var root = SettingsFile.ReadRoot(path);
+        if (root is null && File.Exists(path))
+            throw new InvalidOperationException($"{path} could not be read as JSON, so it was not overwritten. Fix or restore the file, then save again.");
+        return SettingsFile.SectionOf(root);
+    }
 }
