@@ -2,14 +2,20 @@
   "product": "Hive BDC",
   "releases": [
     {
-      "version": "1.4.0",
-      "date": "2026-11-11",
+      "version": "1.5.0",
+      "date": "2026-11-17",
       "changes": [
+        "Settings rebuilt: Outbound (documents from your ERP), Inbound (documents into your ERP), Connections and Service. Each screen holds one level with a breadcrumb back: a document type, its companies, and per company where its documents come from and where they go. Remove asks in the card first, and nothing is written until Save changes.",
+        "Several destinations per company: SharePoint, any number of DocuWare file cabinets and mail, each with its own switch that keeps its settings when off. DocuWare documents are stored with typed index values (text, numbers, dates, keywords, tables), and a repeat updates the same document by a match field. Mail and the company itself can be switched on or off per company.",
+        "Inbound from DocuWare or SharePoint: documents marked ready (an index field or a library column with a value) become a CSV in the folder the ERP reads, with the document's file if wanted, and are then marked done so they are imported once. The lists in Settings are read from the system itself, and Preview with a ready document shows real values. Further document systems come as connectors with updates.",
+        "Document history: every step of every document (received, read, produced, delivered per destination, waiting, failed, done) in plain words, searchable by document number or id, with the documents that need attention and Retry.",
+        "Azure Blob Storage: documents Dynamics 365 Finance and Operations writes to a blob container (JSON with a pdfLink PDF) are picked up, and documents can be delivered back to a blob container with a status file (appsettings.json).",
         "Word input: a company entry can take filled Word invoices (.docx) instead of ERP export pairs (Settings, Document types, company entry, Input). Every value is a Word content control tagged with its EN 16931 business term, the lines are a repeating section, and the document's E-Rechnung field chooses XRechnung or ZUGFeRD. Hive BDC builds the same JSON an ERP export writes, makes the PDF itself and delivers as usual.",
         "Built-in Word to PDF renderer: header and footer, paragraphs, nested tables, borders, images and page numbers, without Microsoft Office or Microsoft 365. A PDF saved with the same name next to the .docx is used instead. Documents with text boxes, shapes or other elements the renderer does not draw go to the error folder with the reason.",
         "Word invoices are checked before anything is produced: required fields, and printed totals against the sums of the lines to the cent. A failed file goes to the error folder with a reason file in German and English.",
         "Settings: Word template... saves a generic Word invoice template; Check a Word file... shows the fields, lines, totals check and a PDF preview of a .docx. The documents lists show where each document came from (JSON or Word).",
-        "Construction invoices: the invoice types 875, 876 and 877 are accepted (they were written as 380) and keep a deduction line negative. A Leitweg-ID as buyer electronic address (BT-49) is written with scheme 0204. BT-41 (seller contact) and BT-154 (item description) can be set from the export."
+        "Construction invoices: the invoice types 875, 876 and 877 are accepted (they were written as 380) and keep a deduction line negative. A Leitweg-ID as buyer electronic address (BT-49) is written with scheme 0204. BT-41 (seller contact) and BT-154 (item description) can be set from the export.",
+        "Settings files from 1.3.x load unchanged and behave as before; the new options only take effect once they are used."
       ]
     },
     {
