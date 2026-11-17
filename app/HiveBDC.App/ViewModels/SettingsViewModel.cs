@@ -666,6 +666,35 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _statusMessage = "";
     /// <summary>True when StatusMessage should render as an error (red), else success/info (green).</summary>
     [ObservableProperty] private bool _statusIsError;
+    /// <summary>True right after a successful save, until another message replaces the saved one.</summary>
+    [ObservableProperty] private bool _justSaved;
+    /// <summary>True while the footer asks whether to close with changes that are not saved.</summary>
+    [ObservableProperty] private bool _confirmClose;
+
+    private const string SavedMessage = "Changes saved";
+    private readonly UnsavedChanges _unsaved = new();
+
+    partial void OnStatusMessageChanged(string value)
+    {
+        if (!value.StartsWith(SavedMessage, StringComparison.Ordinal)) JustSaved = false;
+    }
+
+    /// <summary>True when the form holds anything the service does not have yet; an open page's values count.</summary>
+    public bool HasUnsavedChanges(bool passwordTyped)
+    {
+        CommitOpenPages();
+        return _unsaved.Differ(BuildConfig(null), passwordTyped);
+    }
+
+    /// <summary>Takes the values of an open company, destination or connection page into the settings and leaves the page.</summary>
+    private void CommitOpenPages()
+    {
+        CommitOpenInbound();
+        CommitOpenDestination();
+        CommitOpenConnection();
+        if (View is "Inbound/company" or "Outbound/destination" or "Connections/conn") Back();
+    }
+
     /// <summary>Inline validation errors returned by POST /config.</summary>
     public ObservableCollection<string> ValidationErrors { get; } = new();
 
@@ -723,6 +752,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             int entries = DocumentTypes.Sum(t => t.Companies.Count);
             StatusMessage = $"Settings loaded: {DocumentTypes.Count} outbound document type(s) with {entries} compan{(entries == 1 ? "y" : "ies")}, {Flows.Count} inbound flow(s).";
+            _unsaved.Remember(BuildConfig(null));
         }
         finally
         {
@@ -911,14 +941,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// POST /config with the current form values. <paramref name="newSecret"/> is the raw text
     /// from the shared PasswordBox — blank means keep the stored secret. Returns true on success
-    /// (caller closes the window); populates <see cref="ValidationErrors"/> and StatusMessage on failure.
+    /// (the window stays open and says so); populates <see cref="ValidationErrors"/> and StatusMessage on failure.
     /// </summary>
     public async Task<bool> SaveAsync(string? newSecret, string? newMailSecret = null, string? newDocuWareSecret = null)
     {
-        CommitOpenInbound();
-        CommitOpenDestination();
-        CommitOpenConnection();
-        if (View is "Inbound/company" or "Outbound/destination" or "Connections/conn") Back();
+        CommitOpenPages();
         _pendingDocuWareSecret = newDocuWareSecret;
         _pendingMailSecret = newMailSecret;
         ValidationErrors.Clear();
@@ -954,8 +981,12 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
 
             AppLog.Info("Save settings: saved and applied live.");
-            StatusMessage = "Saved. The service uses it from now on.";
+            _pendingDocuWareSecret = null;
+            _pendingMailSecret = null;
+            _unsaved.Remember(BuildConfig(null));
+            StatusMessage = $"{SavedMessage} at {DateTime.Now:HH:mm}. The service uses them from now on.";
             StatusIsError = false;
+            JustSaved = true;
             return true;
         }
         finally

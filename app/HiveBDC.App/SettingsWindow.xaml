@@ -1794,13 +1794,33 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0"
-                               Foreground="{Binding StatusIsError, Converter={StaticResource StatusBrush}}"/>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="Discard" Click="OnCancel" Margin="0,0,8,0"
+                    <DockPanel VerticalAlignment="Center" Margin="0,0,16,0"
+                               Visibility="{Binding ConfirmClose, Converter={StaticResource Match}, ConverterParameter=False}">
+                        <Border DockPanel.Dock="Left" Background="#DCFCE7" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="10"
+                                Padding="10,3" Margin="0,0,10,0" VerticalAlignment="Center"
+                                Visibility="{Binding JustSaved, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="✓ Saved" Foreground="#166534" FontWeight="SemiBold" FontSize="12.5"
+                                       AutomationProperties.AutomationId="SavedBadge"/>
+                        </Border>
+                        <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{Binding StatusIsError, Converter={StaticResource StatusBrush}}"/>
+                    </DockPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding ConfirmClose, Converter={StaticResource Match}, ConverterParameter=False}">
+                        <Button Content="Close" Click="OnClose" Margin="0,0,8,0" AutomationProperties.AutomationId="CloseSettings"
                                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
                         <Button Content="Save changes" Click="OnSave" Style="{StaticResource PrimaryButton}" Padding="18,7"
+                                AutomationProperties.AutomationId="SaveSettings"
                                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
+                    </StackPanel>
+                    <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0" Foreground="#991B1B" FontWeight="SemiBold"
+                               Text="Some changes are not saved yet. Close without saving them?"
+                               Visibility="{Binding ConfirmClose, Converter={StaticResource BoolToVis}}"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding ConfirmClose, Converter={StaticResource BoolToVis}}">
+                        <Button Content="Keep editing" Click="OnKeepEditing" Margin="0,0,8,0" AutomationProperties.AutomationId="KeepEditing"/>
+                        <Button Content="Close without saving" Click="OnCloseWithoutSaving" Style="{StaticResource DangerSmall}" Padding="14,7"
+                                AutomationProperties.AutomationId="CloseWithoutSaving"/>
                     </StackPanel>
                 </Grid>
             </Border>

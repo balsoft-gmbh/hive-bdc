@@ -7,12 +7,17 @@ namespace Balsoft.Hive.BDC.App;
 /// <summary>
 /// Modal settings editor. The view-model owns all state and the loopback calls; this
 /// code-behind only bridges the PasswordBox (whose content is not bindable) into the
-/// Save / Test commands and closes the window on a successful save. The raw secret is
-/// read from the PasswordBox at the moment of the call and never stored anywhere else.
+/// Save / Test commands. A save keeps the window open and says so; the user closes it, and
+/// closing with changes that are not saved asks first. The raw secret is read from the
+/// PasswordBox at the moment of the call and never stored anywhere else.
 /// </summary>
 public partial class SettingsWindow : Window
 {
     private readonly SettingsViewModel _vm;
+    private bool _closeConfirmed;
+
+    /// <summary>True when at least one save went through, so the dashboard reloads its status after the window closes.</summary>
+    public bool SavedAny { get; private set; }
 
     public SettingsWindow(SettingsViewModel vm)
     {
@@ -23,6 +28,26 @@ public partial class SettingsWindow : Window
         vm.UnsavedConnectionSecret = () => ConnectionSecretBox.Password;
         vm.ClearConnectionSecret = () => ConnectionSecretBox.Clear();
         Loaded += OnLoaded;
+        Closing += OnWindowClosing;
+    }
+
+    private bool PasswordTyped
+        => new[] { SecretBox, MailSecretBox, DocuWareSecretBox, ConnectionSecretBox }.Any(b => b.Password.Length > 0);
+
+    /// <summary>The Close button and the title bar's X both end here.</summary>
+    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_closeConfirmed || _vm.IsBusy || !_vm.HasUnsavedChanges(PasswordTyped)) return;
+        e.Cancel = true;
+        _vm.ConfirmClose = true;
+    }
+
+    private void OnKeepEditing(object sender, RoutedEventArgs e) => _vm.ConfirmClose = false;
+
+    private void OnCloseWithoutSaving(object sender, RoutedEventArgs e)
+    {
+        _closeConfirmed = true;
+        Close();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -60,7 +85,8 @@ public partial class SettingsWindow : Window
             SecretBox.Clear();
             MailSecretBox.Clear();
             DocuWareSecretBox.Clear();
-            DialogResult = true;   // closes the modal
+            ConnectionSecretBox.Clear();
+            SavedAny = true;
         }
     }
 
@@ -179,7 +205,7 @@ public partial class SettingsWindow : Window
 
     private async void OnChangeSource(object sender, RoutedEventArgs e) => await _vm.ChangeInboundSource();
 
-    private void OnCancel(object sender, RoutedEventArgs e)
+    private void OnClose(object sender, RoutedEventArgs e)
         => Close();
 
 }

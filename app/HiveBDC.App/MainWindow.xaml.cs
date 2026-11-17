@@ -92,8 +92,8 @@ public partial class MainWindow : Window
     private async void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var settings = new SettingsWindow(_vm.CreateSettingsViewModel()) { Owner = this };
-        bool? saved = settings.ShowDialog();
-        if (saved == true)
+        settings.ShowDialog();
+        if (settings.SavedAny)
         {
             // Config hot-reloads in the service; pull the fresh values into the dashboard.
             await SafeStatusRefresh();
