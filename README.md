@@ -593,7 +593,8 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               targets, DocumentFile (a produced file as name, content type and content)
   Licensing/                  LicenseValidator (offline, cached per file version)
   Storage/                    IStateStore, ExportLedger (SQLite: exports, deliveries, document history),
-                              SecretProtector (DPAPI)
+                              TableStateStore (the same in Azure Table Storage, for the Azure run mode;
+                              AzureTableRows behind ITableRows), SecretProtector (DPAPI)
   Hosting/                    Worker, LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
