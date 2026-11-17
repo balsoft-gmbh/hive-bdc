@@ -130,6 +130,10 @@ public sealed partial class LocalStatusServer : BackgroundService
                 case ("GET", "/sources"): Respond(ctx, 200, Sources()); return;
                 case ("POST", "/sources/choices"): await PostSourceChoices(ctx, req); return;
                 case ("POST", "/sources/sample"): await PostSourceSample(ctx, req); return;
+                case ("GET", "/targets"): Respond(ctx, 200, Targets()); return;
+                case ("POST", "/targets/choices"): await PostTargetChoices(ctx, req); return;
+                case ("GET", "/connections/kinds"): Respond(ctx, 200, ConnectionKindsList()); return;
+                case ("POST", "/connections/test"): await PostConnectionTest(ctx, req); return;
                 case ("GET", "/config"): GetConfig(ctx); return;
                 case ("POST", "/config"): PostConfig(ctx, req); return;
                 case ("POST", "/config/test-sharepoint"): await PostTestSharePoint(ctx, req); return;

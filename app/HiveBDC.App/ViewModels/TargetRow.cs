@@ -23,13 +23,17 @@ public sealed partial class TargetRow : ObservableObject
 
     public bool IsDocuWare => string.Equals(Kind, DocuWareKind, StringComparison.OrdinalIgnoreCase);
 
-    public string KindLabel => IsDocuWare ? "DocuWare" : Kind;
+    /// <summary>The destination kind's name as the service describes it (Settings sets it when the list is loaded).</summary>
+    public string KindName { get; set; } = "";
+
+    public string KindLabel => KindName.Length > 0 ? KindName : IsDocuWare ? "DocuWare" : Kind;
 
     /// <summary>The line next to the name in the destination list.</summary>
     public string Detail => IsDocuWare
         ? $"File cabinet \"{Setting("FileCabinetName", Setting("FileCabinet"))}\", {Fields.Count} field(s) filled" +
           (Setting("MatchField").Length > 0 ? $"; never stored twice (by {Setting("MatchField")})." : ".")
-        : "Set up with a newer version of Hive BDC; kept as it is.";
+        : Settings.Count == 0 ? "Not set up yet"
+          : string.Join(", ", Settings.Where(p => p.Value.Length > 0 && !p.Key.EndsWith("Name", StringComparison.OrdinalIgnoreCase)).Select(p => $"{p.Key} {p.Value}"));
 
     public string Summary => IsDocuWare
         ? $"DocuWare: file cabinet \"{Setting("FileCabinetName", Setting("FileCabinet"))}\", {Fields.Count} field(s)" +

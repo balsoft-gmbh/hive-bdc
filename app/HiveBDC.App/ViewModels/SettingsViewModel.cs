@@ -60,6 +60,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void ViewChanged()
     {
         if (_lastView == "Inbound/company" && View != "Inbound/company") CommitOpenInbound();
+        if (_lastView == "Outbound/destination" && View != "Outbound/destination") CommitOpenDestination();
+        if (_lastView == "Connections/conn" && View != "Connections/conn") CommitOpenConnection();
         _lastView = View;
         OnPropertyChanged(nameof(View));
         OnPropertyChanged(nameof(CrumbType));
@@ -89,7 +91,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Back()
     {
-        Sub = Sub switch { "sharepoint" => "company", "company" or "pick" => "type", _ => "" };
+        Sub = Sub switch { "sharepoint" or "destination" or "pick-destination" => "company", "company" or "pick" => "type", _ => "" };
         RefreshSummaries();
     }
 
@@ -220,8 +222,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         Secret = string.IsNullOrEmpty(password) ? null : password,
     };
 
-    public DocuWareTargetViewModel CreateDocuWareTarget(string? password, TargetRow? existing)
-        => new(_client, CurrentDocuWare(password), existing);
 
     public async Task TestDocuWareAsync(string? password)
     {
@@ -236,7 +236,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private List<ConnectionConfigDto> BuildConnections(string? docuWarePassword)
     {
         var list = _connections.Where(c => !string.Equals(c.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase))
-            .Select(c => new ConnectionConfigDto { Id = c.Id, Kind = c.Kind, Settings = c.Settings })
+            .Select(c => new ConnectionConfigDto { Id = c.Id, Kind = c.Kind, Settings = c.Settings, Secret = _pendingSecrets.GetValueOrDefault(c.Id ?? "") })
             .ToList();
         bool used = DocumentTypes.Any(t => t.Companies.Any(r => r.Targets.Any(x => x.IsDocuWare))) || Flows.Any(f => f.IsDocuWare);
         if (DocuWareUrl.Trim().Length > 0 || DocuWareSecretSet || used)
@@ -251,6 +251,167 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     private string? _pendingDocuWareSecret;
+
+    // ── Outbound destinations and connections of any kind the service reports ─────────────
+
+    public System.Collections.ObjectModel.ObservableCollection<TargetInfoDto> Destinations { get; } = new();
+    public System.Collections.ObjectModel.ObservableCollection<ConnectionKindDto> ConnectionKinds { get; } = new();
+
+    /// <summary>Connection kinds without a page of their own (DocuWare and the SharePoint app have one).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<ConnectionCard> OtherConnections { get; } = new();
+
+    [ObservableProperty] private DestinationViewModel? _openDestination;
+    [ObservableProperty] private ConnectionViewModel? _openConnection;
+
+    /// <summary>The window hands over the secret typed on the generic connection page, and clears that box.</summary>
+    public Func<string>? UnsavedConnectionSecret { get; set; }
+    public Action? ClearConnectionSecret { get; set; }
+
+    private readonly Dictionary<string, string> _pendingSecrets = new(StringComparer.OrdinalIgnoreCase);
+
+    public async Task LoadCatalogAsync()
+    {
+        await LoadSourcesAsync();
+        await LoadDestinationsAsync();
+        var kinds = await _client.GetConnectionKindsAsync();
+        ConnectionKinds.Clear();
+        foreach (var k in kinds.Data?.Kinds ?? new()) ConnectionKinds.Add(k);
+        RebuildConnectionCards();
+    }
+
+    private async Task LoadDestinationsAsync()
+    {
+        var res = await _client.GetTargetsAsync();
+        var (docuWare, sharePoint) = UnsavedSecrets?.Invoke() ?? ("", "");
+        Destinations.Clear();
+        foreach (var d in res.Data?.Targets ?? new())
+        {
+            d.Connected |= d.ConnectionKind switch
+            {
+                "docuware" => DocuWareUrl.Trim().Length > 0 && DocuWareUserName.Trim().Length > 0 && (DocuWareSecretSet || docuWare.Length > 0),
+                "sharepoint" => TenantId.Trim().Length > 0 && ClientId.Trim().Length > 0 && (SecretSet || sharePoint.Length > 0),
+                _ => _connections.Any(c => string.Equals(c.Kind, d.ConnectionKind, StringComparison.OrdinalIgnoreCase)),
+            };
+            Destinations.Add(d);
+        }
+        foreach (var t in DocumentTypes.SelectMany(t => t.Companies).SelectMany(c => c.Targets))
+            t.KindName = Destinations.FirstOrDefault(d => string.Equals(d.Kind, t.Kind, StringComparison.OrdinalIgnoreCase))?.Name ?? "";
+    }
+
+    private void RebuildConnectionCards()
+    {
+        OtherConnections.Clear();
+        foreach (var k in ConnectionKinds.Where(k => !string.Equals(k.Kind, "docuware", StringComparison.OrdinalIgnoreCase)))
+        {
+            var existing = _connections.FirstOrDefault(c => string.Equals(c.Kind, k.Kind, StringComparison.OrdinalIgnoreCase));
+            OtherConnections.Add(new ConnectionCard(k, existing is not null,
+                existing is null ? k.Description ?? "" : $"Connection \"{existing.Id}\" is set up."));
+        }
+    }
+
+    /// <summary>"+ Add a destination": first the kind, from what the service reports.</summary>
+    [RelayCommand]
+    private async Task AddDestination()
+    {
+        await LoadDestinationsAsync();
+        Open("pick-destination");
+    }
+
+    public void PickDestination(TargetInfoDto kind)
+    {
+        var company = SelectedDocumentType?.SelectedCompany;
+        if (company is null) return;
+        if (!kind.Connected)
+        {
+            ShowPage("Connections");
+            if (kind.ConnectionKind == "sharepoint") Open("sharepoint-app");
+            else if (kind.ConnectionKind == "docuware") Open("docuware");
+            else OpenConnectionKind(kind.ConnectionKind ?? "");
+            StatusMessage = $"Connect {kind.Name} first, then add it as a destination under Outbound.";
+            StatusIsError = false;
+            return;
+        }
+        if (kind.Kind == "sharepoint")
+        {
+            company.SharePointEnabled = true;
+            Open("sharepoint");
+            return;
+        }
+        string connection = kind.ConnectionKind == "docuware" ? DocuWareConnectionId
+            : _connections.FirstOrDefault(c => string.Equals(c.Kind, kind.ConnectionKind, StringComparison.OrdinalIgnoreCase))?.Id ?? kind.ConnectionKind ?? "";
+        var row = new TargetRow { Kind = kind.Kind ?? "", Connection = connection, Enabled = true, KindName = kind.Name ?? "" };
+        company.PutTarget(row, null);
+        OpenDestinationFor(kind, row);
+    }
+
+    public void EditDestination(TargetRow row)
+    {
+        var kind = Destinations.FirstOrDefault(d => string.Equals(d.Kind, row.Kind, StringComparison.OrdinalIgnoreCase));
+        if (kind is null)
+        {
+            StatusMessage = "This destination was set up with a newer version of Hive BDC and is kept as it is.";
+            StatusIsError = false;
+            return;
+        }
+        OpenDestinationFor(kind, row);
+    }
+
+    private void OpenDestinationFor(TargetInfoDto kind, TargetRow row)
+    {
+        CommitOpenDestination();
+        OpenDestination = new DestinationViewModel(_client, WithDrafts, kind, row);
+        Open("destination");
+        _ = OpenDestination.LoadAsync();
+    }
+
+    public void CommitOpenDestination()
+    {
+        if (OpenDestination is not { } open) return;
+        SelectedDocumentType?.SelectedCompany?.PutTarget(open.ToTarget(), open.Row);
+        OpenDestination = null;
+        RefreshSummaries();
+    }
+
+    public void OpenConnectionKind(string kind)
+    {
+        var k = ConnectionKinds.FirstOrDefault(c => string.Equals(c.Kind, kind, StringComparison.OrdinalIgnoreCase));
+        if (k is null) return;
+        CommitOpenConnection();
+        var existing = _connections.FirstOrDefault(c => string.Equals(c.Kind, kind, StringComparison.OrdinalIgnoreCase));
+        OpenConnection = new ConnectionViewModel(_client, k, existing,
+            existing?.HasSecret == true || _pendingSecrets.ContainsKey(existing?.Id ?? k.Kind ?? ""));
+        Page = "Connections";
+        Open("conn");
+    }
+
+    /// <summary>Keeps the generic connection page's values for Save; a typed secret is sent only with Save.</summary>
+    public void CommitOpenConnection()
+    {
+        if (OpenConnection is not { } open) return;
+        string secret = UnsavedConnectionSecret?.Invoke() ?? "";
+        var values = open.SettingValues();
+        var entry = _connections.FirstOrDefault(c => string.Equals(c.Id, open.Id, StringComparison.OrdinalIgnoreCase));
+        if (entry is null && secret.Length == 0 && values.Values.All(string.IsNullOrWhiteSpace))
+        {
+            OpenConnection = null;
+            return;
+        }
+        if (entry is null)
+        {
+            entry = new ConnectionConfigDto { Id = open.Id, Kind = open.Kind.Kind };
+            _connections.Add(entry);
+        }
+        entry.Settings = values;
+        if (secret.Length > 0) _pendingSecrets[open.Id] = secret;
+        ClearConnectionSecret?.Invoke();
+        OpenConnection = null;
+        RebuildConnectionCards();
+    }
+
+    public async Task TestOpenConnectionAsync()
+    {
+        if (OpenConnection is { } open) await open.TestAsync(UnsavedConnectionSecret?.Invoke() ?? "");
+    }
 
     // ── Inbound: document types, each with its companies (one Flows entry per company) ───────
 
@@ -544,7 +705,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             Flows.Clear();
             foreach (var f in (c.Flows ?? new()).OfType<System.Text.Json.Nodes.JsonObject>())
                 Flows.Add(new ImportFlowRow((System.Text.Json.Nodes.JsonObject)f.DeepClone()));
-            _ = LoadSourcesAsync();
+            _ = LoadCatalogAsync();
 
             _connections = c.Connections ?? new();
             var docuWare = _connections.FirstOrDefault(x => string.Equals(x.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase));
@@ -755,7 +916,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public async Task<bool> SaveAsync(string? newSecret, string? newMailSecret = null, string? newDocuWareSecret = null)
     {
         CommitOpenInbound();
-        if (View == "Inbound/company") Back();
+        CommitOpenDestination();
+        CommitOpenConnection();
+        if (View is "Inbound/company" or "Outbound/destination" or "Connections/conn") Back();
         _pendingDocuWareSecret = newDocuWareSecret;
         _pendingMailSecret = newMailSecret;
         ValidationErrors.Clear();
@@ -965,4 +1128,11 @@ public sealed partial class InboundTypeRow : ObservableObject
     }
 
     public string StatusKind => Companies.Count == 0 ? "setup" : Companies.Any(c => c.Enabled) ? "ok" : "off";
+}
+
+/// <summary>A card on Connections for a kind without a page of its own.</summary>
+public sealed record ConnectionCard(ConnectionKindDto Kind, bool SetUp, string Detail)
+{
+    public string Name => Kind.Name ?? Kind.Kind ?? "";
+    public string Initial => Kind.Initial;
 }

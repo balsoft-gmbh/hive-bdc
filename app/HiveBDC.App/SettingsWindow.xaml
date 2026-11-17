@@ -413,13 +413,13 @@
                             AutomationProperties.AutomationId="CrumbPage">
                         <TextBlock Text="{Binding Page}"/>
                     </Button>
-                    <StackPanel Orientation="Horizontal" Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Outbound/company|Outbound/sharepoint|Inbound/company|Inbound/pick}">
+                    <StackPanel Orientation="Horizontal" Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Outbound/company|Outbound/sharepoint|Outbound/pick-destination|Outbound/destination|Inbound/company|Inbound/pick}">
                         <Path Style="{StaticResource Crumb}"/>
                         <Button Style="{StaticResource LinkBtn}" Command="{Binding OpenCommand}" CommandParameter="type" AutomationProperties.AutomationId="CrumbType">
                             <TextBlock Text="{Binding CrumbType}"/>
                         </Button>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Outbound/sharepoint}">
+                    <StackPanel Orientation="Horizontal" Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Outbound/sharepoint|Outbound/pick-destination|Outbound/destination}">
                         <Path Style="{StaticResource Crumb}"/>
                         <Button Style="{StaticResource LinkBtn}" Command="{Binding OpenCommand}" CommandParameter="company" AutomationProperties.AutomationId="CrumbCompany">
                             <TextBlock Text="{Binding CrumbCompany}"/>
@@ -879,9 +879,9 @@
                                         </Grid>
                                     </Border>
 
-                                    <Button Style="{StaticResource AddBtn}" Click="OnAddDocuWareTarget" AutomationProperties.AutomationId="AddDocuWare"
-                                            AutomationProperties.Name="Add a DocuWare file cabinet">
-                                        <TextBlock Text="+ Add a DocuWare file cabinet" Foreground="#1D4ED8" FontWeight="SemiBold"/>
+                                    <Button Style="{StaticResource AddBtn}" AutomationProperties.AutomationId="AddDestination" AutomationProperties.Name="Add a destination"
+                                            Command="{Binding DataContext.AddDestinationCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <TextBlock Text="+ Add a destination" Foreground="#1D4ED8" FontWeight="SemiBold"/>
                                     </Button>
 
                                 </StackPanel>
@@ -942,6 +942,129 @@
                                 <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,0,0,0"
                                            Text="Uses the SharePoint connection. Uploads nothing."/>
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ══ Outbound / company / add a destination: one tile per destination kind the service has ══ -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Outbound/pick-destination}">
+                <StackPanel Margin="40,8,40,24">
+                    <TextBlock Text="Where should the documents go?" Style="{StaticResource PageTitle}"/>
+                    <TextBlock Foreground="#5B6474" FontSize="14" Margin="0,4,0,18" TextWrapping="Wrap"
+                               Text="Choose the destination. Its own settings follow on the next screen. Mail is a switch on the company itself."/>
+                    <ItemsControl ItemsSource="{Binding Destinations}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource Bare}" Click="OnPickDestination" Margin="0,0,14,14"
+                                        AutomationProperties.AutomationId="DestinationTile" AutomationProperties.Name="{Binding Name}">
+                                    <Border Style="{StaticResource ListCard}" Margin="0" Padding="20">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <Border Width="44" Height="44" CornerRadius="11" Background="#EEF4FF">
+                                                    <TextBlock Text="{Binding Initial}" Foreground="#1D4ED8" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <Border HorizontalAlignment="Right" VerticalAlignment="Center" CornerRadius="11" Padding="10,3">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#FFFBEB"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Connected}" Value="True"><Setter Property="Background" Value="#F0FDF4"/></DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="Connect first"/>
+                                                                <Setter Property="Foreground" Value="#92400E"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Connected}" Value="True">
+                                                                        <Setter Property="Text" Value="Connected"/>
+                                                                        <Setter Property="Foreground" Value="#166534"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                            </DockPanel>
+                                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" Foreground="#0F172A"/>
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Hint}" FontSize="13" Height="56"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Border BorderBrush="#CBD5E1" BorderThickness="1.5" CornerRadius="12" Padding="20,14" HorizontalAlignment="Left" Width="320">
+                        <StackPanel>
+                            <TextBlock Text="More destinations" FontWeight="SemiBold" Foreground="#334155"/>
+                            <TextBlock Style="{StaticResource Hint}" Text="Further destinations appear here when a Hive BDC update brings their connector."/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ══ Outbound / company / one destination: its settings and what its fields say ══ -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Outbound/destination}">
+                <StackPanel Margin="40,8,40,24" MaxWidth="980" HorizontalAlignment="Left" DataContext="{Binding OpenDestination}">
+                    <DockPanel>
+                        <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Enabled}" Content="Active" FontSize="14" VerticalAlignment="Center"
+                                  AutomationProperties.Name="Destination active"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}"/>
+                            <Border Style="{StaticResource ExportBadge}"><TextBlock Text="OUTBOUND" Foreground="#1D4ED8" FontWeight="Bold" FontSize="11"/></Border>
+                        </StackPanel>
+                    </DockPanel>
+                    <TextBlock Text="{Binding Description}" Foreground="#5B6474" FontSize="14" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    <Border Style="{StaticResource Panel}" Margin="0,18,0,0" Padding="22">
+                        <StackPanel>
+                            <TextBlock Text="SETTINGS" Style="{StaticResource PanelTitle}"/>
+                            <ItemsControl ItemsSource="{Binding Settings}" ItemTemplate="{StaticResource SourceSettingTemplate}" Margin="0,-12,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Panel}" Margin="0,16,0,0" Padding="22" Visibility="{Binding HasFields, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="WHAT THE FIELDS SAY" Style="{StaticResource PanelTitle}"/>
+                            <DataGrid ItemsSource="{Binding Fields}" Style="{StaticResource EditGrid}" MinHeight="70" MaxHeight="420" AutomationProperties.AutomationId="DestinationFields">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Field" Width="1.2*" Binding="{Binding Label}" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Kind" Width="0.8*" Binding="{Binding Kind}" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Value from the document" Width="1.4*" Binding="{Binding Template, UpdateSourceTrigger=PropertyChanged}"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBlock Style="{StaticResource Hint}" Text="{}{property} takes a value of the ERP JSON, {property:date} writes a date. Example: {DocumentNumber}."/>
+                            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="12.5"
+                                       Foreground="{Binding StatusIsError, Converter={StaticResource StatusBrush}}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ══ Connections / a kind without a page of its own ══ -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Connections/conn}">
+                <StackPanel Margin="40,8,40,24" MaxWidth="680" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding OpenConnection.Title}" Style="{StaticResource PageTitle}"/>
+                    <TextBlock Text="{Binding OpenConnection.Kind.Description}" Foreground="#5B6474" FontSize="14" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    <Border Style="{StaticResource Panel}" Margin="0,18,0,0" Padding="22">
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding OpenConnection.Settings}" ItemTemplate="{StaticResource SourceSettingTemplate}" Margin="0,-12,0,0"/>
+                            <TextBlock Text="{Binding OpenConnection.SecretLabel}" Style="{StaticResource Label}"/>
+                            <PasswordBox x:Name="ConnectionSecretBox" AutomationProperties.Name="Connection secret"/>
+                            <TextBlock Text="{Binding OpenConnection.SecretHint}" Style="{StaticResource Hint}"/>
+                            <Border Height="1" Background="#EEF1F5" Margin="0,18,0,14"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Test connection" Click="OnTestConnection" AutomationProperties.AutomationId="TestGenericConnection"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding OpenConnection.StatusMessage}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="12.5"
+                                       Foreground="{Binding OpenConnection.StatusIsError, Converter={StaticResource StatusBrush}}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -1452,6 +1575,54 @@
                             </DockPanel>
                         </Border>
                     </UniformGrid>
+                    <ItemsControl ItemsSource="{Binding OtherConnections}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Panel}" Margin="0,0,12,12" Padding="20">
+                                    <DockPanel>
+                                        <DockPanel DockPanel.Dock="Top">
+                                            <Border Width="44" Height="44" CornerRadius="11" Background="#F1F5F9">
+                                                <TextBlock Text="{Binding Initial}" Foreground="#475569" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" CornerRadius="11" Padding="10,3">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#FFFBEB"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SetUp}" Value="True"><Setter Property="Background" Value="#F0FDF4"/></DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock FontSize="12" FontWeight="SemiBold">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="Not set up"/>
+                                                            <Setter Property="Foreground" Value="#92400E"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SetUp}" Value="True">
+                                                                    <Setter Property="Text" Value="Set up"/>
+                                                                    <Setter Property="Foreground" Value="#166534"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                        </DockPanel>
+                                        <Button DockPanel.Dock="Bottom" Content="Edit" Margin="0,16,0,0" Click="OnEditConnectionKind"
+                                                AutomationProperties.AutomationId="EditConnectionKind" AutomationProperties.Name="{Binding Name}"/>
+                                        <StackPanel Margin="0,14,0,0">
+                                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Hint}" FontSize="13"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                     <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
                                Text="Passwords and secrets are stored encrypted on this machine when you save, and never shown again. Leave a password field empty to keep the stored one."/>
                 </StackPanel>

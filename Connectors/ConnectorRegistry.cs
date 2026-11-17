@@ -9,6 +9,10 @@ public sealed class ConnectorRegistry
     private readonly Dictionary<string, Func<TargetRuntime, IDocumentTarget>> _targets = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Func<SourceRuntime, IRecordSource>> _sources = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _sourceOrder = new();
+    private readonly Dictionary<string, Func<SourceRuntime, IDestinationKind>> _destinations = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _destinationOrder = new();
+    private readonly Dictionary<string, Func<IConnectionKind>> _connectionKinds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _connectionOrder = new();
 
     public static ConnectorRegistry BuiltIn()
     {
@@ -19,8 +23,38 @@ public sealed class ConnectorRegistry
         registry.RegisterTarget("blob", runtime => new BlobDocumentTarget(runtime.Options, (c, container) => AzureBlobStore.For(c, container)));
         registry.RegisterSource(ConnectionKinds.DocuWare, runtime => new DocuWareRecordSource(runtime, DocuWareClients.For));
         registry.RegisterSource(TargetKinds.SharePoint, runtime => new SharePointRecordSource(runtime.SharePointAuth));
+        registry.RegisterDestination(TargetKinds.SharePoint, runtime => new SharePointDestinationKind(runtime));
+        registry.RegisterDestination(ConnectionKinds.DocuWare, runtime => new DocuWareDestinationKind(runtime, DocuWareClients.For));
+        registry.RegisterDestination("blob", runtime => new BlobDestinationKind(runtime));
+        registry.RegisterConnectionKind(ConnectionKinds.DocuWare, () => new DocuWareConnectionKind());
+        registry.RegisterConnectionKind(ConnectionKinds.AzureStorage, () => new AzureStorageConnectionKind());
         return registry;
     }
+
+    /// <summary>The Settings side of a destination kind (its page and lists); delivery is the target of the same kind.</summary>
+    public void RegisterDestination(string kind, Func<SourceRuntime, IDestinationKind> create)
+    {
+        string key = TargetKinds.Clean(kind);
+        if (!_destinations.ContainsKey(key)) _destinationOrder.Add(key);
+        _destinations[key] = create;
+    }
+
+    public IReadOnlyList<string> DestinationKindNames => _destinationOrder;
+
+    public IDestinationKind? Destination(string kind, SourceRuntime runtime)
+        => _destinations.TryGetValue(TargetKinds.Clean(kind), out var create) ? create(runtime) : null;
+
+    public void RegisterConnectionKind(string kind, Func<IConnectionKind> create)
+    {
+        string key = TargetKinds.Clean(kind);
+        if (!_connectionKinds.ContainsKey(key)) _connectionOrder.Add(key);
+        _connectionKinds[key] = create;
+    }
+
+    public IReadOnlyList<string> ConnectionKindNames => _connectionOrder;
+
+    public IConnectionKind? ConnectionKind(string kind)
+        => _connectionKinds.TryGetValue(TargetKinds.Clean(kind), out var create) ? create() : null;
 
     public void RegisterSource(string kind, Func<SourceRuntime, IRecordSource> create)
     {

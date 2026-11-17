@@ -701,9 +701,17 @@ adding and removing of the level below it; a breadcrumb leads back:
 - **Inbound** lists the document types brought into the ERP, the same way: a type, its
   companies, and per company where its documents come from and where the ERP reads them
   (see Inbound flows below).
+- **+ Add a destination** (on a company) shows one tile per destination kind this version
+  delivers to: SharePoint library, DocuWare file cabinet, Azure Blob container. A further
+  kind is one connector in the service and shows up here without a dashboard change. A
+  kind whose connection is not set up says Connect first and opens it under Connections.
+- **A destination** opens as its own screen: its settings, with lists read from the
+  system itself (the DocuWare file cabinet, the SharePoint library), and for systems
+  with fields one row per field with the template that fills it.
 - **SharePoint library** (from a company) holds the site, library, folder and columns.
-- **Connections** shows SharePoint, DocuWare and Document mail as cards; each opens its
-  own screen.
+- **Connections** shows SharePoint, DocuWare and Document mail, plus one card per further
+  connection kind of this version (Azure Storage today), each opening its own screen with
+  **Test connection**.
 
 Remove asks in the card before anything goes, and nothing is written until **Save
 changes**.
@@ -719,9 +727,9 @@ In the dashboard:
 1. **Settings > Connections > DocuWare:** address, user name and password, then
    **Test connection**. It signs in and lists the file cabinets the user can see.
 2. **Settings > Outbound >** a document type **>** a company **> Goes to >
-   + Add a DocuWare file cabinet:** choose the file cabinet by name. Its fields are listed with their
-   kind and whether they are required; fill the ones you want with templates. Choose
-   the field that holds the document number under **Never store a document twice**.
+   + Add a destination > DocuWare file cabinet:** choose the file cabinet by name. Its fields
+   are listed with their kind and whether they are required; fill the ones you want with
+   templates. Choose the field that holds the document number under **Never store twice**.
 3. **Save.** Every document of that type and company now also goes to DocuWare.
 4. **View > Document history** shows what needs attention (stopped or waiting
    documents) and every step of one document by its number; **Retry** puts a stopped

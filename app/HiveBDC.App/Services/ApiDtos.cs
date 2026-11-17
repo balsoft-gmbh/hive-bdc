@@ -327,6 +327,60 @@ public sealed class SourceChoicesResult
 
 public sealed record SourceValueDto(string? Name, string? Value);
 
+// ── outbound destinations and connection kinds (GET /targets, POST /targets/choices, GET /connections/kinds,
+//    POST /connections/test) ──────────────────────────────────────────────────────────────────────────
+
+public sealed class TargetsDto
+{
+    [JsonPropertyName("targets")] public List<TargetInfoDto>? Targets { get; set; }
+}
+
+/// <summary>A destination kind this version of the service delivers to, and what a destination of it needs.</summary>
+public sealed class TargetInfoDto
+{
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("description")] public string? Description { get; set; }
+    [JsonPropertyName("connectionKind")] public string? ConnectionKind { get; set; }
+    [JsonPropertyName("connected")] public bool Connected { get; set; }
+    [JsonPropertyName("fieldsLookup")] public string? FieldsLookup { get; set; }
+    [JsonPropertyName("settings")] public List<SourceSettingDto>? Settings { get; set; }
+
+    public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name[..1].ToUpperInvariant();
+}
+
+public sealed class ConnectionKindsDto
+{
+    [JsonPropertyName("kinds")] public List<ConnectionKindDto>? Kinds { get; set; }
+}
+
+public sealed class ConnectionKindDto
+{
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("description")] public string? Description { get; set; }
+    [JsonPropertyName("secretLabel")] public string? SecretLabel { get; set; }
+    [JsonPropertyName("secretHint")] public string? SecretHint { get; set; }
+    [JsonPropertyName("settings")] public List<SourceSettingDto>? Settings { get; set; }
+
+    public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name[..1].ToUpperInvariant();
+}
+
+/// <summary>A connection as the form shows it; a null or empty Secret means the stored one of the same id.</summary>
+public sealed class ConnectionTestRequestDto
+{
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("settings")] public Dictionary<string, string>? Settings { get; set; }
+    [JsonPropertyName("secret")] public string? Secret { get; set; }
+}
+
+public sealed class ConnectionTestResultDto
+{
+    [JsonPropertyName("ok")] public bool Ok { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+}
+
 public sealed class SourceSampleResult
 {
     [JsonPropertyName("ok")] public bool Ok { get; set; }

@@ -98,6 +98,22 @@ public sealed class LoopbackClient
     public Task<ApiResult<SourceSampleResult>> SourceSampleAsync(SourceRequestDto request, CancellationToken ct = default)
         => PostAsync<SourceSampleResult>("/sources/sample", request, ct);
 
+    /// <summary>GET /targets: the destination kinds outbound documents can go to, with what each needs.</summary>
+    public Task<ApiResult<TargetsDto>> GetTargetsAsync(CancellationToken ct = default)
+        => GetAsync<TargetsDto>("/targets", ct);
+
+    /// <summary>POST /targets/choices: the values of one dropdown or the field rows of a destination.</summary>
+    public Task<ApiResult<SourceChoicesResult>> TargetChoicesAsync(SourceRequestDto request, CancellationToken ct = default)
+        => PostAsync<SourceChoicesResult>("/targets/choices", request, ct);
+
+    /// <summary>GET /connections/kinds: the kinds of sign-in kept under Connections.</summary>
+    public Task<ApiResult<ConnectionKindsDto>> GetConnectionKindsAsync(CancellationToken ct = default)
+        => GetAsync<ConnectionKindsDto>("/connections/kinds", ct);
+
+    /// <summary>POST /connections/test: signs in with the values on the form; a blank secret uses the stored one.</summary>
+    public Task<ApiResult<ConnectionTestResultDto>> TestConnectionAsync(ConnectionTestRequestDto request, CancellationToken ct = default)
+        => PostAsync<ConnectionTestResultDto>("/connections/test", request, ct);
+
     /// <summary>GET /history: the steps of one document (by id or number), or the newest steps of all documents.</summary>
     public Task<ApiResult<HistoryDto>> GetHistoryAsync(string? search, int limit = 500, CancellationToken ct = default)
         => GetAsync<HistoryDto>($"/history?limit={limit}&search={Uri.EscapeDataString(search ?? "")}", ct);

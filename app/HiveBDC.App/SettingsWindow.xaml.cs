@@ -20,6 +20,8 @@ public partial class SettingsWindow : Window
         _vm = vm;
         DataContext = vm;
         vm.UnsavedSecrets = () => (DocuWareSecretBox.Password, SecretBox.Password);
+        vm.UnsavedConnectionSecret = () => ConnectionSecretBox.Password;
+        vm.ClearConnectionSecret = () => ConnectionSecretBox.Clear();
         Loaded += OnLoaded;
     }
 
@@ -126,25 +128,22 @@ public partial class SettingsWindow : Window
         _vm.OpenCommand.Execute("mail");
     }
 
-    private async void OnAddDocuWareTarget(object sender, RoutedEventArgs e)
+    private void OnPickDestination(object sender, RoutedEventArgs e)
     {
-        if (_vm.SelectedDocumentType?.SelectedCompany is not { } row) return;
-        await EditDocuWareTarget(row, null);
-        _vm.RefreshSummaries();
+        if ((sender as FrameworkElement)?.DataContext is TargetInfoDto kind) _vm.PickDestination(kind);
     }
 
-    private async void OnEditTargetCard(object sender, RoutedEventArgs e)
+    private void OnEditTargetCard(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: ViewModels.TargetRow target, Tag: ViewModels.RouteRow row }) return;
-        if (!target.IsDocuWare)
-        {
-            MessageBox.Show(this, "This destination was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        await EditDocuWareTarget(row, target);
-        _vm.RefreshSummaries();
+        if ((sender as FrameworkElement)?.DataContext is TargetRow target) _vm.EditDestination(target);
     }
+
+    private void OnEditConnectionKind(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ConnectionCard card) _vm.OpenConnectionKind(card.Kind.Kind ?? "");
+    }
+
+    private async void OnTestConnection(object sender, RoutedEventArgs e) => await _vm.TestOpenConnectionAsync();
 
     private void OnRemoveTargetCard(object sender, RoutedEventArgs e)
     {
@@ -179,20 +178,6 @@ public partial class SettingsWindow : Window
     }
 
     private async void OnChangeSource(object sender, RoutedEventArgs e) => await _vm.ChangeInboundSource();
-
-    private async Task EditDocuWareTarget(ViewModels.RouteRow row, ViewModels.TargetRow? existing)
-    {
-        if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))
-        {
-            MessageBox.Show(this, "Connect DocuWare under Connections first (address, user name, password), then add it as a destination.",
-                "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        var vm = _vm.CreateDocuWareTarget(DocuWareSecretBox.Password, existing);
-        var dialog = new DocuWareTargetWindow(vm) { Owner = this };
-        await Task.Yield();
-        if (dialog.ShowDialog() == true) row.PutTarget(vm.ToTarget(), existing);
-    }
 
     private void OnCancel(object sender, RoutedEventArgs e)
         => Close();
