@@ -596,11 +596,12 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               SharePointFieldImport (column template import, shared with the dashboard)
   Documents/                  AxDocument (the JSON envelope), DocumentProcessor (scan, resolve,
                               produce, deliver, meter), DocumentHandlers (EInvoice, Pdf),
-                              DocumentTypeRegistry (auto-registration), SharePointFieldTemplate
+                              DocumentTypeRegistry (auto-registration), SharePointFieldTemplate,
+                              BlobStager and ServiceBusStager (Azure sources staged into the input folder)
   EInvoice/                   InvoiceMapper (JSON -> EN 16931), EInvoiceGenerator, PdfRepair
   Delivery/                   MailSender (Graph), SharePointUploader (Graph)
   Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint, mail, DocuWare,
-                              blob and HTTPS targets, DocumentFile (a produced file as name, content type and content)
+                              blob, HTTPS and Service Bus targets, DocumentFile (a produced file as name, content type and content)
   Licensing/                  LicenseValidator (offline, cached per file version), LicenseTenant (the tenant a
                               licence must name: the settings locally, the instance identity in Azure),
                               LicenseStore (where the licence lives: a file locally, a blob in Azure)
@@ -849,6 +850,40 @@ An `azure-storage` connection holds the storage connection string as its secret,
 in Azure, the account address in `Settings.AccountUrl`, signing in with the managed
 identity.
 
+### Azure Service Bus (D365 F&O)
+
+A company entry with a `Source` of kind `servicebus` takes the documents an F&O send
+class (BDCDataSend_ServiceBusQueue or _Topic) puts on a queue or topic: the message
+body is the document JSON, its `MessageId` the outbound id, and the PDF is the blob
+the JSON names in `pdfLink`:
+
+```json
+{ "DataAreaId": "USMF", "Input": "D:\\HiveBDC\\staging\\usmf-sb", "Output": "",
+  "Source": { "Kind": "servicebus", "Connection": "fo-bus",
+    "Settings": { "Queue": "bdc-out", "PdfConnection": "fo-storage", "PdfContainer": "bdc-pdf" } } }
+```
+
+(`Topic` and `Subscription` instead of `Queue` for a topic.) Before every scan, new
+messages are received with peek-lock, staged into the input folder as `{id}_sb.json`
+and `{id}_sb.pdf`, and deferred: a deferred message holds no lock and its delivery
+count does not grow, so a document that waits for hours is not dead-lettered by the
+broker. Once the pair is in `processed`, the message is completed; once it is in
+`error`, it is dead-lettered (`HiveBDC.DocumentError`) with the last failed step of
+the document history as its description. A message whose `MessageId` was staged
+before is completed without a second document. A `pdfLink` outside `PdfContainer`,
+or one without `PdfConnection` and `PdfContainer`, is dead-lettered
+(`HiveBDC.Refused`); a PDF that is not there yet leaves the message for a later scan.
+
+A target of kind `servicebus` (`Settings.Queue` or `Settings.Topic`) sends each
+produced document as the same JSON as the HTTPS target, with `MessageId`
+`{type}_{company}_{document id}` (the same for a repeat, so the queue's duplicate
+detection can drop it), the document type as `Subject` and `documentNumber`,
+`documentType`, `dataAreaId` and `fileName` as message properties; an F&O receive
+flow reads the body as UTF-8 text. A transient Service Bus failure leaves the
+document waiting. A `servicebus` connection holds the namespace connection string as
+its secret, or, in Azure, `Settings.Namespace` (`{name}.servicebus.windows.net`) for
+the managed identity.
+
 ### Azure run mode (in development, 1.8.0)
 
 The same program runs as an Azure web app. The deployment sets, as app settings:
@@ -877,8 +912,8 @@ changes, then every 5 minutes):
 
 - the settings blob cannot be read (the last settings read stay in use);
 - the settings use what only a local install has: a company that reads a folder
-  instead of Blob Storage, Word input, a company that only writes to its output
-  folder, an inbound flow that writes to a folder, or a secret kept in the settings
+  instead of Blob Storage or Service Bus, Word input, a company that only writes to
+  its output folder, an inbound flow that writes to a folder, or a secret kept in the settings
   instead of a `kv:` reference. Each is named with its type and company or flow;
 - Table Storage cannot be reached;
 - Key Vault cannot be reached (asked at most once a minute);

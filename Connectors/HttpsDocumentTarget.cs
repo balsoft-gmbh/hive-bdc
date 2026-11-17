@@ -39,10 +39,8 @@ public sealed record HttpsEndpoint(Uri Url, string? HeaderName, string? Key)
 }
 
 /// <summary>
-/// Sends the produced file as JSON to an HTTPS address: a Logic App, a Power Automate flow or the customer's own API.
-/// Body: documentId, documentNumber, documentType, dataAreaId, fileName, contentType, content (base64), fields (the
-/// target's templates, filled from the document) and, on a repeat, previousId (the id the endpoint answered the first
-/// time as {"id": ...}). 408, 429, 5xx, a timeout or no connection leave the document pending for the next scan (case
+/// Sends the produced file as JSON (<see cref="DocumentEnvelope"/>) to an HTTPS address: a Logic App, a Power Automate
+/// flow or the customer's own API; on a repeat previousId is the id the endpoint answered the first time as {"id": ...}. 408, 429, 5xx, a timeout or no connection leave the document pending for the next scan (case
 /// 20); any other 4xx is an error with the endpoint's answer.
 /// </summary>
 public sealed class HttpsDocumentTarget(BDCOptions options, HttpMessageHandler? handler = null) : IDocumentTarget
@@ -66,20 +64,7 @@ public sealed class HttpsDocumentTarget(BDCOptions options, HttpMessageHandler? 
     public DeliveryResult Deliver(DeliveryContext ctx)
     {
         var endpoint = HttpsEndpoint.From(options.Connection(ctx.Target.Connection)!, ctx.Target.Setting("Path"));
-        var fields = new JsonObject();
-        foreach (var (name, value) in SharePointFieldTemplate.Resolve(ctx.Document, ctx.Target.Fields, ctx.Warn)) fields[name] = value;
-        var body = new JsonObject
-        {
-            ["documentId"] = ctx.DocumentId,
-            ["documentNumber"] = ctx.DocumentNumber,
-            ["documentType"] = ctx.Type.Id,
-            ["dataAreaId"] = ctx.Route.DataAreaId,
-            ["fileName"] = ctx.Output.Name,
-            ["contentType"] = ctx.Output.ContentType,
-            ["content"] = Convert.ToBase64String(ctx.Output.ReadAllBytes()),
-            ["fields"] = fields,
-        };
-        if (ctx.PreviousRemoteId is { } previous) body["previousId"] = previous;
+        var body = DocumentEnvelope.Build(ctx);
 
         HttpResponseMessage response;
         try
@@ -179,5 +164,32 @@ public sealed class HttpsConnectionKind(HttpMessageHandler? handler = null) : IC
         {
             throw new ConnectorException($"{endpoint.Shown} cannot be reached: {ex.Message}", retryLater: false);
         }
+    }
+}
+
+/// <summary>
+/// The JSON every generic target sends (HTTPS, Service Bus): documentId, documentNumber, documentType, dataAreaId,
+/// fileName, contentType, content (base64), fields (the target's templates filled from the document) and, on a repeat,
+/// previousId.
+/// </summary>
+public static class DocumentEnvelope
+{
+    public static JsonObject Build(DeliveryContext ctx)
+    {
+        var fields = new JsonObject();
+        foreach (var (name, value) in SharePointFieldTemplate.Resolve(ctx.Document, ctx.Target.Fields, ctx.Warn)) fields[name] = value;
+        var body = new JsonObject
+        {
+            ["documentId"] = ctx.DocumentId,
+            ["documentNumber"] = ctx.DocumentNumber,
+            ["documentType"] = ctx.Type.Id,
+            ["dataAreaId"] = ctx.Route.DataAreaId,
+            ["fileName"] = ctx.Output.Name,
+            ["contentType"] = ctx.Output.ContentType,
+            ["content"] = Convert.ToBase64String(ctx.Output.ReadAllBytes()),
+            ["fields"] = fields,
+        };
+        if (ctx.PreviousRemoteId is { } previous) body["previousId"] = previous;
+        return body;
     }
 }

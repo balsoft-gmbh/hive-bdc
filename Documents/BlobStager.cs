@@ -114,33 +114,11 @@ public sealed partial class BlobStager
         }
     }
 
-    /// <summary>
-    /// The PDF of a JSON blob: the blob the JSON names in pdfLink, when it lies in this container, else a blob with the
-    /// same name plus .pdf. A pdfLink that points anywhere else is refused, so a document cannot make the service fetch
-    /// from an address it was not given.
-    /// </summary>
+    /// <summary>The PDF of a JSON blob: the blob the JSON names in pdfLink (<see cref="PdfLink"/>), else a blob with the same name plus .pdf.</summary>
     private static string? PdfFor(IBlobStore store, string name, byte[] json, HashSet<string> names, out string? refused)
     {
-        refused = null;
-        string? link = null;
-        try
-        {
-            using var doc = JsonDocument.Parse(json, AxDocument.DocumentOptions);
-            foreach (var p in doc.RootElement.EnumerateObject())
-                if (p.Name.Equals("pdfLink", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.String)
-                    link = p.Value.GetString();
-        }
-        catch (JsonException) { }
-
-        if (!string.IsNullOrWhiteSpace(link))
-        {
-            if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) { refused = $"pdfLink '{link}' is not an address."; return null; }
-            string root = store.ContainerUri.GetLeftPart(UriPartial.Path).TrimEnd('/') + "/";
-            string target = uri.GetLeftPart(UriPartial.Path);
-            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            { refused = $"pdfLink points outside the container {store.ContainerUri.GetLeftPart(UriPartial.Path)}, so the PDF is not fetched."; return null; }
-            return Uri.UnescapeDataString(target[root.Length..]);
-        }
+        string? linked = PdfLink.BlobName(store, json, out refused);
+        if (linked is not null || refused is not null) return linked;
         string sibling = name + ".pdf";
         return names.Contains(sibling) ? sibling : null;
     }
@@ -164,5 +142,49 @@ public sealed partial class BlobStager
     private void WarnOnce(string key, string message)
     {
         if (_warned.Add(key + "|" + message)) _log.LogWarning("[blob] {Message}", message);
+    }
+}
+
+/// <summary>
+/// The pdfLink an F&amp;O export puts into its JSON (BDCDocumentPdf.addPdfLink): the blob it names, but only when it lies in
+/// the container the service was given, so a document cannot make the service fetch from any other address.
+/// </summary>
+public static class PdfLink
+{
+    /// <summary>The blob name inside <paramref name="store"/>'s container; null with no link; null and a reason when refused.</summary>
+    public static string? BlobName(IBlobStore store, byte[] json, out string? refused)
+    {
+        refused = null;
+        string? link = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json, AxDocument.DocumentOptions);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                foreach (var p in doc.RootElement.EnumerateObject())
+                    if (p.Name.Equals("pdfLink", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.String)
+                        link = p.Value.GetString();
+        }
+        catch (JsonException) { }
+
+        if (string.IsNullOrWhiteSpace(link)) return null;
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) { refused = $"pdfLink '{link}' is not an address."; return null; }
+        string root = store.ContainerUri.GetLeftPart(UriPartial.Path).TrimEnd('/') + "/";
+        string target = uri.GetLeftPart(UriPartial.Path);
+        if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        { refused = $"pdfLink points outside the container {store.ContainerUri.GetLeftPart(UriPartial.Path)}, so the PDF is not fetched."; return null; }
+        return Uri.UnescapeDataString(target[root.Length..]);
+    }
+
+    /// <summary>Whether the JSON names a pdfLink at all.</summary>
+    public static bool Present(byte[] json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, AxDocument.DocumentOptions);
+            return doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.EnumerateObject()
+                .Any(p => p.Name.Equals("pdfLink", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.String
+                          && !string.IsNullOrWhiteSpace(p.Value.GetString()));
+        }
+        catch (JsonException) { return false; }
     }
 }

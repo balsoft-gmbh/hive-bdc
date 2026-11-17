@@ -22,15 +22,18 @@ public sealed class ConnectorRegistry
         registry.RegisterTarget(ConnectionKinds.DocuWare, runtime => new DocuWareDocumentTarget(runtime.Options, DocuWareClients.For));
         registry.RegisterTarget("blob", runtime => new BlobDocumentTarget(runtime.Options, (c, container) => AzureBlobStore.For(c, container)));
         registry.RegisterTarget(ConnectionKinds.Https, runtime => new HttpsDocumentTarget(runtime.Options));
+        registry.RegisterTarget(ConnectionKinds.ServiceBus, runtime => new ServiceBusDocumentTarget(runtime.Options));
         registry.RegisterSource(ConnectionKinds.DocuWare, runtime => new DocuWareRecordSource(runtime, DocuWareClients.For));
         registry.RegisterSource(TargetKinds.SharePoint, runtime => new SharePointRecordSource(runtime.SharePointAuth));
         registry.RegisterDestination(TargetKinds.SharePoint, runtime => new SharePointDestinationKind(runtime));
         registry.RegisterDestination(ConnectionKinds.DocuWare, runtime => new DocuWareDestinationKind(runtime, DocuWareClients.For));
         registry.RegisterDestination("blob", runtime => new BlobDestinationKind(runtime));
         registry.RegisterDestination(ConnectionKinds.Https, runtime => new HttpsDestinationKind(runtime));
+        registry.RegisterDestination(ConnectionKinds.ServiceBus, runtime => new ServiceBusDestinationKind(runtime));
         registry.RegisterConnectionKind(ConnectionKinds.DocuWare, () => new DocuWareConnectionKind());
         registry.RegisterConnectionKind(ConnectionKinds.AzureStorage, () => new AzureStorageConnectionKind());
         registry.RegisterConnectionKind(ConnectionKinds.Https, () => new HttpsConnectionKind());
+        registry.RegisterConnectionKind(ConnectionKinds.ServiceBus, () => new ServiceBusConnectionKind());
         return registry;
     }
 

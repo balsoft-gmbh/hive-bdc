@@ -6,6 +6,7 @@ public static class ConnectionKinds
     public const string DocuWare = "docuware";
     public const string AzureStorage = "azure-storage";
     public const string Https = "https";
+    public const string ServiceBus = "servicebus";
 }
 
 /// <summary>
@@ -54,6 +55,9 @@ public sealed class ConnectionOptions
             if (url.Length == 0 && Secret.Length == 0)
                 problems.Add($"Connection '{Id}': give the address, or for a Logic App or Power Automate trigger its whole URL as the secret.");
         }
+        if (Kind == ConnectionKinds.ServiceBus && Secret.Length == 0
+            && !(Setting("Namespace") is { Length: > 0 } ns && Uri.CheckHostName(ns) == UriHostNameType.Dns && ns.Contains('.')))
+            problems.Add($"Connection '{Id}': give the Service Bus connection string, or in Azure the namespace (<name>.servicebus.windows.net) for the managed identity.");
         if (Kind == ConnectionKinds.AzureStorage && Secret.Length == 0
             && !(Uri.TryCreate(Setting("AccountUrl"), UriKind.Absolute, out var account) && account.Scheme == Uri.UriSchemeHttps))
             problems.Add($"Connection '{Id}': give the storage connection string, or in Azure the account address (https://<account>.blob.core.windows.net) for the managed identity.");
