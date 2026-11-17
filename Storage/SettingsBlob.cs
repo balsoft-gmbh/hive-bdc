@@ -9,8 +9,8 @@ using Microsoft.Extensions.Configuration;
 
 namespace Balsoft.Hive.BDC.Storage;
 
-/// <summary>The one blob that holds the settings of an Azure instance, with the ETag every write is checked against.</summary>
-public interface ISettingsBlob
+/// <summary>One blob an Azure instance owns (its settings, its licence), with the ETag every write is checked against.</summary>
+public interface IETagBlob
 {
     string Where { get; }
 
@@ -28,16 +28,25 @@ public interface ISettingsBlob
 }
 
 /// <summary>Azure Blob Storage, signed in with a connection string or the host identity (managed identity in Azure).</summary>
-public sealed class AzureSettingsBlob(BlobClient blob) : ISettingsBlob
+public sealed class AzureETagBlob(BlobClient blob) : IETagBlob
 {
-    public static AzureSettingsBlob For(string blobUrl, string? connectionString)
+    public static AzureETagBlob For(string blobUrl, string? connectionString)
     {
         if (!Uri.TryCreate(blobUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps || url.Segments.Length < 3)
             throw new ArgumentException("The settings blob must look like https://<account>.blob.core.windows.net/<container>/<name>.json.");
         if (string.IsNullOrWhiteSpace(connectionString))
-            return new AzureSettingsBlob(new BlobClient(url, new DefaultAzureCredential()));
+            return new AzureETagBlob(new BlobClient(url, new DefaultAzureCredential()));
         var parts = new BlobUriBuilder(url);
-        return new AzureSettingsBlob(new BlobServiceClient(connectionString).GetBlobContainerClient(parts.BlobContainerName).GetBlobClient(parts.BlobName));
+        return new AzureETagBlob(new BlobServiceClient(connectionString).GetBlobContainerClient(parts.BlobContainerName).GetBlobClient(parts.BlobName));
+    }
+
+    /// <summary>The address of the blob <paramref name="name"/> in the same container and folder as <paramref name="blobUrl"/>.</summary>
+    public static string SiblingUrl(string blobUrl, string name)
+    {
+        var parts = new BlobUriBuilder(new Uri(blobUrl));
+        int slash = parts.BlobName.LastIndexOf('/');
+        parts.BlobName = (slash < 0 ? "" : parts.BlobName[..(slash + 1)]) + name;
+        return parts.ToUri().ToString();
     }
 
     public string Where => blob.Uri.GetLeftPart(UriPartial.Path);
@@ -91,7 +100,7 @@ public sealed class AzureSettingsBlob(BlobClient blob) : ISettingsBlob
 /// back only if nobody wrote in between (ETag); otherwise it reads again and repeats the change, so a document type the
 /// service registers and a save from the web page never overwrite each other (failure case 22).
 /// </summary>
-public sealed class BlobSettingsDocument(ISettingsBlob blob) : ISettingsDocument
+public sealed class BlobSettingsDocument(IETagBlob blob) : ISettingsDocument
 {
     private const int Attempts = 5;
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
@@ -133,12 +142,12 @@ public sealed class BlobSettingsDocument(ISettingsBlob blob) : ISettingsDocument
 /// </summary>
 public sealed class BlobSettingsProvider : ConfigurationProvider, IConfigurationSource, IDisposable
 {
-    private readonly ISettingsBlob _blob;
+    private readonly IETagBlob _blob;
     private readonly Timer? _timer;
     private readonly object _gate = new();
     private string? _etag;
 
-    public BlobSettingsProvider(ISettingsBlob blob, TimeSpan? pollEvery = null)
+    public BlobSettingsProvider(IETagBlob blob, TimeSpan? pollEvery = null)
     {
         _blob = blob;
         if (pollEvery is { } every) _timer = new Timer(_ => Poll(), null, every, every);

@@ -14,57 +14,9 @@ namespace Balsoft.Hive.BDC.Tests;
 /// <summary>The settings of an Azure instance in one blob: reading, reloading, writing with ETag checks (case 22).</summary>
 public sealed class SettingsBlobTests
 {
-    private sealed class MemoryBlob : ISettingsBlob
-    {
-        private byte[]? _content;
-        private int _version;
+    private readonly MemoryETagBlob _blob = new();
 
-        public string Where => "https://account.blob.core.windows.net/settings/hivebdc.json";
-
-        public bool Down { get; set; }
-
-        public int Writes { get; private set; }
-
-        /// <summary>Runs right before a conditional write, as another writer would between a read and a write.</summary>
-        public Action<MemoryBlob>? BeforeWrite { get; set; }
-
-        public string? Text => _content is null ? null : Encoding.UTF8.GetString(_content);
-
-        public void Put(string json)
-        {
-            _content = Encoding.UTF8.GetBytes(json);
-            _version++;
-        }
-
-        public (byte[] Content, string ETag)? Read()
-        {
-            if (Down) throw new InvalidOperationException("blob 503");
-            return _content is null ? null : (_content, "v" + _version);
-        }
-
-        public string? CurrentETag()
-        {
-            if (Down) throw new InvalidOperationException("blob 503");
-            return _content is null ? null : "v" + _version;
-        }
-
-        public bool TryWrite(byte[] content, string? ifMatch)
-        {
-            var hook = BeforeWrite;
-            BeforeWrite = null;
-            hook?.Invoke(this);
-            string? now = _content is null ? null : "v" + _version;
-            if (now != ifMatch) return false;
-            _content = content;
-            _version++;
-            Writes++;
-            return true;
-        }
-    }
-
-    private readonly MemoryBlob _blob = new();
-
-    private static JsonObject Section(MemoryBlob blob) => (JsonObject)SettingsFile.Parse(blob.Text!)["HiveBDC"]!;
+    private static JsonObject Section(MemoryETagBlob blob) => (JsonObject)SettingsFile.Parse(blob.Text!)["HiveBDC"]!;
 
     [Fact]
     public void AFirstWriteCreatesTheBlobWithTheProductSection()
@@ -210,5 +162,5 @@ public sealed class SettingsBlobTests
     [InlineData("http://account.blob.core.windows.net/settings/hivebdc.json")]
     [InlineData("hivebdc.json")]
     public void ASettingsBlobAddressWithoutContainerAndNameIsRefused(string url)
-        => Assert.Throws<ArgumentException>(() => AzureSettingsBlob.For(url, null));
+        => Assert.Throws<ArgumentException>(() => AzureETagBlob.For(url, null));
 }

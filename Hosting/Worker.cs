@@ -40,15 +40,17 @@ public sealed class Worker : BackgroundService
     private DateTime _lastHoldLogUtc = DateTime.MinValue;
     private static readonly TimeSpan HoldLogEvery = TimeSpan.FromMinutes(5);
     private readonly ILicenseTenant _licenseTenant;
+    private readonly ILicenseStore _licenseStore;
 
     public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, IStateStore ledger, DocumentTypeRegistry registry,
-        IProcessingGate? gate = null, ILicenseTenant? licenseTenant = null)
+        IProcessingGate? gate = null, ILicenseTenant? licenseTenant = null, ILicenseStore? licenseStore = null)
     {
         _optsMonitor = opts;
         _log = log;
         _ledger = ledger;
         _gate = gate ?? new LocalProcessingGate();
         _licenseTenant = licenseTenant ?? new SettingsLicenseTenant();
+        _licenseStore = licenseStore ?? new FileLicenseStore();
         _processor = new DocumentProcessor(log, registry, ledger);
         _imports = new ImportProcessor(log, ledger);
         _blobs = new BlobStager(log, ledger);
@@ -196,8 +198,7 @@ public sealed class Worker : BackgroundService
 
                 // Re-check the license every cycle (cheap) so expiry/renewal is picked up
                 // without a service restart. Log only when the state changes to avoid spam.
-                var license = LicenseValidator.Validate(
-                    opts.License.File, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+                var license = _licenseStore.Check(opts, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
                 if (license.State != _lastLicenseState)
                 {
                     LicenseLogging.Report(_log, license);

@@ -14,6 +14,7 @@ using Serilog;
 //                        HiveBDC --test-sharepoint   (verify SharePoint AUTH and the first configured company target)
 //                        HiveBDC --test-mail         (verify the mail app registration and sender mailbox; sends nothing)
 //                        HiveBDC --test-license      (verify the license file: signature, tenant binding, expiry)
+//                        HiveBDC --install-license <file.lic>  (check a license and store it: the file locally, the blob in Azure)
 //                        HiveBDC --word-read <file.docx>            (print the JSON and problems Hive BDC reads from a Word invoice)
 //                        HiveBDC --word-pdf <file.docx> [out.pdf]   (render a Word invoice to PDF with the built-in renderer)
 //                        HiveBDC --word-template <out.docx>         (write the generic Hive BDC Word invoice template)
@@ -45,7 +46,7 @@ string procName = System.IO.Path.GetFileNameWithoutExtension(Environment.Process
 bool looksLikeSetup = procName.Contains("setup", StringComparison.OrdinalIgnoreCase)
                    || procName.Contains("install", StringComparison.OrdinalIgnoreCase);
 bool anyCommand = Has("install") || Has("--install") || Has("uninstall") || Has("--uninstall")
-               || once || makeSample || Has("--dump-embedded") || testSharePoint || testLicense;
+               || once || makeSample || Has("--dump-embedded") || testSharePoint || testLicense || Has("--install-license");
 if (looksLikeSetup && !anyCommand && !WindowsServiceHelpers.IsWindowsService())
     return Installer.RunInstall(args);
 
@@ -59,6 +60,11 @@ var dumpIdx = Array.FindIndex(args, a => a.Equals("--dump-embedded", StringCompa
 if (dumpIdx >= 0 && dumpIdx + 1 < args.Length)
     dumpTarget = args[dumpIdx + 1];
 
+string? installLicenseFile = null;
+var licenseIdx = Array.FindIndex(args, a => a.Equals("--install-license", StringComparison.OrdinalIgnoreCase));
+if (licenseIdx >= 0 && licenseIdx + 1 < args.Length)
+    installLicenseFile = args[licenseIdx + 1];
+
 // Flags / non-config args are stripped before handing the rest to the command-line
 // config provider (which only understands the --input/--output/--poll value options).
 var flagSet = new[] { "--once", "--make-sample", "--watch", "-w", "--test-sharepoint", "--test-mail", "--test-license" };
@@ -68,6 +74,7 @@ for (int i = 0; i < args.Length; i++)
     var a = args[i];
     if (flagSet.Contains(a, StringComparer.OrdinalIgnoreCase)) continue;
     if (a.Equals("--dump-embedded", StringComparison.OrdinalIgnoreCase)) { i++; continue; } // skip its value
+    if (a.Equals("--install-license", StringComparison.OrdinalIgnoreCase)) { i++; continue; }
     configArgs.Add(a);
 }
 
@@ -112,6 +119,7 @@ string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json")
 ISettingsDocument settingsDocument = new FileSettingsDocument(settingsPath);
 BlobSettingsProvider? settingsBlob = null;
 ILicenseTenant licenseTenant = new SettingsLicenseTenant();
+ILicenseStore licenseStore = new FileLicenseStore();
 if (runMode == RunModes.Azure)
 {
     // The licence is bound to the tenant of the instance's own identity, never to a tenant typed into the settings.
@@ -129,7 +137,10 @@ if (runMode == RunModes.Azure)
     // document types would merge index by index into the blob's list). Environment and command line still win.
     if (azureRun.SettingsBlobUrl.Trim().Length > 0)
     {
-        var blob = AzureSettingsBlob.For(azureRun.SettingsBlobUrl.Trim(), azureRun.StorageConnection.Trim());
+        var blob = AzureETagBlob.For(azureRun.SettingsBlobUrl.Trim(), azureRun.StorageConnection.Trim());
+        // The licence the user uploads lives next to the settings (Ertugrul 2026-11-17): the app folder is read-only.
+        licenseStore = new BlobLicenseStore(AzureETagBlob.For(
+            AzureETagBlob.SiblingUrl(azureRun.SettingsBlobUrl.Trim(), "license.lic"), azureRun.StorageConnection.Trim()));
         settingsBlob = new BlobSettingsProvider(blob, TimeSpan.FromSeconds(Math.Max(5, azureRun.SettingsPollSeconds)));
         var document = new BlobSettingsDocument(blob);
         document.Changed += settingsBlob.Refresh;
@@ -161,6 +172,7 @@ else
     return 3;
 }
 builder.Services.AddSingleton(licenseTenant);
+builder.Services.AddSingleton(licenseStore);
 builder.Services.AddSingleton(sp =>
     new DocumentTypeRegistry(settingsDocument, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
 builder.Services.AddHostedService<Worker>();
@@ -224,7 +236,26 @@ if (legacySection)
 // The service Worker re-checks this each cycle; here we log the startup status
 // and handle --test-license / --once. A valid license is always required — a
 // missing/invalid/expired-past-grace license stops processing.
-var license = LicenseValidator.Validate(opts.License.File, licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+if (installLicenseFile is not null)
+{
+    string content;
+    try { content = File.ReadAllText(installLicenseFile); }
+    catch (Exception ex)
+    {
+        log.LogCritical("The license file {File} could not be read: {Error}", installLicenseFile, ex.Message);
+        return 1;
+    }
+    var (checkedLicense, stored) = licenseStore.Install(opts, content, licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+    if (!stored)
+    {
+        log.LogCritical("License not installed, {State}: {Message}", checkedLicense.State, checkedLicense.Message);
+        return 1;
+    }
+    log.LogInformation("License installed in {Where}, {State}: {Message}", licenseStore.Where(opts), checkedLicense.State, checkedLicense.Message);
+    return 0;
+}
+
+var license = licenseStore.Check(opts, licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
 LicenseLogging.Report(log, license);
 if (testLicense)
     return license.Blocked ? 1 : 0;

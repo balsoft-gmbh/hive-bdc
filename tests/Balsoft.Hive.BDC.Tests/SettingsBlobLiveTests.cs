@@ -19,7 +19,7 @@ public sealed class SettingsBlobLiveTests : IDisposable
     [SettingsBlobLiveFact]
     public void ARealBlobKeepsTheETagRulesAndTheProviderReadsIt()
     {
-        var blob = AzureSettingsBlob.For(_url, null);
+        var blob = AzureETagBlob.For(_url, null);
         Assert.Null(blob.Read());
         Assert.Null(blob.CurrentETag());
 

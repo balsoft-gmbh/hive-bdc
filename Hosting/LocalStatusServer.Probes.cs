@@ -129,30 +129,23 @@ public sealed partial class LocalStatusServer
         { Respond(ctx, 400, new { ok = false, message = "No license content provided." }); return; }
 
         var opts = Snapshot();
-        var result = LicenseValidator.ValidateContent(
-            content, opts.SharePointAuth.TenantId, DateOnly.FromDateTime(DateTime.Today));
+        LicenseResult result;
+        bool stored;
+        try
+        {
+            (result, stored) = new FileLicenseStore().Install(opts, content, opts.SharePointAuth.TenantId, DateOnly.FromDateTime(DateTime.Today));
+        }
+        catch (Exception ex)
+        { Respond(ctx, 500, new { ok = false, message = "Could not install the license: " + ex.Message }); return; }
 
         // Refuse anything that wouldn't actually license the install (tampered/wrong-tenant/
         // wrong-product => Invalid; already past grace => Expired). Valid/Warning/Grace install.
-        if (result.State is LicenseState.Invalid or LicenseState.Expired)
+        if (!stored)
         {
             _log.LogWarning("License upload REJECTED via /license — {State}: {Message}", result.State, result.Message);
             Respond(ctx, 400, new { ok = false, state = result.State.ToString(), message = result.Message });
             return;
         }
-
-        string target = LicenseValidator.DefaultInstallPath(opts.License.File);
-        try
-        {
-            string dir = Path.GetDirectoryName(target)!;
-            Directory.CreateDirectory(dir);
-            string tmp = Path.Combine(dir, $".license.{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(tmp, content.Trim());
-            try { File.Move(tmp, target, overwrite: true); }
-            catch { try { File.Delete(tmp); } catch { /* best effort */ } throw; }
-        }
-        catch (Exception ex)
-        { Respond(ctx, 500, new { ok = false, message = "Could not install the license: " + ex.Message }); return; }
 
         _log.LogInformation("License installed via /license — {State}: {Message}", result.State, result.Message);
         Respond(ctx, 200, new

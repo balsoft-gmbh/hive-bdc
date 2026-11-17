@@ -274,7 +274,10 @@ A local install checks the tenant against the SharePoint app's tenant in the
 settings. An Azure instance checks it against the tenant of its own identity (the
 `tid` of its managed identity's access token), which the settings cannot change;
 while that tenant cannot be determined, the instance takes no documents and a
-tenant-bound licence is not accepted.
+tenant-bound licence is not accepted. An Azure instance keeps its licence as
+`license.lic` next to its settings blob (the app folder is read-only there); the
+licence is checked against the instance's tenant before it is stored, and a
+foreign, expired or tampered one never replaces a working one.
 
 ## Updates
 
@@ -566,6 +569,7 @@ HiveBDC.exe --make-sample   # write one sample per built-in document type to the
 HiveBDC.exe --test-sharepoint
 HiveBDC.exe --test-mail     # verify the mail app registration + sender mailbox (sends nothing)
 HiveBDC.exe --test-license  # verify the licence (signature, tenant, expiry, features)
+HiveBDC.exe --install-license <file.lic>  # check a licence and store it (the licence file locally, license.lic next to the settings blob in Azure)
 HiveBDC.exe --dump-embedded <zugferd.pdf>
 HiveBDC.exe --word-read <invoice.docx>             # the JSON, totals and problems Hive BDC reads from a Word invoice
 HiveBDC.exe --word-pdf <invoice.docx> [out.pdf]    # render a Word invoice with the built-in renderer
@@ -598,12 +602,13 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
   Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint and mail
                               targets, DocumentFile (a produced file as name, content type and content)
   Licensing/                  LicenseValidator (offline, cached per file version), LicenseTenant (the tenant a
-                              licence must name: the settings locally, the instance identity in Azure)
+                              licence must name: the settings locally, the instance identity in Azure),
+                              LicenseStore (where the licence lives: a file locally, a blob in Azure)
   Storage/                    IStateStore, ExportLedger (SQLite: exports, deliveries, document history),
                               TableStateStore (the same in Azure Table Storage, for the Azure run mode;
                               AzureTableRows behind ITableRows), SecretProtector (DPAPI locally, "kv:" Key Vault
                               references in Azure; KeyVaultSecretVault), SettingsBlob (settings of an
-                              Azure instance: AzureSettingsBlob, BlobSettingsDocument, BlobSettingsProvider)
+                              Azure instance: AzureETagBlob, BlobSettingsDocument, BlobSettingsProvider)
   Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate),
                               LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
                               ServiceAccount, SampleData
