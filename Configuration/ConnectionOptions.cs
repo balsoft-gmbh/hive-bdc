@@ -5,6 +5,7 @@ public static class ConnectionKinds
 {
     public const string DocuWare = "docuware";
     public const string AzureStorage = "azure-storage";
+    public const string Https = "https";
 }
 
 /// <summary>
@@ -44,6 +45,14 @@ public sealed class ConnectionOptions
                 problems.Add($"Connection '{Id}': the DocuWare address must start with https://, for example https://yourcompany.docuware.cloud.");
             if (Setting("UserName").Length == 0) problems.Add($"Connection '{Id}': the DocuWare user name is empty.");
             if (Secret.Length == 0) problems.Add($"Connection '{Id}': the DocuWare password is empty.");
+        }
+        if (Kind == ConnectionKinds.Https)
+        {
+            string url = Setting("Url");
+            if (url.Length > 0 && !(Uri.TryCreate(url, UriKind.Absolute, out var endpoint) && endpoint.Scheme == Uri.UriSchemeHttps))
+                problems.Add($"Connection '{Id}': the address must start with https://.");
+            if (url.Length == 0 && Secret.Length == 0)
+                problems.Add($"Connection '{Id}': give the address, or for a Logic App or Power Automate trigger its whole URL as the secret.");
         }
         if (Kind == ConnectionKinds.AzureStorage && Secret.Length == 0
             && !(Uri.TryCreate(Setting("AccountUrl"), UriKind.Absolute, out var account) && account.Scheme == Uri.UriSchemeHttps))

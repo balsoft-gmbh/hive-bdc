@@ -58,7 +58,7 @@ public sealed class DestinationCatalogTests
         };
         var list = DestinationCatalog.Describe(ConnectorRegistry.BuiltIn(), new SourceRuntime(options, NullLogger.Instance));
 
-        Assert.Equal(new[] { "sharepoint", "docuware", "blob" }, list.Select(d => d.Kind));
+        Assert.Equal(new[] { "sharepoint", "docuware", "blob", "https" }, list.Select(d => d.Kind));
         var docuWare = list.Single(d => d.Kind == "docuware");
         Assert.False(docuWare.Connected);
         Assert.Equal(new[] { "FileCabinet", "MatchField" }, docuWare.Descriptor.Settings.Select(s => s.Key));
@@ -68,6 +68,9 @@ public sealed class DestinationCatalogTests
         Assert.True(blob.Connected);
         Assert.Null(blob.Descriptor.FieldsLookup);
         Assert.Equal(new[] { "Container", "Prefix", "Status" }, blob.Descriptor.Settings.Select(s => s.Key));
+        var https = list.Single(d => d.Kind == "https");
+        Assert.False(https.Connected);
+        Assert.Equal(new[] { "Path" }, https.Descriptor.Settings.Select(s => s.Key));
     }
 
     [Fact]

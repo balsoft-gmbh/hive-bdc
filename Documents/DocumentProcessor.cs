@@ -294,7 +294,7 @@ public sealed partial class DocumentProcessor
                 delivered = target.Deliver(new DeliveryContext(route, type, options, data, json.RootElement,
                     documentId, documentNumber, produced, previous, tag, Warn, _log));
             }
-            catch (DocuWareException ex) when (ex.RetryLater)
+            catch (ConnectorException ex) when (ex.RetryLater)
             {
                 throw new PendingDocumentException($"{TargetLabel(options.Kind)}: {ex.Message} Hive BDC tries again on the next scan.");
             }

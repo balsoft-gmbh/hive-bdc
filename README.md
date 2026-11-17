@@ -599,8 +599,8 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               DocumentTypeRegistry (auto-registration), SharePointFieldTemplate
   EInvoice/                   InvoiceMapper (JSON -> EN 16931), EInvoiceGenerator, PdfRepair
   Delivery/                   MailSender (Graph), SharePointUploader (Graph)
-  Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint and mail
-                              targets, DocumentFile (a produced file as name, content type and content)
+  Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint, mail, DocuWare,
+                              blob and HTTPS targets, DocumentFile (a produced file as name, content type and content)
   Licensing/                  LicenseValidator (offline, cached per file version), LicenseTenant (the tenant a
                               licence must name: the settings locally, the instance identity in Azure),
                               LicenseStore (where the licence lives: a file locally, a blob in Azure)
@@ -695,6 +695,30 @@ only that company entry with a message; every other entry keeps running. An entr
 without further targets is saved without the `Targets` key, so the file stays
 readable by earlier versions, and a save from a dashboard that does not send targets
 keeps the stored ones.
+
+A target that says "try again later" (DocuWare busy, an HTTPS endpoint that answers
+408, 429 or 5xx or does not answer) leaves the document waiting in the input folder;
+the next scan tries again. Any other refusal sends it to `error\` with the reason.
+
+### HTTPS target (Logic App, Power Automate, own API)
+
+A target of kind `https` posts each produced document as JSON to the address of its
+`https` connection, plus the optional `Settings.Path`:
+
+```json
+{ "documentId": "...", "documentNumber": "RE-1", "documentType": "SalesInvoice", "dataAreaId": "1000",
+  "fileName": "RE-1.pdf", "contentType": "application/pdf", "content": "<base64>",
+  "fields": { "number": "RE-1" }, "previousId": "only on a repeat" }
+```
+
+`fields` are the target's `Fields` templates filled from the document. When the
+endpoint answers `{"id": ...}`, that id is kept and sent as `previousId` if the same
+document is delivered again, so the receiver can update instead of adding. The
+connection holds the address (`Settings.Url`), the header for the key
+(`Settings.HeaderName`, default `x-api-key`) and the key as its secret. For a Logic
+App or Power Automate trigger, leave the address empty and keep the whole trigger URL
+as the secret: its `sig=` part is a key, and log lines and the document history name
+only host and path. The connection test asks the address with `GET` and sends nothing.
 
 ### Settings
 
