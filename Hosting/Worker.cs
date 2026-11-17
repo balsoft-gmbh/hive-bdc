@@ -35,12 +35,18 @@ public sealed class Worker : BackgroundService
     private static readonly TimeSpan IdleHeartbeat = TimeSpan.FromMinutes(5);
     private DateTime _lastLogCleanupUtc = DateTime.MinValue;
     private DateTime _lastLicenseHoldLogUtc = DateTime.MinValue;
+    private readonly IProcessingGate _gate;
+    private string? _lastHold;
+    private DateTime _lastHoldLogUtc = DateTime.MinValue;
+    private static readonly TimeSpan HoldLogEvery = TimeSpan.FromMinutes(5);
 
-    public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, IStateStore ledger, DocumentTypeRegistry registry)
+    public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, IStateStore ledger, DocumentTypeRegistry registry,
+        IProcessingGate? gate = null)
     {
         _optsMonitor = opts;
         _log = log;
         _ledger = ledger;
+        _gate = gate ?? new LocalProcessingGate();
         _processor = new DocumentProcessor(log, registry, ledger);
         _imports = new ImportProcessor(log, ledger);
         _blobs = new BlobStager(log, ledger);
@@ -159,6 +165,27 @@ public sealed class Worker : BackgroundService
                 // A new type (from Settings, or auto-registered by the processor) is worth one line.
                 if (opts.DocumentTypes.Count != _lastDocumentTypeCount)
                     LogDocumentTypes(opts);
+
+                // The Azure run mode waits while its settings, Table Storage or Key Vault are not usable: nothing is
+                // taken from a source, so nothing is lost and the documents are taken once the reason is gone.
+                string? hold = _gate.Hold(opts);
+                if (hold is not null)
+                {
+                    if (hold != _lastHold || DateTime.UtcNow - _lastHoldLogUtc >= HoldLogEvery)
+                    {
+                        _log.LogWarning("cycle: no document taken, {Reason}", hold);
+                        _lastHoldLogUtc = DateTime.UtcNow;
+                    }
+                    _lastHold = hold;
+                    try { await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, opts.PollSeconds)), stoppingToken); }
+                    catch (TaskCanceledException) { break; }
+                    continue;
+                }
+                if (_lastHold is not null)
+                {
+                    _log.LogInformation("cycle: taking documents again, the reason to wait is gone.");
+                    _lastHold = null;
+                }
 
                 // Daily housekeeping: drop ledger rows older than the retention window so
                 // hive.db stays bounded (self-throttles to once/24h; lifetime total kept).

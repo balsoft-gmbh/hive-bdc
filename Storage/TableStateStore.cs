@@ -312,6 +312,30 @@ public sealed class TableStateStore : IStateStore
         }
     }
 
+    /// <summary>
+    /// Whether the tables answer now (one read of the counter row, plus the first load). The Azure run mode takes no
+    /// document from a source while this is false, so nothing is delivered without a ledger entry (failure case 37).
+    /// </summary>
+    public bool Reachable(out string? problem)
+    {
+        lock (_gate)
+        {
+            try
+            {
+                Load();
+                _rows.Get(_meta, MetaPartition, LifetimeRow);
+                problem = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Forget();
+                problem = ex.Message;
+                return false;
+            }
+        }
+    }
+
     public void PruneIfDue(int retentionDays = ExportLedger.DefaultRetentionDays)
     {
         var now = _clock.GetUtcNow().UtcDateTime;

@@ -51,6 +51,38 @@ public sealed partial class SecretResolver
 
     public bool UsesVault => _vault is not null;
 
+    private const string ProbeName = "hivebdc-reachability-check";
+    private (DateTimeOffset At, string? Problem)? _lastProbe;
+
+    /// <summary>
+    /// Whether the vault answers (a read of a secret that need not exist), asked at most once a minute. The Azure run
+    /// mode takes no document from a source while this is false (failure case 17).
+    /// </summary>
+    public bool VaultReachable(out string? problem)
+    {
+        if (_vault is null) { problem = null; return true; }
+        var now = _clock.GetUtcNow();
+        lock (_gate)
+        {
+            if (_lastProbe is { } last && now - last.At < TimeSpan.FromMinutes(1))
+            {
+                problem = last.Problem;
+                return problem is null;
+            }
+        }
+        try
+        {
+            _vault.Get(ProbeName);
+            problem = null;
+        }
+        catch (Exception ex)
+        {
+            problem = ex.Message;
+        }
+        lock (_gate) _lastProbe = (now, problem);
+        return problem is null;
+    }
+
     public static bool IsProtected(string value)
         => value.StartsWith(LocalPrefix, StringComparison.Ordinal) || value.StartsWith(VaultPrefix, StringComparison.Ordinal);
 

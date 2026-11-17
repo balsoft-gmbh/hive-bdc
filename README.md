@@ -596,7 +596,8 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               TableStateStore (the same in Azure Table Storage, for the Azure run mode;
                               AzureTableRows behind ITableRows), SecretProtector (DPAPI locally, "kv:" Key Vault
                               references in Azure; KeyVaultSecretVault)
-  Hosting/                    Worker, LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
+  Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate),
+                              LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
 app/HiveBDC.App/          the WPF dashboard (own project, loopback client only)
@@ -810,6 +811,32 @@ an F&O receive flow; with `"Status": "true"` it also writes
 An `azure-storage` connection holds the storage connection string as its secret, or,
 in Azure, the account address in `Settings.AccountUrl`, signing in with the managed
 identity.
+
+### Azure run mode (in development, 1.8.0)
+
+The same program runs as an Azure web app. The deployment sets, as app settings:
+
+| Setting | Meaning |
+|---|---|
+| `HiveBDC__RunMode` | `azure` (default `local`) |
+| `HiveBDC__Azure__TableEndpoint` | `https://{account}.table.core.windows.net`; the state (exports, deliveries, document history) lives there, signed in with the managed identity |
+| `HiveBDC__Azure__StorageConnection` | instead of the endpoint, a storage connection string (as an App Service Key Vault reference) |
+| `HiveBDC__Azure__TablePrefix` | table name prefix, default `HiveBDC` |
+| `HiveBDC__Azure__KeyVaultUrl` | `https://{vault}.vault.azure.net`; every secret in the settings is then `kv:{secret name}` |
+
+In Azure there is no loopback API for the Windows app. The service takes no document
+from a source while one of these holds, and says why in the log (when the reason
+changes, then every 5 minutes):
+
+- the settings use what only a local install has: a company that reads a folder
+  instead of Blob Storage, Word input, a company that only writes to its output
+  folder, an inbound flow that writes to a folder, or a secret kept in the settings
+  instead of a `kv:` reference. Each is named with its type and company or flow;
+- Table Storage cannot be reached;
+- Key Vault cannot be reached (asked at most once a minute).
+
+Without a table endpoint or connection string, or with an unknown run mode, the
+program does not start (exit code 3); `--once` exits with 2 while it would wait.
 
 ### Inbound flows (DocuWare, SharePoint)
 

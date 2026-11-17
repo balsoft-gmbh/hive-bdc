@@ -102,9 +102,39 @@ builder.Configuration.AddCommandLine(configArgs.ToArray(), switchMappings);
 // without a service restart. The section binding below participates in that reload.
 builder.Services.Configure<BDCOptions>(builder.Configuration.GetSection(sectionName));
 builder.Services.AddWindowsService(o => o.ServiceName = "HiveBDC");
-builder.Services.AddSingleton(sp =>
-    ExportLedger.CreateIfMissing(sp.GetRequiredService<ILoggerFactory>().CreateLogger("ExportLedger")));
-builder.Services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<ExportLedger>());
+
+// Run mode: "local" (default; SQLite ledger, DPAPI, loopback API for the Windows app) or "azure" (Table Storage,
+// Key Vault references, no loopback API). The Azure settings come from the deployment (HiveBDC__RunMode,
+// HiveBDC__Azure__*), never from the dashboard.
+string runMode = RunModes.Clean(builder.Configuration[$"{sectionName}:RunMode"]);
+var azureRun = builder.Configuration.GetSection($"{sectionName}:Azure").Get<AzureRunOptions>() ?? new AzureRunOptions();
+if (runMode == RunModes.Azure)
+{
+    if (azureRun.TableEndpoint.Trim().Length == 0 && azureRun.StorageConnection.Trim().Length == 0)
+    {
+        Console.Error.WriteLine("Run mode azure needs HiveBDC:Azure:TableEndpoint (or StorageConnection) for its state in Table Storage.");
+        return 3;
+    }
+    if (azureRun.KeyVaultUrl.Trim().Length > 0)
+        SecretProtector.UseVault(KeyVaultSecretVault.For(azureRun.KeyVaultUrl.Trim()));
+    builder.Services.AddSingleton(sp => new TableStateStore(
+        AzureTableRows.For(azureRun.StorageConnection.Trim(), azureRun.TableEndpoint.Trim()),
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("TableStateStore"), azureRun.TablePrefix.Trim()));
+    builder.Services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<TableStateStore>());
+    builder.Services.AddSingleton<IProcessingGate>(sp => new AzureProcessingGate(sp.GetRequiredService<TableStateStore>(), SecretProtector.Current));
+}
+else if (runMode == RunModes.Local)
+{
+    builder.Services.AddSingleton(sp =>
+        ExportLedger.CreateIfMissing(sp.GetRequiredService<ILoggerFactory>().CreateLogger("ExportLedger")));
+    builder.Services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<ExportLedger>());
+    builder.Services.AddSingleton<IProcessingGate, LocalProcessingGate>();
+}
+else
+{
+    Console.Error.WriteLine($"Unknown run mode '{runMode}'; use local or azure.");
+    return 3;
+}
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 builder.Services.AddSingleton(sp =>
     new DocumentTypeRegistry(settingsPath, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
@@ -127,11 +157,12 @@ if (OperatingSystem.IsWindows())
 // Loopback config + status API for the companion desktop app. Reads are observational;
 // POST /config writes appsettings.json atomically (the file-watcher then hot-reloads it).
 var appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
-builder.Services.AddSingleton<IHostedService>(sp => new LocalStatusServer(
-    sp.GetRequiredService<IOptionsMonitor<BDCOptions>>(),
-    sp.GetRequiredService<IStateStore>(),
-    sp.GetRequiredService<ILogger<LocalStatusServer>>(),
-    resolvedLogDir, appVersion, settingsPath));
+if (runMode == RunModes.Local)
+    builder.Services.AddSingleton<IHostedService>(sp => new LocalStatusServer(
+        sp.GetRequiredService<IOptionsMonitor<BDCOptions>>(),
+        sp.GetRequiredService<IStateStore>(),
+        sp.GetRequiredService<ILogger<LocalStatusServer>>(),
+        resolvedLogDir, appVersion, settingsPath));
 
 using var host = builder.Build();
 
@@ -142,9 +173,17 @@ var log = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("HiveB
 
 // Startup banner: shows the effective config (incl. where the log file lives).
 log.LogInformation(
-    "Hive BDC, by Balsoft v{Version} — companies={Companies} [{Areas}] documentTypes={Types} folders={Folders} poll={Poll}s logDir={LogDir}",
-    appVersion, opts.CompanyIds().Count, string.Join(", ", opts.CompanyIds()),
+    "Hive BDC, by Balsoft v{Version} — runMode={RunMode} companies={Companies} [{Areas}] documentTypes={Types} folders={Folders} poll={Poll}s logDir={LogDir}",
+    appVersion, runMode, opts.CompanyIds().Count, string.Join(", ", opts.CompanyIds()),
     opts.DocumentTypes.Count, opts.ScanFolders().Count, opts.PollSeconds, resolvedLogDir ?? "(console only)");
+if (runMode == RunModes.Azure)
+{
+    log.LogInformation("Azure run mode: state in Table Storage ({Tables}, prefix {Prefix}), secrets {Secrets}.",
+        azureRun.TableEndpoint.Trim().Length > 0 ? azureRun.TableEndpoint.Trim() : "connection string", azureRun.TablePrefix.Trim(),
+        SecretProtector.Current.UsesVault ? "from Key Vault " + azureRun.KeyVaultUrl.Trim() : "not in Key Vault (no vault configured)");
+    foreach (var problem in AzureSettingsCheck.Problems(opts))
+        log.LogWarning("Not usable in Azure: {Problem}", problem);
+}
 if (legacySection)
     log.LogWarning(
         "Settings were read from the Hive DocFlow section \"HiveDocFlow\". Rename it to \"HiveBDC\" " +
@@ -197,13 +236,18 @@ if (testMail)
 
 if (once)
 {
+    if (host.Services.GetRequiredService<IProcessingGate>().Hold(opts) is { } hold)
+    {
+        log.LogCritical("One-shot scan skipped: {Reason}", hold);
+        return 2;
+    }
     if (license.Blocked)
     {
         log.LogCritical("One-shot scan skipped — no valid license.");
         return 2;
     }
     log.LogInformation("One-shot scan. folders={Folders} documentTypes={Types}", opts.ScanFolders().Count, opts.DocumentTypes.Count);
-    var ledger = host.Services.GetRequiredService<ExportLedger>();
+    var ledger = host.Services.GetRequiredService<IStateStore>();
     var registry = host.Services.GetRequiredService<DocumentTypeRegistry>();
     var uploader = opts.AnySharePointEnabled() ? SharePointUploader.Create(opts.SharePointAuth, log) : null;
     var mailer = MailSender.Create(opts.Mail, opts.SharePointAuth, log);
