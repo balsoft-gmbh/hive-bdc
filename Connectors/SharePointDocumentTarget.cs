@@ -18,7 +18,7 @@ public sealed class SharePointDocumentTarget(SharePointUploader? uploader) : IDo
         var target = sp.ResolveTarget(out var reason);
         if (target is null)
             throw new InvalidOperationException($"SharePoint upload for '{ctx.Type.Id}' / company '{ctx.Route.DataAreaId}': {reason} " +
-                "Set the site URL and library on that company entry in Settings > Document types.");
+                "Set the site URL and library on that company in Settings > Outbound.");
 
         var fields = SharePointFieldTemplate.Resolve(ctx.Document, sp.Fields, ctx.Warn);
         var empty = sp.Fields.Keys.Where(k => !fields.ContainsKey(k)).ToList();

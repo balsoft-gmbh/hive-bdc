@@ -1,4 +1,5 @@
 using System.Windows;
+using Balsoft.Hive.BDC.App.Services;
 using Balsoft.Hive.BDC.App.ViewModels;
 
 namespace Balsoft.Hive.BDC.App;
@@ -18,6 +19,7 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _vm = vm;
         DataContext = vm;
+        vm.UnsavedSecrets = () => (DocuWareSecretBox.Password, SecretBox.Password);
         Loaded += OnLoaded;
     }
 
@@ -92,6 +94,7 @@ public partial class SettingsWindow : Window
             case RouteRow r: r.ConfirmRemove = ask; break;
             case TargetRow d: d.ConfirmRemove = ask; break;
             case ImportFlowRow i: i.ConfirmRemove = ask; break;
+            case InboundTypeRow g: g.ConfirmRemove = ask; break;
         }
     }
 
@@ -150,41 +153,32 @@ public partial class SettingsWindow : Window
         _vm.RefreshSummaries();
     }
 
-    private async void OnAddImport(object sender, RoutedEventArgs e) => await EditImport(null);
-
-    private void OnRemoveImportCard(object sender, RoutedEventArgs e)
+    private void OnOpenInboundType(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not ImportFlowRow flow) return;
-        _vm.SelectedFlow = flow;
-        _vm.RemoveFlowCommand.Execute(null);
+        if ((sender as FrameworkElement)?.DataContext is InboundTypeRow type) _vm.OpenInboundType(type);
     }
 
-    private async void OnEditImportCard(object sender, RoutedEventArgs e)
+    private void OnRemoveInboundType(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not ImportFlowRow flow) return;
-        _vm.SelectedFlow = flow;
-        if (!flow.IsDocuWare)
-        {
-            MessageBox.Show(this, "This import was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        await EditImport(flow);
+        if ((sender as FrameworkElement)?.DataContext is InboundTypeRow type) _vm.RemoveInboundType(type);
     }
 
-    private async Task EditImport(ViewModels.ImportFlowRow? existing)
+    private void OnOpenInboundCompany(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))
-        {
-            MessageBox.Show(this, "Connect DocuWare under Connections first (address, user name, password), then add the import.",
-                "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        var vm = _vm.CreateImportFlow(DocuWareSecretBox.Password, existing);
-        var dialog = new ImportFlowWindow(vm) { Owner = this };
-        await Task.Yield();
-        if (dialog.ShowDialog() == true) _vm.PutFlow(vm, existing);
+        if ((sender as FrameworkElement)?.DataContext is ImportFlowRow row) _vm.OpenInboundCompany(row);
     }
+
+    private void OnRemoveInboundCompany(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ImportFlowRow row) _vm.RemoveInboundCompany(row);
+    }
+
+    private void OnPickSource(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SourceInfoDto source) _vm.PickSource(source);
+    }
+
+    private async void OnChangeSource(object sender, RoutedEventArgs e) => await _vm.ChangeInboundSource();
 
     private async Task EditDocuWareTarget(ViewModels.RouteRow row, ViewModels.TargetRow? existing)
     {

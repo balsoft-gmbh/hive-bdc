@@ -54,9 +54,18 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
         + (Enabled ? "" : " · disabled") + (Discovered ? " · auto-registered" : "");
 
     /// <summary>Card lines on the Export page.</summary>
-    public string StatusText => !Enabled ? "Switched off"
-        : Companies.Count == 0 ? "Needs setup · no company yet"
-        : $"Active · {Companies.Count} compan{(Companies.Count == 1 ? "y" : "ies")}";
+    public string StatusText
+    {
+        get
+        {
+            int on = Companies.Count(c => c.Enabled);
+            return !Enabled ? "Switched off"
+                : Companies.Count == 0 ? "Needs setup · no company yet"
+                : on == 0 ? "Active, but every company is switched off"
+                : on == Companies.Count ? $"Active · {on} compan{(on == 1 ? "y" : "ies")}"
+                : $"Active · {on} of {Companies.Count} companies on";
+        }
+    }
 
     /// <summary>ok, setup or off: picks the colour of the status dot.</summary>
     public string StatusKind => !Enabled ? "off" : Companies.Count == 0 ? "setup" : "ok";
@@ -76,7 +85,7 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
     [ObservableProperty] private bool _mailConnected;
 
     /// <summary>on, waiting (switched on but mail is not connected) or off.</summary>
-    public string MailState => !Companies.Any(c => c.Mail) ? "off" : MailConnected ? "on" : "waiting";
+    public string MailState => !Companies.Any(c => c.Mail && c.Enabled) ? "off" : MailConnected ? "on" : "waiting";
 
     partial void OnMailConnectedChanged(bool value) => OnPropertyChanged(nameof(MailState));
 

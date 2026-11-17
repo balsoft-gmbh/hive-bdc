@@ -5,10 +5,10 @@ using Microsoft.Extensions.Logging;
 namespace Balsoft.Hive.BDC.Documents;
 
 /// <summary>
-/// Runs the flows that start outside the ERP (<see cref="BDCOptions.Flows"/>): finds the DocuWare documents marked
-/// ready, writes for each a CSV (and its file) into the folder the ERP reads, then marks the document done in DocuWare.
-/// Every record gets a history like an exported document. A record whose files were written but whose done mark
-/// failed is not written again: the next run only repeats the mark.
+/// Runs the inbound flows (<see cref="BDCOptions.Flows"/>): finds the records a document system marks ready, writes for
+/// each a CSV (and its file) into the folder the ERP reads, then marks the record done in that system. The system is a
+/// source connector by kind (<see cref="IRecordSource"/>). Every record gets a history like an outbound document. A
+/// record whose files were written but whose done mark failed is not written again: the next run only repeats the mark.
 /// </summary>
 public sealed class ImportProcessor
 {
@@ -18,23 +18,35 @@ public sealed class ImportProcessor
 
     private readonly ILogger _log;
     private readonly IStateStore? _state;
-    private readonly Func<ConnectionOptions, DocuWareClient> _clients;
+    private readonly ConnectorRegistry _connectors;
     private readonly Dictionary<string, DateTime> _failedUntil = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _warned = new(StringComparer.Ordinal);
 
-    public ImportProcessor(ILogger log, IStateStore? state, Func<ConnectionOptions, DocuWareClient>? clients = null)
+    public ImportProcessor(ILogger log, IStateStore? state, ConnectorRegistry? connectors = null)
     {
         _log = log;
         _state = state;
-        _clients = clients ?? DocuWareClients.For;
+        _connectors = connectors ?? ConnectorRegistry.BuiltIn();
+    }
+
+    /// <summary>DocuWare with its own client factory (tests use a fake DocuWare behind it).</summary>
+    public ImportProcessor(ILogger log, IStateStore? state, Func<ConnectionOptions, DocuWareClient> clients)
+        : this(log, state, WithDocuWare(clients)) { }
+
+    private static ConnectorRegistry WithDocuWare(Func<ConnectionOptions, DocuWareClient> clients)
+    {
+        var registry = ConnectorRegistry.BuiltIn();
+        registry.RegisterSource(ConnectionKinds.DocuWare, runtime => new DocuWareRecordSource(runtime, clients));
+        return registry;
     }
 
     public DocumentProcessor.ScanResult RunOnce(BDCOptions opts, LicenseResult license)
     {
         var result = new DocumentProcessor.ScanResult();
+        var runtime = new SourceRuntime(opts, _log);
         foreach (var flow in opts.Flows.Where(f => f.Enabled))
         {
-            try { result += RunFlow(opts, flow, license); }
+            try { result += RunFlow(runtime, flow, license); }
             catch (Exception ex)
             {
                 WarnOnce(flow.Id, $"flow {flow.DisplayName}: {ex.Message}");
@@ -44,59 +56,55 @@ public sealed class ImportProcessor
         return result;
     }
 
-    private DocumentProcessor.ScanResult RunFlow(BDCOptions opts, FlowOptions flow, LicenseResult license)
+    private DocumentProcessor.ScanResult RunFlow(SourceRuntime runtime, FlowOptions flow, LicenseResult license)
     {
-        if (flow.Source.Kind != ConnectionKinds.DocuWare)
+        var source = _connectors.Source(flow.Source.Kind, runtime);
+        if (source is null)
         { WarnOnce(flow.Id, $"flow {flow.DisplayName}: source kind '{flow.Source.Kind}' is not known to this version of Hive BDC."); return new(0, 0, 0); }
-        if (!license.HasFeature(LicenseFeatures.SharePoint))
-        { WarnOnce(flow.Id, $"flow {flow.DisplayName}: the installed licence has no 'sharepoint' feature, which DocuWare import needs."); return new(0, 0, 0); }
-        var connection = opts.Connection(flow.Source.Connection);
-        var problems = connection?.Problems() ?? new[] { $"The connection '{flow.Source.Connection}' is not set up (Settings > Connections)." };
-        string cabinet = flow.Source.Setting("FileCabinet"), readyField = flow.Source.Setting("ReadyField"),
-               readyValue = flow.Source.Setting("ReadyValue"), doneValue = flow.Source.Setting("DoneValue");
+        var d = source.Descriptor;
+        if (!license.HasFeature(d.RequiredFeature))
+        { WarnOnce(flow.Id, $"flow {flow.DisplayName}: the installed licence has no '{d.RequiredFeature}' feature, which {d.Name} import needs."); return new(0, 0, 0); }
+        var problems = source.Problems(flow.Source).ToList();
         string folder = flow.Targets.FirstOrDefault(t => t.Enabled && t.Kind == "folder")?.Setting("Folder") ?? "";
-        if (cabinet.Length == 0 || readyField.Length == 0 || readyValue.Length == 0 || doneValue.Length == 0)
-            problems = problems.Append("Set the file cabinet, the field and value that mark a document ready, and the value written once it is imported.").ToList();
-        if (folder.Length == 0) problems = problems.Append("Set the folder the ERP reads.").ToList();
-        if (flow.Produce.Columns.Count == 0) problems = problems.Append("Add at least one CSV column.").ToList();
+        if (folder.Length == 0) problems.Add("Set the folder the ERP reads.");
+        if (flow.Produce.Columns.Count == 0) problems.Add("Add at least one CSV column.");
         if (problems.Count > 0) { WarnOnce(flow.Id, $"flow {flow.DisplayName}: " + string.Join(" ", problems)); return new(0, 0, 0); }
         _warned.RemoveWhere(w => w.StartsWith(flow.Id + "|", StringComparison.Ordinal));
 
-        var client = _clients(connection!);
-        var ids = client.QueryIdsAsync(cabinet, readyField, readyValue, RecordsPerRun).GetAwaiter().GetResult();
+        var ids = source.ReadyAsync(flow.Source, RecordsPerRun).GetAwaiter().GetResult();
         var result = new DocumentProcessor.ScanResult();
         foreach (var id in ids)
         {
-            string key = $"{flow.Id}|{cabinet}|{id}";
+            string key = $"{flow.Id}|{source.RecordKey(flow.Source, id)}";
             if (_failedUntil.TryGetValue(key, out var until) && DateTime.UtcNow < until) continue;
-            result += ImportOne(flow, client, cabinet, id, readyField, doneValue, folder, key);
+            result += ImportOne(flow, source, id, folder, key);
         }
         return result;
     }
 
-    private DocumentProcessor.ScanResult ImportOne(FlowOptions flow, DocuWareClient client, string cabinet, string id,
-        string readyField, string doneValue, string folder, string key)
+    private DocumentProcessor.ScanResult ImportOne(FlowOptions flow, IRecordSource source, string id, string folder, string key)
     {
-        string input = $"DocuWare document {id}";
+        var d = source.Descriptor;
+        string input = $"{d.Name} {d.RecordNoun} {id}";
         bool written = _state?.DeliveryRemoteId(key, "folder") is not null;
         try
         {
             if (!written)
             {
-                Note(id, input, EventSteps.Received, EventStates.Ok, $"Found document {id} in DocuWare, ready for flow \"{flow.DisplayName}\".", flow);
-                var record = client.RecordAsync(cabinet, id).GetAwaiter().GetResult();
+                Note(id, input, EventSteps.Received, EventStates.Ok, $"Found {d.RecordNoun} {id} in {d.Name}, ready for flow \"{flow.DisplayName}\".", flow);
+                var record = source.ReadAsync(flow.Source, id).GetAwaiter().GetResult();
                 var culture = CultureFor(flow.Produce.Setting("Culture", "de-DE"));
                 string delimiter = flow.Produce.Setting("Delimiter", ";");
                 string rowsFrom = flow.Produce.Setting("RowsFrom");
-                var extra = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var extra = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["DataAreaId"] = flow.DataAreaId };
 
                 string? filePath = null;
-                if (string.Equals(flow.Targets.First(t => t.Kind == "folder").Setting("SaveFile"), "true", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(flow.Targets.First(t => t.Kind == "folder").Setting("SaveFile"), "true", StringComparison.OrdinalIgnoreCase)
+                    && source.FileAsync(flow.Source, id).GetAwaiter().GetResult() is { } file)
                 {
-                    var (content, name, _) = client.DownloadAsync(cabinet, id).GetAwaiter().GetResult();
-                    string ext = Path.GetExtension(name);
-                    filePath = Path.Combine(folder, CsvFile.SafeFileName($"DW{id}{(ext.Length > 0 ? ext : ".pdf")}"));
-                    CsvFile.WriteAtomic(filePath, content);
+                    string ext = Path.GetExtension(file.Name);
+                    filePath = Path.Combine(folder, CsvFile.SafeFileName($"{d.FilePrefix}{id}{(ext.Length > 0 ? ext : ".pdf")}"));
+                    CsvFile.WriteAtomic(filePath, file.ReadAllBytes());
                 }
                 extra["FilePath"] = filePath ?? "";
 
@@ -105,9 +113,9 @@ public sealed class ImportProcessor
                 if (problems.Count > 0)
                 {
                     if (filePath is not null) TryDelete(filePath);
-                    throw new InvalidOperationException(string.Join(" ", problems.Distinct()) + " Correct the columns of the flow in Settings > Imports.");
+                    throw new InvalidOperationException(string.Join(" ", problems.Distinct()) + " Correct the columns of the flow in Settings > Inbound.");
                 }
-                string fileName = CsvFile.SafeFileName(CsvFile.Resolve(flow.Produce.Setting("FileName", "{DWDOCID}.csv"), record, null,
+                string fileName = CsvFile.SafeFileName(CsvFile.Resolve(flow.Produce.Setting("FileName", d.DefaultFileName), record, null,
                     new Dictionary<string, object?>(), culture, extra, "file name", null));
                 if (!fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) fileName += ".csv";
                 string csvPath = Path.Combine(folder, fileName);
@@ -118,20 +126,20 @@ public sealed class ImportProcessor
                     $"Wrote {fileName} with {rows} row(s) to {folder}" + (filePath is null ? "." : $" and the file as {Path.GetFileName(filePath)}."), flow, "folder");
             }
 
-            client.SetFieldAsync(cabinet, id, readyField, doneValue).GetAwaiter().GetResult();
-            Note(id, input, EventSteps.Done, EventStates.Ok, $"Marked {readyField} = {doneValue} in DocuWare, so it is not imported again.", flow);
+            string done = source.MarkDoneAsync(flow.Source, id).GetAwaiter().GetResult();
+            Note(id, input, EventSteps.Done, EventStates.Ok, done, flow);
             _failedUntil.Remove(key);
             return new(1, 0, 0);
         }
-        catch (DocuWareException ex) when (ex.RetryLater)
+        catch (ConnectorException ex) when (ex.RetryLater)
         {
-            Note(id, input, EventSteps.Waiting, EventStates.Waiting, $"DocuWare: {ex.Message} Hive BDC tries again on the next scan.", flow);
+            Note(id, input, EventSteps.Waiting, EventStates.Waiting, $"{d.Name}: {ex.Message} Hive BDC tries again on the next scan.", flow);
             return new(0, 0, 1);
         }
         catch (Exception ex)
         {
             _failedUntil[key] = DateTime.UtcNow.Add(FailedPause);
-            _log.LogError("[import] {Flow}: document {Id} failed - {Message}", flow.DisplayName, id, ex.Message);
+            _log.LogError("[import] {Flow}: {Noun} {Id} failed - {Message}", flow.DisplayName, d.RecordNoun, id, ex.Message);
             Note(id, input, EventSteps.Failed, EventStates.Failed,
                 ex.Message + (written ? "" : " Nothing was written for it.") + " Hive BDC tries again in an hour, or after the flow's settings are saved.", flow);
             return new(0, 1, 0);

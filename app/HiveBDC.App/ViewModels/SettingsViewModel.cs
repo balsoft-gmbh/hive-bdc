@@ -46,14 +46,29 @@ public sealed partial class SettingsViewModel : ObservableObject
     // ── navigation: one level per screen ──────────────────────────────────────
     // Page is the entry in the left menu. Sub is the level below it: on Export "type", "company" or
     // "sharepoint" (a company's SharePoint library); on Connections "sharepoint-app", "docuware" or "mail".
-    [ObservableProperty] private string _page = "Export";
+    [ObservableProperty] private string _page = "Outbound";
     [ObservableProperty] private string _sub = "";
 
-    /// <summary>The screen the content area shows, e.g. "Export", "Export/company", "Connections/docuware".</summary>
+    /// <summary>The screen the content area shows, e.g. "Outbound", "Outbound/company", "Inbound/pick", "Connections/docuware".</summary>
     public string View => Sub.Length == 0 ? Page : Page + "/" + Sub;
 
-    partial void OnPageChanged(string value) => OnPropertyChanged(nameof(View));
-    partial void OnSubChanged(string value) => OnPropertyChanged(nameof(View));
+    private string _lastView = "Outbound";
+
+    partial void OnPageChanged(string value) => ViewChanged();
+    partial void OnSubChanged(string value) => ViewChanged();
+
+    private void ViewChanged()
+    {
+        if (_lastView == "Inbound/company" && View != "Inbound/company") CommitOpenInbound();
+        _lastView = View;
+        OnPropertyChanged(nameof(View));
+        OnPropertyChanged(nameof(CrumbType));
+        OnPropertyChanged(nameof(CrumbCompany));
+    }
+
+    /// <summary>The breadcrumb's middle and last parts: the opened document type and company, outbound or inbound.</summary>
+    public string CrumbType => Page == "Inbound" ? SelectedInboundType?.Name ?? "" : SelectedDocumentType?.Label ?? "";
+    public string CrumbCompany => Page == "Inbound" ? OpenInbound?.Title ?? "" : SelectedDocumentType?.SelectedCompany?.TabTitle ?? "";
 
     [RelayCommand]
     private void ShowPage(string page)
@@ -74,14 +89,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Back()
     {
-        Sub = Sub switch { "sharepoint" => "company", "company" => "type", _ => "" };
+        Sub = Sub switch { "sharepoint" => "company", "company" or "pick" => "type", _ => "" };
         RefreshSummaries();
     }
 
     public void OpenType(DocumentTypeEditViewModel type)
     {
         SelectedDocumentType = type;
-        Page = "Export";
+        Page = "Outbound";
         Open("type");
     }
 
@@ -237,39 +252,222 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private string? _pendingDocuWareSecret;
 
-    // Import page
+    // ── Inbound: document types, each with its companies (one Flows entry per company) ───────
+
+    /// <summary>Every inbound flow as the file holds it, one per company.</summary>
     public System.Collections.ObjectModel.ObservableCollection<ImportFlowRow> Flows { get; } = new();
-    [ObservableProperty] private ImportFlowRow? _selectedFlow;
 
-    public ImportFlowViewModel CreateImportFlow(string? password, ImportFlowRow? existing)
-        => new(_client, CurrentDocuWare(password), existing);
+    /// <summary>The document systems the service reads from, for the "Where from?" tiles and the company page.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<SourceInfoDto> Sources { get; } = new();
 
-    /// <summary>Adds the edited flow, or puts it in place of the one it was edited from; ids stay unique.</summary>
-    public void PutFlow(ImportFlowViewModel edited, ImportFlowRow? replaces)
+    public System.Collections.ObjectModel.ObservableCollection<InboundTypeRow> InboundTypes { get; } = new();
+
+    [ObservableProperty] private InboundTypeRow? _selectedInboundType;
+    [ObservableProperty] private InboundFlowViewModel? _openInbound;
+
+    partial void OnSelectedInboundTypeChanged(InboundTypeRow? value) => OnPropertyChanged(nameof(CrumbType));
+    partial void OnOpenInboundChanged(InboundFlowViewModel? value) => OnPropertyChanged(nameof(CrumbCompany));
+
+    /// <summary>The window hands over the passwords typed but not saved, so a dropdown can be filled before Save.</summary>
+    public Func<(string DocuWare, string SharePoint)>? UnsavedSecrets { get; set; }
+
+    private ImportFlowRow? _changeSourceOf;
+
+    public async Task LoadSourcesAsync()
     {
-        string id = replaces?.Id is { Length: > 0 } kept ? kept : UniqueFlowId(edited.Name);
-        var row = new ImportFlowRow(edited.ToJson(id));
-        int at = replaces is null ? -1 : Flows.IndexOf(replaces);
-        if (at >= 0) Flows[at] = row; else Flows.Add(row);
-        SelectedFlow = row;
+        var res = await _client.GetSourcesAsync();
+        var (docuWare, sharePoint) = UnsavedSecrets?.Invoke() ?? ("", "");
+        Sources.Clear();
+        foreach (var s in res.Data?.Sources ?? new())
+        {
+            // Filled in on the form counts too: the dropdowns use the form's values before Save.
+            if (s.ConnectionKind == "docuware")
+                s.Connected |= DocuWareUrl.Trim().Length > 0 && DocuWareUserName.Trim().Length > 0 && (DocuWareSecretSet || docuWare.Length > 0);
+            else if (s.ConnectionKind == "sharepoint")
+                s.Connected |= TenantId.Trim().Length > 0 && ClientId.Trim().Length > 0 && (SecretSet || sharePoint.Length > 0);
+            Sources.Add(s);
+        }
+        RebuildInbound();
+    }
+
+    private SourceInfoDto? SourceFor(string kind)
+        => Sources.FirstOrDefault(s => string.Equals(s.Kind, kind, StringComparison.OrdinalIgnoreCase));
+
+    private SourceRequestDto WithDrafts(SourceRequestDto request)
+    {
+        var (docuWare, sharePoint) = UnsavedSecrets?.Invoke() ?? ("", "");
+        request.DocuWare = CurrentDocuWare(docuWare);
+        request.SharePoint = new SharePointDraftDto { TenantId = TenantId.Trim(), ClientId = ClientId.Trim(), Secret = sharePoint.Length == 0 ? null : sharePoint };
+        return request;
+    }
+
+    /// <summary>Groups the flows by document type and words each company card from its source's setting labels.</summary>
+    public void RebuildInbound()
+    {
+        string? selected = SelectedInboundType?.Name;
+        var pending = InboundTypes.Where(t => t.Companies.Count == 0).Select(t => t.Name).ToList();
+        InboundTypes.Clear();
+        foreach (var group in Flows.GroupBy(f => f.TypeLabel, StringComparer.OrdinalIgnoreCase))
+        {
+            var type = new InboundTypeRow(group.Key, ApplyTypeName);
+            foreach (var flow in group)
+            {
+                Describe(flow);
+                type.Companies.Add(flow);
+            }
+            type.SystemsText = string.Join(" · ", group.Select(f => SourceFor(f.SourceKind)?.Name ?? f.SourceKind).Distinct());
+            InboundTypes.Add(type);
+        }
+        foreach (var name in pending.Where(n => InboundTypes.All(t => !t.Name.Equals(n, StringComparison.OrdinalIgnoreCase))))
+            InboundTypes.Add(new InboundTypeRow(name, ApplyTypeName));
+        SelectedInboundType = InboundTypes.FirstOrDefault(t => t.Name.Equals(selected ?? "", StringComparison.OrdinalIgnoreCase));
+        OnPropertyChanged(nameof(CrumbType));
+    }
+
+    private void Describe(ImportFlowRow flow)
+    {
+        var source = SourceFor(flow.SourceKind);
+        if (source is null) { flow.CardSource = $"{flow.SourceKind}: set up with a newer version of Hive BDC, kept as it is"; flow.CardReady = ""; return; }
+        string Shown(string key) => flow.Setting("Source", key + "Name") is { Length: > 0 } n ? n : flow.Setting("Source", key);
+        var which = (source.Settings ?? new()).Where(s => s.Step != "after").ToList();
+        var place = which.FirstOrDefault(s => !string.IsNullOrEmpty(s.Lookup));
+        flow.CardSource = $"From {source.Name}" + (place is null || Shown(place.Key ?? "").Length == 0 ? "" : ", " + Shown(place.Key ?? ""))
+                          + (flow.Folder.Length > 0 ? $", CSV to {flow.Folder}" : ", no folder set yet");
+        flow.CardReady = which.Count >= 2 && Shown(which[^2].Key ?? "").Length > 0
+            ? $"{which[^2].Label} {Shown(which[^2].Key ?? "")} {which[^1].Label} {Shown(which[^1].Key ?? "")}"
+            : "Not set up yet";
+    }
+
+    /// <summary>Renaming an inbound document type renames it on every company of the type.</summary>
+    private void ApplyTypeName(InboundTypeRow type, string oldName)
+    {
+        foreach (var flow in type.Companies)
+        {
+            var json = flow.ToJson();
+            json["DocumentType"] = type.Name.Trim();
+            string company = flow.DataAreaId;
+            json["Name"] = company.Length > 0 ? $"{type.Name.Trim()} ({company})" : type.Name.Trim();
+            flow.Replace(json);
+        }
+        OnPropertyChanged(nameof(CrumbType));
+    }
+
+    [RelayCommand]
+    private void NewInboundType()
+    {
+        string name = "New document type";
+        for (int n = 2; InboundTypes.Any(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase)); n++) name = $"New document type {n}";
+        var type = new InboundTypeRow(name, ApplyTypeName);
+        InboundTypes.Add(type);
+        OpenInboundType(type);
+    }
+
+    public void OpenInboundType(InboundTypeRow type)
+    {
+        SelectedInboundType = type;
+        Page = "Inbound";
+        Open("type");
+    }
+
+    public void RemoveInboundType(InboundTypeRow type)
+    {
+        foreach (var flow in type.Companies.ToList()) Flows.Remove(flow);
+        InboundTypes.Remove(type);
+        RebuildInbound();
+    }
+
+    /// <summary>"+ Add company": first the document system it comes from.</summary>
+    [RelayCommand]
+    private async Task AddInboundCompany()
+    {
+        _changeSourceOf = null;
+        await LoadSourcesAsync();
+        Open("pick");
+    }
+
+    public async Task ChangeInboundSource()
+    {
+        _changeSourceOf = OpenInbound?.Row;
+        CommitOpenInbound();
+        await LoadSourcesAsync();
+        Open("pick");
+    }
+
+    /// <summary>A tile on "Where from?": a new company of the opened type, or a new source for the company being changed.</summary>
+    public void PickSource(SourceInfoDto source)
+    {
+        if (!source.Connected)
+        {
+            ShowPage("Connections");
+            Open(source.ConnectionKind == "sharepoint" ? "sharepoint-app" : source.ConnectionKind ?? "");
+            StatusMessage = $"Connect {source.Name} first, then add the company under Inbound.";
+            StatusIsError = false;
+            return;
+        }
+        var type = SelectedInboundType;
+        if (type is null) return;
+        ImportFlowRow row;
+        if (_changeSourceOf is { } existing)
+        {
+            var json = existing.ToJson();
+            json["Source"] = new System.Text.Json.Nodes.JsonObject { ["Kind"] = source.Kind, ["Connection"] = source.ConnectionKind == "docuware" ? "docuware" : "", ["Settings"] = new System.Text.Json.Nodes.JsonObject() };
+            existing.Replace(json);
+            row = existing;
+        }
+        else
+        {
+            string id = UniqueFlowId(type.Name);
+            row = new ImportFlowRow(new System.Text.Json.Nodes.JsonObject
+            {
+                ["Id"] = id, ["Name"] = type.Name, ["Enabled"] = true, ["DocumentType"] = type.Name, ["DataAreaId"] = "",
+                ["Source"] = new System.Text.Json.Nodes.JsonObject { ["Kind"] = source.Kind, ["Connection"] = source.ConnectionKind == "docuware" ? "docuware" : "", ["Settings"] = new System.Text.Json.Nodes.JsonObject() },
+            });
+            Flows.Add(row);
+        }
+        _changeSourceOf = null;
+        RebuildInbound();
+        if (SelectedInboundType?.Companies.Contains(row) == true) OpenInboundCompany(row);
+    }
+
+    public void OpenInboundCompany(ImportFlowRow row)
+    {
+        CommitOpenInbound();
+        var source = SourceFor(row.SourceKind);
+        if (source is null)
+        {
+            StatusMessage = "This company was set up with a newer version of Hive BDC and is kept as it is.";
+            StatusIsError = false;
+            return;
+        }
+        OpenInbound = new InboundFlowViewModel(_client, WithDrafts, source, row);
+        Open("company");
+        _ = OpenInbound.LoadAsync();
+    }
+
+    /// <summary>Writes the open company page back into its flow.</summary>
+    public void CommitOpenInbound()
+    {
+        if (OpenInbound is not { } open || SelectedInboundType is not { } type) return;
+        string id = open.Row.Id.Length > 0 ? open.Row.Id : UniqueFlowId(type.Name);
+        open.Row.Replace(open.ToJson(id, type.Name.Trim()));
+        OpenInbound = null;
+        RebuildInbound();
+    }
+
+    public void RemoveInboundCompany(ImportFlowRow row)
+    {
+        Flows.Remove(row);
+        RebuildInbound();
     }
 
     private string UniqueFlowId(string name)
     {
         string slug = new string(name.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
         while (slug.Contains("--")) slug = slug.Replace("--", "-");
-        if (slug.Length == 0) slug = "import";
+        if (slug.Length == 0) slug = "inbound";
         string id = slug;
         for (int n = 2; Flows.Any(f => f.Id.Equals(id, StringComparison.OrdinalIgnoreCase)); n++) id = $"{slug}-{n}";
         return id;
-    }
-
-    [RelayCommand]
-    private void RemoveFlow()
-    {
-        if (SelectedFlow is null) return;
-        Flows.Remove(SelectedFlow);
-        SelectedFlow = Flows.FirstOrDefault();
     }
     /// <summary>
     /// Where documents from a non-production AX go instead of to the partner. One text box
@@ -346,7 +544,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             Flows.Clear();
             foreach (var f in (c.Flows ?? new()).OfType<System.Text.Json.Nodes.JsonObject>())
                 Flows.Add(new ImportFlowRow((System.Text.Json.Nodes.JsonObject)f.DeepClone()));
-            SelectedFlow = Flows.FirstOrDefault();
+            _ = LoadSourcesAsync();
 
             _connections = c.Connections ?? new();
             var docuWare = _connections.FirstOrDefault(x => string.Equals(x.Id, DocuWareConnectionId, StringComparison.OrdinalIgnoreCase));
@@ -363,7 +561,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             RefreshSummaries();
 
             int entries = DocumentTypes.Sum(t => t.Companies.Count);
-            StatusMessage = $"Settings loaded: {DocumentTypes.Count} document type(s), {entries} company entr{(entries == 1 ? "y" : "ies")}.";
+            StatusMessage = $"Settings loaded: {DocumentTypes.Count} outbound document type(s) with {entries} compan{(entries == 1 ? "y" : "ies")}, {Flows.Count} inbound flow(s).";
         }
         finally
         {
@@ -556,6 +754,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public async Task<bool> SaveAsync(string? newSecret, string? newMailSecret = null, string? newDocuWareSecret = null)
     {
+        CommitOpenInbound();
+        if (View == "Inbound/company") Back();
         _pendingDocuWareSecret = newDocuWareSecret;
         _pendingMailSecret = newMailSecret;
         ValidationErrors.Clear();
@@ -727,4 +927,42 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// so <see cref="BuildConfig"/> can reach it without widening its signature everywhere.
     /// </summary>
     private string? _pendingMailSecret;
+}
+
+/// <summary>An inbound document type: its name and its companies (each one Flows entry).</summary>
+public sealed partial class InboundTypeRow : ObservableObject
+{
+    private readonly Action<InboundTypeRow, string> _renamed;
+
+    public InboundTypeRow(string name, Action<InboundTypeRow, string> renamed)
+    {
+        _name = name;
+        _renamed = renamed;
+        Companies.CollectionChanged += (_, _) => { OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(StatusKind)); };
+    }
+
+    public System.Collections.ObjectModel.ObservableCollection<ImportFlowRow> Companies { get; } = new();
+
+    [ObservableProperty] private string _name;
+    [ObservableProperty] private bool _confirmRemove;
+    [ObservableProperty] private string _systemsText = "";
+
+    partial void OnNameChanged(string? oldValue, string newValue)
+    {
+        if (oldValue is not null && newValue.Trim().Length > 0) _renamed(this, oldValue);
+    }
+
+    public string StatusText
+    {
+        get
+        {
+            int on = Companies.Count(c => c.Enabled);
+            return Companies.Count == 0 ? "Needs setup · no company yet"
+                : on == 0 ? "Switched off"
+                : on == Companies.Count ? $"Active · {on} compan{(on == 1 ? "y" : "ies")}"
+                : $"Active · {on} of {Companies.Count} companies on";
+        }
+    }
+
+    public string StatusKind => Companies.Count == 0 ? "setup" : Companies.Any(c => c.Enabled) ? "ok" : "off";
 }

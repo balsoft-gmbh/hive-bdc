@@ -109,6 +109,11 @@ public sealed class DocumentRoute
     /// <summary>Further targets next to the SharePoint block, of any kind the installed version knows.</summary>
     public List<TargetOptions> Targets { get; set; } = new();
 
+    /// <summary>Whether this company of the flow runs. Null (files written before 1.5.0) = on.</summary>
+    public bool? Enabled { get; set; }
+
+    public bool IsOn => Enabled ?? true;
+
     /// <summary>Whether this company's documents are mailed. Null (files written before 1.5.0) = as the type says.</summary>
     public bool? Mail { get; set; }
 
@@ -268,7 +273,7 @@ public sealed record ScanFolder(string Path, IReadOnlyList<(DocumentTypeOptions 
         }
     }
 
-    /// <summary>Build the distinct scan folders; a folder used only by disabled types is left out.</summary>
+    /// <summary>Build the distinct scan folders; a folder used only by switched-off types or companies is left out.</summary>
     public static IReadOnlyList<ScanFolder> Build(IEnumerable<DocumentTypeOptions> types)
     {
         static string Key(string p) => System.IO.Path.GetFullPath(p).TrimEnd('\\', '/').ToLowerInvariant();
@@ -283,7 +288,7 @@ public sealed record ScanFolder(string Path, IReadOnlyList<(DocumentTypeOptions 
                 e.Routes.Add((t, r));
             }
         return byFolder.Values
-            .Where(e => e.Routes.Any(r => r.Item1.Enabled))
+            .Where(e => e.Routes.Any(r => r.Item1.Enabled && r.Item2.IsOn))
             .Select(e => new ScanFolder(e.Path, e.Routes))
             .ToList();
     }

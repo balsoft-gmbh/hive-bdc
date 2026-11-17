@@ -203,13 +203,13 @@ public sealed partial class DocumentProcessor
         var type = _registry.Resolve(opts, typeId, data.Party, seed, out _);
         if (!type.Discovered && !opts.DocumentTypes.Contains(type))
             throw new InvalidOperationException(
-                $"Document type '{type.Id}' was removed in Settings > Document types. Add it again (Add type, ID {type.Id}), then drop the pair back into the input folder.");
+                $"Document type '{type.Id}' was removed in Settings > Outbound. Add it again (New document type, ID {type.Id}), then drop the pair back into the input folder.");
         var route = PickRoute(folder.Routes.Where(r => r.Type.Matches(type.Id)).Select(r => r.Route), company)
                     ?? PickRoute(type.Companies, company)
                     ?? (type.Discovered && seed is not null ? _registry.AddCompany(type, seed) : null)
                     ?? throw new PendingDocumentException(
                         $"Document type '{type.Id}' has no route for company '{company ?? "(not in the JSON, folder serves several)"}' " +
-                        $"(Settings > Document types > {type.EffectiveDisplayName} > Companies). Add that company; the pair remains pending.");
+                        $"(Settings > Outbound > {type.EffectiveDisplayName} > Companies). Add that company; the pair remains pending.");
         var documentNumber = data.ResolveNumber(documentId);
         string area = company ?? route.DataAreaId;
 
@@ -229,7 +229,11 @@ public sealed partial class DocumentProcessor
         // ── 2. may it be processed? ───────────────────────────────────────
         if (!type.Enabled)
             throw new InvalidOperationException(
-                $"Document type '{type.Id}' is disabled in Settings > Document types. Enable it, then drop the pair back into the input folder.");
+                $"Document type '{type.Id}' is switched off in Settings > Outbound. Switch it on, then drop the pair back into the input folder.");
+        if (!route.IsOn)
+            throw new InvalidOperationException(
+                $"Company '{route.DataAreaId}' of document type '{type.Id}' is switched off in Settings > Outbound > {type.EffectiveDisplayName}. " +
+                "Switch it on, then drop the pair back into the input folder.");
 
         var handler = DocumentHandlers.For(type.Handler);
         if (!license.HasFeature(handler.RequiredFeature))
@@ -275,7 +279,7 @@ public sealed partial class DocumentProcessor
         // replaces by name simply runs again, any other target is handed the id of its earlier
         // delivery from the ledger and updates that document.
         if (!route.SharePoint.Enabled)
-            _log.LogInformation("[{Tag}] {Id}: SharePoint upload skipped: SharePoint is off for {Type} / company {Area} (Settings > Document types).",
+            _log.LogInformation("[{Tag}] {Id}: SharePoint upload skipped: SharePoint is off for {Type} / company {Area} (Settings > Outbound).",
                 tag, documentId, type.Id, route.DataAreaId);
 
         string? targetSite = null;

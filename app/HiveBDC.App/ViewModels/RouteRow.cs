@@ -16,6 +16,9 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     /// <summary>Mail each document of this company to the recipient the ERP names.</summary>
     [ObservableProperty] private bool _mail = true;
 
+    /// <summary>Whether this company of the document type runs; off = its folder is not read for this type.</summary>
+    [ObservableProperty] private bool _enabled = true;
+
     /// <summary>Remove was clicked once; the card asks before the item goes.</summary>
     [ObservableProperty] private bool _confirmRemove;
 
@@ -68,6 +71,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     partial void OnDataAreaIdChanged(string value) { OnPropertyChanged(nameof(Label)); OnPropertyChanged(nameof(TabTitle)); }
     partial void OnInputChanged(string value) => OnPropertyChanged(nameof(Summary));
     partial void OnMailChanged(bool value) => OnPropertyChanged(nameof(DestinationLine));
+    partial void OnEnabledChanged(bool value) => OnPropertyChanged(nameof(DestinationLine));
     partial void OnIsWordChanged(bool value) { OnPropertyChanged(nameof(IsJson)); OnPropertyChanged(nameof(Summary)); }
     partial void OnSharePointEnabledChanged(bool value) { OnPropertyChanged(nameof(Summary)); OnPropertyChanged(nameof(SharePointDetail)); }
     partial void OnLibraryChanged(string value) { OnPropertyChanged(nameof(Summary)); OnPropertyChanged(nameof(SharePointDetail)); }
@@ -81,6 +85,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         IsWord = InputFormats.IsWord(dto.InputFormat);
         Output = dto.Output ?? "";
         Mail = dto.Mail ?? true;
+        Enabled = dto.Enabled ?? true;
         var sp = dto.SharePoint;
         SharePointEnabled = sp?.Enabled ?? false;
         SiteUrl = sp?.SiteUrl ?? "";
@@ -122,7 +127,8 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
             if (SharePointEnabled) places.Add("SharePoint");
             places.AddRange(Targets.Where(t => t.Enabled).Select(t => t.KindLabel));
             if (Mail) places.Add("Mail");
-            return places.Count == 0 ? "No destination yet" : "Goes to " + string.Join(", ", places);
+            string line = places.Count == 0 ? "No destination yet" : "Goes to " + string.Join(", ", places);
+            return Enabled ? line : "Switched off for this document type. " + line;
         }
     }
 
@@ -153,6 +159,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         InputFormat = IsWord ? InputFormats.Word : InputFormats.Json,
         Output = Output?.Trim() ?? "",
         Mail = Mail,
+        Enabled = Enabled,
         SharePoint = new CompanySharePointConfigDto
         {
             Enabled = SharePointEnabled,

@@ -29,7 +29,7 @@ public sealed partial class DocuWareDocumentTarget(BDCOptions options, Func<Conn
         var problems = connection.Problems();
         if (problems.Count > 0) return string.Join(" ", problems);
         if (target.Setting("FileCabinet").Length == 0)
-            return "The DocuWare target has no file cabinet. Choose one in Settings > Document types > company > Targets.";
+            return "The DocuWare target has no file cabinet. Choose one in Settings > Outbound > the document type > the company > Goes to.";
         return null;
     }
 
@@ -47,7 +47,7 @@ public sealed partial class DocuWareDocumentTarget(BDCOptions options, Func<Conn
         var fields = DocuWareFieldValues.Build(cabinet, values, tables, problems);
         if (problems.Count > 0)
             throw new InvalidOperationException($"DocuWare file cabinet \"{cabinet.Name}\": " + string.Join(" ", problems) +
-                " Correct the fields of the DocuWare target in Settings > Document types.");
+                " Correct the fields of the DocuWare destination in Settings > Outbound.");
 
         string? existing = ctx.PreviousRemoteId;
         string matchField = ctx.Target.Setting("MatchField");

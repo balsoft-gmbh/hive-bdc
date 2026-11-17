@@ -187,6 +187,21 @@ public sealed class SettingsCompatibilityTests
     }
 
     [Fact]
+    public void ACompanySwitchIsWrittenOnlyWhenSetAndOlderEntriesStayOn()
+    {
+        var invoices = Load(Version134).DocumentTypes.Single(t => t.Id == "SalesInvoice");
+        Assert.All(invoices.Companies, r => Assert.True(r.IsOn));
+        Assert.False(SettingsFile.RouteNode(invoices.Companies[0]).ContainsKey("Enabled"));
+
+        invoices.Companies[1].Enabled = false;
+        var file = new JsonObject { ["HiveBDC"] = new JsonObject { ["DocumentTypes"] = new JsonArray(SettingsFile.DocumentTypeNode(invoices)) } };
+        var reloaded = Load(file.ToJsonString()).DocumentTypes.Single(t => t.Id == "SalesInvoice");
+
+        Assert.True(reloaded.Companies[0].IsOn);
+        Assert.False(reloaded.Companies[1].IsOn);
+    }
+
+    [Fact]
     public void AChangedTargetChangesTheWorkerSignature()
     {
         var a = Load(WithTargets);

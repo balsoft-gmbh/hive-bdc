@@ -128,7 +128,7 @@ public sealed class SharePointUploader
         if (fields.Count > 0)
             await SetFieldsAsync(driveId, itemId, fields);
         else
-            _log.LogWarning("SharePoint: {File} uploaded without any column values (no column templates resolved). Set them under Settings > Document types > company > Column templates.",
+            _log.LogWarning("SharePoint: {File} uploaded without any column values (no column templates resolved). Set them under Settings > Outbound > company > Column templates.",
                 fileName);
     }
 

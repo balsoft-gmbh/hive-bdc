@@ -1,8 +1,8 @@
 namespace Balsoft.Hive.BDC.Configuration;
 
 /// <summary>
-/// A flow that does not start in an ERP export folder ("HiveBDC:Flows[i]"): a source (DocuWare), what to produce from
-/// each record (a CSV the ERP reads) and where to put it. Export flows from the ERP stay under DocumentTypes.
+/// An inbound flow ("HiveBDC:Flows[i]"): one company of one document type, read from a document system (the source),
+/// made into what the ERP reads (a CSV) and put where the ERP reads it. Outbound flows stay under DocumentTypes.
 /// </summary>
 public sealed class FlowOptions
 {
@@ -13,6 +13,12 @@ public sealed class FlowOptions
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>The document type this flow brings in, e.g. PurchaseOrder. Empty in files written before 1.5.0.</summary>
+    public string DocumentType { get; set; } = "";
+
+    /// <summary>The ERP company the records are for; also {DataAreaId} in the CSV. Empty in files written before 1.5.0.</summary>
+    public string DataAreaId { get; set; } = "";
+
     public SourceOptions Source { get; set; } = new();
 
     public ProduceOptions Produce { get; set; } = new();
@@ -21,10 +27,15 @@ public sealed class FlowOptions
 
     public string DisplayName => string.IsNullOrWhiteSpace(Name) ? Id : Name.Trim();
 
+    /// <summary>The document type the dashboard groups this flow under; an older entry without one stands under its own name.</summary>
+    public string TypeLabel => DocumentType.Length > 0 ? DocumentType : DisplayName;
+
     public void Normalize()
     {
         Id = Id?.Trim() ?? "";
         Name = Name?.Trim() ?? "";
+        DocumentType = DocumentType?.Trim() ?? "";
+        DataAreaId = DataAreaId?.Trim() ?? "";
         Source ??= new();
         Source.Normalize();
         Produce ??= new();
@@ -36,8 +47,8 @@ public sealed class FlowOptions
 }
 
 /// <summary>
-/// Where records come from. DocuWare: Settings FileCabinet, ReadyField and ReadyValue (which documents are ready), and
-/// DoneValue, written into ReadyField once the record is handed over, so it is not picked up again.
+/// Where records come from: a source kind registered in the ConnectorRegistry and its settings, e.g. DocuWare (FileCabinet,
+/// ReadyField, ReadyValue, DoneValue) or SharePoint (SiteUrl, Library, ReadyColumn, ReadyValue, DoneValue).
 /// </summary>
 public sealed class SourceOptions
 {

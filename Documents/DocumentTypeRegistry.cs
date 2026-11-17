@@ -77,7 +77,7 @@ public sealed class DocumentTypeRegistry
                 if (written)
                     _log.LogWarning(
                         "New document type '{Type}' received from the ERP — registered in settings as a PDF pass-through " +
-                        "({Party}, mail on{Route}). Review it under Settings > Document types.",
+                        "({Party}, mail on{Route}). Review it under Settings > Outbound.",
                         clean, party,
                         seed is null ? "" : $", company {seed.DataAreaId}, folder {seed.Input}, SharePoint {(seed.SharePoint.Enabled ? "on" : "off")}");
             }
@@ -123,7 +123,7 @@ public sealed class DocumentTypeRegistry
                 if (written)
                     _log.LogWarning(
                         "Auto-registered document type '{Type}' arrived for company {Area}: added that company in settings " +
-                        "(folder {Input}, SharePoint {Sp}). Review it under Settings > Document types.",
+                        "(folder {Input}, SharePoint {Sp}). Review it under Settings > Outbound.",
                         type.Id, route.DataAreaId, route.Input, route.SharePoint.Enabled ? "on" : "off");
             }
             catch (Exception ex)

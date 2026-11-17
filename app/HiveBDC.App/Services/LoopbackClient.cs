@@ -86,6 +86,18 @@ public sealed class LoopbackClient
     public Task<ApiResult<DocuWareFieldsResult>> DocuWareFieldsAsync(DocuWareRequestDto request, CancellationToken ct = default)
         => PostAsync<DocuWareFieldsResult>("/config/docuware-fields", request, ct);
 
+    /// <summary>GET /sources: the document systems inbound flows can read from, with the settings each one needs.</summary>
+    public Task<ApiResult<SourcesDto>> GetSourcesAsync(CancellationToken ct = default)
+        => GetAsync<SourcesDto>("/sources", ct);
+
+    /// <summary>POST /sources/choices: the values of one dropdown, read from the document system itself.</summary>
+    public Task<ApiResult<SourceChoicesResult>> SourceChoicesAsync(SourceRequestDto request, CancellationToken ct = default)
+        => PostAsync<SourceChoicesResult>("/sources/choices", request, ct);
+
+    /// <summary>POST /sources/sample: one ready record, for the column preview.</summary>
+    public Task<ApiResult<SourceSampleResult>> SourceSampleAsync(SourceRequestDto request, CancellationToken ct = default)
+        => PostAsync<SourceSampleResult>("/sources/sample", request, ct);
+
     /// <summary>GET /history: the steps of one document (by id or number), or the newest steps of all documents.</summary>
     public Task<ApiResult<HistoryDto>> GetHistoryAsync(string? search, int limit = 500, CancellationToken ct = default)
         => GetAsync<HistoryDto>($"/history?limit={limit}&search={Uri.EscapeDataString(search ?? "")}", ct);

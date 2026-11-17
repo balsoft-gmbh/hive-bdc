@@ -127,6 +127,9 @@ public sealed partial class LocalStatusServer : BackgroundService
                 case ("POST", "/history/retry"): PostRetry(ctx, req); return;
                 case ("POST", "/config/test-docuware"): await PostTestDocuWare(ctx, req); return;
                 case ("POST", "/config/docuware-fields"): await PostDocuWareFields(ctx, req); return;
+                case ("GET", "/sources"): Respond(ctx, 200, Sources()); return;
+                case ("POST", "/sources/choices"): await PostSourceChoices(ctx, req); return;
+                case ("POST", "/sources/sample"): await PostSourceSample(ctx, req); return;
                 case ("GET", "/config"): GetConfig(ctx); return;
                 case ("POST", "/config"): PostConfig(ctx, req); return;
                 case ("POST", "/config/test-sharepoint"): await PostTestSharePoint(ctx, req); return;

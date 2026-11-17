@@ -147,6 +147,8 @@ public sealed class RouteConfigDto
     /// <summary>"Json" (ERP export pairs) or "Word" (filled Word invoices).</summary>
     [JsonPropertyName("inputFormat")] public string? InputFormat { get; set; }
     [JsonPropertyName("output")] public string? Output { get; set; }
+    /// <summary>Whether this company of the flow runs. A service before 1.5.0 sends none (on).</summary>
+    [JsonPropertyName("enabled")] public bool? Enabled { get; set; }
     /// <summary>Whether this company's documents are mailed. GET sends the effective value; a service before 1.5.0 sends none.</summary>
     [JsonPropertyName("mail")] public bool? Mail { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
@@ -258,6 +260,79 @@ public sealed class DocuWareRequestDto
 }
 
 public sealed record DocuWareCabinetDto(string? Id, string? Name);
+
+// ── inbound sources (GET /sources, POST /sources/choices, POST /sources/sample) ──────────────
+
+public sealed class SourcesDto
+{
+    [JsonPropertyName("sources")] public List<SourceInfoDto>? Sources { get; set; }
+}
+
+/// <summary>A document system this version of the service reads from, and the settings an inbound flow from it needs.</summary>
+public sealed class SourceInfoDto
+{
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("description")] public string? Description { get; set; }
+    [JsonPropertyName("connectionKind")] public string? ConnectionKind { get; set; }
+    [JsonPropertyName("connected")] public bool Connected { get; set; }
+    [JsonPropertyName("recordNoun")] public string? RecordNoun { get; set; }
+    [JsonPropertyName("defaultFileName")] public string? DefaultFileName { get; set; }
+    [JsonPropertyName("fieldsLookup")] public string? FieldsLookup { get; set; }
+    [JsonPropertyName("settings")] public List<SourceSettingDto>? Settings { get; set; }
+
+    public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name[..1].ToUpperInvariant();
+}
+
+public sealed class SourceSettingDto
+{
+    [JsonPropertyName("key")] public string? Key { get; set; }
+    [JsonPropertyName("label")] public string? Label { get; set; }
+    [JsonPropertyName("step")] public string? Step { get; set; }
+    [JsonPropertyName("required")] public bool Required { get; set; }
+    [JsonPropertyName("lookup")] public string? Lookup { get; set; }
+    [JsonPropertyName("dependsOn")] public string? DependsOn { get; set; }
+    [JsonPropertyName("hint")] public string? Hint { get; set; }
+}
+
+public sealed class SharePointDraftDto
+{
+    [JsonPropertyName("tenantId")] public string? TenantId { get; set; }
+    [JsonPropertyName("clientId")] public string? ClientId { get; set; }
+    [JsonPropertyName("secret")] public string? Secret { get; set; }
+}
+
+/// <summary>Which source, which list, its settings so far, and the unsaved connection values of the form.</summary>
+public sealed class SourceRequestDto
+{
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("lookup")] public string? Lookup { get; set; }
+    [JsonPropertyName("connection")] public string? Connection { get; set; }
+    [JsonPropertyName("settings")] public Dictionary<string, string>? Settings { get; set; }
+    [JsonPropertyName("docuWare")] public DocuWareRequestDto? DocuWare { get; set; }
+    [JsonPropertyName("sharePoint")] public SharePointDraftDto? SharePoint { get; set; }
+}
+
+public sealed record SourceChoiceDto(string? Value, string? Label, string? Detail)
+{
+    public override string ToString() => Label ?? Value ?? "";
+}
+
+public sealed class SourceChoicesResult
+{
+    [JsonPropertyName("ok")] public bool Ok { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+    [JsonPropertyName("choices")] public List<SourceChoiceDto>? Choices { get; set; }
+}
+
+public sealed record SourceValueDto(string? Name, string? Value);
+
+public sealed class SourceSampleResult
+{
+    [JsonPropertyName("ok")] public bool Ok { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+    [JsonPropertyName("values")] public List<SourceValueDto>? Values { get; set; }
+}
 
 public sealed record TestDocuWareResult(bool Ok, string? Message, List<DocuWareCabinetDto>? Cabinets);
 

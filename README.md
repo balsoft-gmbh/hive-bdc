@@ -186,7 +186,7 @@ They resume automatically after the input or configuration is repaired.
 
 ## Word input (filled Word invoices instead of an ERP export)
 
-A company entry can take **Word documents** instead of ERP export pairs (**Settings > Export >** a document type **>** a company **>
+A company entry can take **Word documents** instead of ERP export pairs (**Settings > Outbound >** a document type **>** a company **>
 Comes from: Word**, or `InputFormat: "Word"` on the entry). Hive BDC then reads every `.docx` in the
 input folder, builds the same JSON an ERP export would drop, renders the PDF itself and runs the normal pipeline:
 XRechnung or ZUGFeRD, SharePoint, mail, ledger. Local folders and network shares work the same way as for JSON (a
@@ -359,7 +359,7 @@ Prerequisite: an Entra ID app registration in the target tenant with the
 
 ### Importing column templates
 
-Settings > Export > a document type > a company > SharePoint **Edit**, then
+Settings > Outbound > a document type > a company > SharePoint **Edit**, then
 **Import columns…** on the SharePoint library screen reads a JSON file and
 applies the entry for exactly that type and company (target and column
 templates), so nobody types internal column names by hand. One file can carry
@@ -682,18 +682,25 @@ keeps the stored ones.
 
 ### Settings
 
-Settings opens on four entries: **Export** (documents from the ERP), **Import**
-(documents into the ERP), **Connections** and **Service**. Each screen holds one level
-and the adding and removing of the level below it; a breadcrumb leads back:
+Settings opens on four entries: **Outbound** (documents from the ERP), **Inbound**
+(documents into the ERP), **Connections** and **Service**. Every setup is a flow of one
+document type in one direction, with its companies. Each screen holds one level and the
+adding and removing of the level below it; a breadcrumb leads back:
 
-- **Export** lists the document types. Add a type here, or remove one.
+- **Outbound** lists the document types the ERP sends. Add a type here, or remove one.
 - **A document type** holds its name, the ID the ERP writes, who it is sent to and what
   Hive BDC makes (an e-invoice or the PDF as the ERP made it), and lists its companies.
   Add or remove a company here.
 - **A company** holds where its documents come from (the ERP export, JSON and PDF, or
   Word documents, and the folder) and where they go: SharePoint, one row per DocuWare
-  file cabinet, and mail. Each destination has its own switch and keeps its settings
-  when switched off. Mail needs Document mail under Connections.
+  file cabinet, and mail. The company has its own switch (`"Enabled"` on the company
+  entry; a file without it keeps the company on): a company that is off is not read for
+  that type, and a document for it that still arrives goes to `error\` with the reason.
+  Each destination has its own switch and keeps its settings when switched off. Mail
+  needs Document mail under Connections.
+- **Inbound** lists the document types brought into the ERP, the same way: a type, its
+  companies, and per company where its documents come from and where the ERP reads them
+  (see Inbound flows below).
 - **SharePoint library** (from a company) holds the site, library, folder and columns.
 - **Connections** shows SharePoint, DocuWare and Document mail as cards; each opens its
   own screen.
@@ -711,7 +718,7 @@ In the dashboard:
 
 1. **Settings > Connections > DocuWare:** address, user name and password, then
    **Test connection**. It signs in and lists the file cabinets the user can see.
-2. **Settings > Export >** a document type **>** a company **> Goes to >
+2. **Settings > Outbound >** a document type **>** a company **> Goes to >
    + Add a DocuWare file cabinet:** choose the file cabinet by name. Its fields are listed with their
    kind and whether they are required; fill the ones you want with templates. Choose
    the field that holds the document number under **Never store a document twice**.
@@ -794,37 +801,64 @@ An `azure-storage` connection holds the storage connection string as its secret,
 in Azure, the account address in `Settings.AccountUrl`, signing in with the managed
 identity.
 
-### Import from DocuWare
+### Inbound flows (DocuWare, SharePoint)
 
-**Settings > Import > + New import from DocuWare** sets up a flow that runs on every
-scan: documents in a file cabinet whose field (for example `STATUS`) has the ready
-value become a CSV file in the folder the ERP reads, and the field is then set to
-the done value, so a document is imported once. The document's file can be saved
-next to the CSV (`{FilePath}` is its path). Columns are named as the ERP expects;
-**Columns from a CSV file…** takes them from the first line of a file the ERP
-already reads. Each column is filled from a template: `{FIELD}` (a DocuWare field by
-its database name), `{TABLE.COLUMN}` (a column of the current table row when the rows
-come from a table field), `{DWDOCID}` and `{FilePath}`. With a table chosen, every
-table row becomes a CSV row with the other columns repeated.
+**Settings > Inbound > + New document type**, then **+ Add company** asks where the
+documents come from: one tile per document system this version reads from (DocuWare and
+SharePoint today; a further system is one source connector in the service and shows up
+here without a dashboard change). The company's screen then shows that system's own
+settings, with lists read from the system itself:
+
+- **DocuWare:** the file cabinet, the field (for example `STATUS`) and the value that mark
+  a document ready, and the value written once it is imported.
+- **SharePoint:** the site, the document library, the column and the value that mark a
+  file ready, and the value written once it is imported. It uses the SharePoint app from
+  Connections (application permission Sites.ReadWrite.All, or Sites.Selected with write
+  on that site). SharePoint filters best on an indexed column; in a library with more
+  than 5000 files, index the ready column (Library settings, Indexed columns), otherwise
+  the flow says so and takes nothing.
+
+Every scan, the ready documents become a CSV file in the folder the ERP reads, and the
+ready field or column is then set to the done value, so a document is imported once.
+The document's file can be saved next to the CSV (`{FilePath}` is its path). Columns are
+named as the ERP expects; **Columns from a CSV the ERP reads…** takes them from the first
+line of such a file, **One column per field** adds every field, and **Preview with a ready
+document** reads one ready document so the values can be checked. Each column is filled
+from a template: `{FIELD}` (a field by its internal name), `{TABLE.COLUMN}` (a column of
+the current table row when the rows come from a DocuWare table field), `{DWDOCID}` or
+`{ID}` (the document's id), `{DataAreaId}` (the company) and `{FilePath}`. With a table
+chosen, every table row becomes a CSV row with the other columns repeated. Two switched-on
+flows that would pick up the same documents are refused on Save.
 
 The CSV is UTF-8 with a byte order mark, separated by `;` unless set otherwise,
 with numbers and dates in German (`1234,5`, `31.12.2026`), English (US) or ISO
 format, quoted per RFC 4180 where a value holds the separator, a quote or a line
-break, and written under a temporary name first. DocuWare dates are read in German
-time, so a date stored at midnight is not moved to the day before. A column naming
-a field the document lacks stops that document with the column named and nothing
-written; it is tried again after an hour or after the flow is saved. If the done
-mark cannot be written, the next scan only repeats the mark. Settings:
+break, and written under a temporary name first. Dates are read in German time, so a
+date stored at midnight is not moved to the day before. A column naming a field the
+document lacks stops that document with the column named and nothing written; it is
+tried again after an hour or after the flow is saved. If the done mark cannot be
+written, the next scan only repeats the mark. Each company is one entry under `Flows`;
+`DocumentType` and `DataAreaId` are new in 1.5.0, and an entry without them is shown under
+its own name:
 
 ```json
 "Flows": [
-  { "Id": "purchase-requisitions", "Name": "Purchase requisitions from DocuWare", "Enabled": true,
+  { "Id": "purchase-order-demf", "Name": "Purchase order (DEMF)", "Enabled": true,
+    "DocumentType": "Purchase order", "DataAreaId": "DEMF",
     "Source": { "Kind": "docuware", "Connection": "docuware",
       "Settings": { "FileCabinet": "<id>", "ReadyField": "STATUS", "ReadyValue": "Released", "DoneValue": "Imported" } },
     "Produce": { "Kind": "csv",
       "Settings": { "Delimiter": ";", "Culture": "de-DE", "RowsFrom": "ITEMS", "FileName": "{DWDOCID}.csv" },
       "Columns": [ { "Name": "DWDOCID", "Value": "{DWDOCID}" }, { "Name": "ItemId", "Value": "{ITEMS.ITEM_NUMBER}" } ] },
-    "Targets": [ { "Kind": "folder", "Settings": { "Folder": "\\\\server\\erp\\pending", "SaveFile": "true" } } ] }
+    "Targets": [ { "Kind": "folder", "Settings": { "Folder": "\\\\server\\erp\\pending", "SaveFile": "true" } } ] },
+  { "Id": "vendor-invoice-demf", "Name": "Vendor invoice (DEMF)", "Enabled": true,
+    "DocumentType": "Vendor invoice", "DataAreaId": "DEMF",
+    "Source": { "Kind": "sharepoint",
+      "Settings": { "SiteUrl": "https://contoso.sharepoint.com/sites/Finance", "Library": "Incoming invoices",
+                    "ReadyColumn": "Status", "ReadyValue": "Approved", "DoneValue": "In ERP" } },
+    "Produce": { "Kind": "csv", "Settings": { "FileName": "{ID}.csv" },
+      "Columns": [ { "Name": "Company", "Value": "{DataAreaId}" }, { "Name": "VendorAccount", "Value": "{VendorNumber}" } ] },
+    "Targets": [ { "Kind": "folder", "Settings": { "Folder": "\\\\server\\erp\\vendor-invoices", "SaveFile": "true" } } ] }
 ]
 ```
 

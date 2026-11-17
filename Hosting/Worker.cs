@@ -82,7 +82,7 @@ public sealed class Worker : BackgroundService
                 var sp = r.SharePoint;
                 string fields = string.Join(";",
                     sp.Fields.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value));
-                parts.Add(string.Join("~", t.Id, t.Enabled, r.DataAreaId, sp.Enabled, sp.SiteUrl, sp.Library, sp.Folder, fields));
+                parts.Add(string.Join("~", t.Id, t.Enabled, r.DataAreaId, r.IsOn, sp.Enabled, sp.SiteUrl, sp.Library, sp.Folder, fields));
                 foreach (var target in r.Targets)
                     parts.Add(string.Join("~", "target", target.Enabled, target.Key,
                         string.Join(";", target.Fields.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value))));

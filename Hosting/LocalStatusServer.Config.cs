@@ -70,6 +70,7 @@ public sealed partial class LocalStatusServer
                     input = r.Input,
                     inputFormat = r.InputFormat,
                     output = r.Output,
+                    enabled = r.IsOn,
                     mail = r.MailsFor(t),
                     sharePoint = new
                     {
@@ -143,7 +144,7 @@ public sealed partial class LocalStatusServer
         var seenTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool anySharePoint = false;
         if (types is { Count: 0 })
-            errors.Add("Keep at least one document type. To stop one from being processed, untick Enabled instead of removing it.");
+            errors.Add("Keep at least one outbound document type. To stop one from being processed, switch it off instead of removing it.");
         if (types is not null)
         {
             for (int i = 0; i < types.Count; i++)
@@ -191,6 +192,18 @@ public sealed partial class LocalStatusServer
                 errors.Add("SharePoint is on for at least one company entry, so the SharePoint app needs a client ID (Connections).");
             if (!haveSecret)
                 errors.Add("SharePoint is on for at least one company entry, so the SharePoint app needs a client secret (Connections).");
+        }
+
+        // Inbound flows: two switched-on flows must not pick up the same records.
+        if (dto.Flows is { Count: > 0 } postedFlows)
+        {
+            try
+            {
+                var flows = JsonSerializer.Deserialize<List<FlowOptions>>(postedFlows.ToJsonString(), JsonOpts) ?? new();
+                foreach (var f in flows) f.Normalize();
+                errors.AddRange(InboundChecks.Problems(flows, ConnectorRegistry.BuiltIn(), new SourceRuntime(_optsMonitor.CurrentValue, _log)));
+            }
+            catch (JsonException ex) { errors.Add("The inbound flows could not be read: " + ex.Message); }
         }
 
         // Mail: only validated when it is switched on. The redirect list is required then,
@@ -245,6 +258,7 @@ public sealed partial class LocalStatusServer
                         Input = r.Input?.Trim() ?? "",
                         InputFormat = InputFormats.IsWord(r.InputFormat) ? InputFormats.Word : InputFormats.Json,
                         Output = r.Output?.Trim() ?? "",
+                        Enabled = r.Enabled,
                         Mail = r.Mail,
                         SharePoint = new SharePointTargetOptions
                         {
@@ -415,6 +429,8 @@ public sealed partial class LocalStatusServer
         public string? Input { get; set; }
         public string? InputFormat { get; set; }
         public string? Output { get; set; }
+        /// <summary>Absent => on (a dashboard before 1.5.0).</summary>
+        public bool? Enabled { get; set; }
         /// <summary>Absent => the entry follows the type's Mail (a dashboard before 1.5.0).</summary>
         public bool? Mail { get; set; }
         public CompanySpDto? SharePoint { get; set; }

@@ -1,12 +1,14 @@
 namespace Balsoft.Hive.BDC.Connectors;
 
 /// <summary>
-/// The connector kinds this version knows, by name. A new DMS is one class and one line here;
-/// the processor, the settings and the ledger do not change.
+/// The connector kinds this version knows, by name: targets an outbound flow delivers to and sources an inbound flow
+/// reads from. A new DMS is one class and one line here; the processors, the settings and the ledger do not change.
 /// </summary>
 public sealed class ConnectorRegistry
 {
     private readonly Dictionary<string, Func<TargetRuntime, IDocumentTarget>> _targets = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Func<SourceRuntime, IRecordSource>> _sources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _sourceOrder = new();
 
     public static ConnectorRegistry BuiltIn()
     {
@@ -15,8 +17,24 @@ public sealed class ConnectorRegistry
         registry.RegisterTarget(TargetKinds.Mail, runtime => new MailDocumentTarget(runtime.Options.Mail, runtime.Mailer));
         registry.RegisterTarget(ConnectionKinds.DocuWare, runtime => new DocuWareDocumentTarget(runtime.Options, DocuWareClients.For));
         registry.RegisterTarget("blob", runtime => new BlobDocumentTarget(runtime.Options, (c, container) => AzureBlobStore.For(c, container)));
+        registry.RegisterSource(ConnectionKinds.DocuWare, runtime => new DocuWareRecordSource(runtime, DocuWareClients.For));
+        registry.RegisterSource(TargetKinds.SharePoint, runtime => new SharePointRecordSource(runtime.SharePointAuth));
         return registry;
     }
+
+    public void RegisterSource(string kind, Func<SourceRuntime, IRecordSource> create)
+    {
+        string key = TargetKinds.Clean(kind);
+        if (!_sources.ContainsKey(key)) _sourceOrder.Add(key);
+        _sources[key] = create;
+    }
+
+    /// <summary>The source kinds in the order they were registered (the order of the tiles in the dashboard).</summary>
+    public IReadOnlyList<string> SourceKindNames => _sourceOrder;
+
+    /// <summary>The source for <paramref name="kind"/>, or null when this version does not know the kind.</summary>
+    public IRecordSource? Source(string kind, SourceRuntime runtime)
+        => _sources.TryGetValue(TargetKinds.Clean(kind), out var create) ? create(runtime) : null;
 
     public void RegisterTarget(string kind, Func<TargetRuntime, IDocumentTarget> create)
         => _targets[TargetKinds.Clean(kind)] = create;

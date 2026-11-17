@@ -172,6 +172,25 @@ public class RoutingAndConfigTests
     }
 
     [Fact]
+    public void ACompanySwitchedOffCountsLikeADisabledTypeAndOlderEntriesAreOn()
+    {
+        var o = new BDCOptions();
+        var off = Route("agr", @"C:\po", sp: true);
+        off.Enabled = false;
+        o.DocumentTypes.Add(new DocumentTypeOptions { Id = "SalesInvoice", Companies = { Route("agr", @"C:\in"), off } });
+
+        Assert.True(o.DocumentTypes[0].Companies[0].IsOn);
+        Assert.False(off.IsOn);
+        Assert.False(o.AnySharePointEnabled());
+        Assert.DoesNotContain(off, o.ActiveRoutes());
+        Assert.Equal(@"C:\in", Assert.Single(ScanFolder.Build(o.DocumentTypes)).Path);
+
+        off.Enabled = null;
+        Assert.True(off.IsOn);
+        Assert.True(o.AnySharePointEnabled());
+    }
+
+    [Fact]
     public void SharePointOnADisabledTypeDoesNotCountAsEnabled()
     {
         var o = new BDCOptions();

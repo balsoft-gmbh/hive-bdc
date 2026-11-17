@@ -119,6 +119,7 @@ public static class SettingsFile
             },
         };
         // Written only once a company has its own switch; without it the entry follows the type, as before.
+        if (r.Enabled is { } enabled) node["Enabled"] = enabled;
         if (r.Mail is { } mail) node["Mail"] = mail;
         if (r.Source is not null)
         {

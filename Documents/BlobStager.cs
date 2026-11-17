@@ -37,7 +37,7 @@ public sealed partial class BlobStager
     public void Run(BDCOptions opts)
     {
         foreach (var t in opts.DocumentTypes.Where(t => t.Enabled))
-            foreach (var route in t.Companies.Where(r => r.Source is { Kind: "blob" }))
+            foreach (var route in t.Companies.Where(r => r.IsOn && r.Source is { Kind: "blob" }))
             {
                 try { Settle(opts, route); Stage(opts, route); }
                 catch (Exception ex) { WarnOnce(route.Input, $"blob source for {route.Input}: {ex.Message}"); }

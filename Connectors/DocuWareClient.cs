@@ -16,10 +16,7 @@ public sealed record DocuWareCabinet(string Id, string Name, IReadOnlyList<DocuW
 public sealed record DocuWareCabinetSummary(string Id, string Name);
 
 /// <summary>A DocuWare call failed. <see cref="RetryLater"/> is true when trying again later can succeed (sign-in, network, server busy).</summary>
-public sealed class DocuWareException(string message, bool retryLater) : Exception(message)
-{
-    public bool RetryLater { get; } = retryLater;
-}
+public sealed class DocuWareException(string message, bool retryLater) : ConnectorException(message, retryLater);
 
 /// <summary>
 /// DocuWare Platform REST client for one connection: signs in through DocuWare's identity service (the only sign-in the

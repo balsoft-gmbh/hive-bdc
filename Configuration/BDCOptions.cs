@@ -187,8 +187,8 @@ public sealed class BDCOptions
     /// <summary>All company entries of all types.</summary>
     public IEnumerable<DocumentRoute> AllRoutes() => DocumentTypes.SelectMany(t => t.Companies);
 
-    /// <summary>Company entries of ENABLED types only: the ones that can actually deliver anything.</summary>
-    public IEnumerable<DocumentRoute> ActiveRoutes() => DocumentTypes.Where(t => t.Enabled).SelectMany(t => t.Companies);
+    /// <summary>Switched-on company entries of ENABLED types only: the ones that can actually deliver anything.</summary>
+    public IEnumerable<DocumentRoute> ActiveRoutes() => DocumentTypes.Where(t => t.Enabled).SelectMany(t => t.Companies.Where(r => r.IsOn));
 
     /// <summary>Distinct dataAreaIds across every type, in first-seen order.</summary>
     public IReadOnlyList<string> CompanyIds()

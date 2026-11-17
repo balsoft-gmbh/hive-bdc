@@ -129,6 +129,25 @@ public sealed class DocumentProcessorTests : IDisposable
         Assert.False(File.Exists(Path.Combine(a.Input, "out", "SalesQuotation", "quote.pdf")));
     }
 
+    [Fact]
+    public void ACompanySwitchedOffIsNotScannedAndItsPairInASharedFolderGoesToError()
+    {
+        var a = Route("A"); var options = Options(a);
+        string offOnly = Path.Combine(_root, "company-off-not-created");
+        options.DocumentTypes[0].Companies.Add(new DocumentRoute { DataAreaId = "B", Input = offOnly, Enabled = false });
+        options.DocumentTypes[0].Companies.Add(new DocumentRoute { DataAreaId = "C", Input = a.Input, Enabled = false });
+        Pair(a, "order", "A");
+        Pair(a, "orderc", "C");
+
+        var result = Scan(options);
+
+        Assert.Equal(1, result.Processed);
+        Assert.Equal(1, result.Errors);
+        Assert.True(File.Exists(Path.Combine(a.Input, "error", "orderc_1.json")));
+        Assert.False(Directory.Exists(offOnly));
+        Assert.Single(options.ScanFolders());
+    }
+
     /// <summary>Customer report 2026-10-26: removed built-ins came back; one the ERP still sends must not register again.</summary>
     [Fact]
     public void RemovedBuiltInTypeGoesToErrorAndIsNotRegisteredAgain()
