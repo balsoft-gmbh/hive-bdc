@@ -108,6 +108,9 @@ builder.Services.AddWindowsService(o => o.ServiceName = "HiveBDC");
 // HiveBDC__Azure__*), never from the dashboard.
 string runMode = RunModes.Clean(builder.Configuration[$"{sectionName}:RunMode"]);
 var azureRun = builder.Configuration.GetSection($"{sectionName}:Azure").Get<AzureRunOptions>() ?? new AzureRunOptions();
+string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+ISettingsDocument settingsDocument = new FileSettingsDocument(settingsPath);
+BlobSettingsProvider? settingsBlob = null;
 if (runMode == RunModes.Azure)
 {
     if (azureRun.TableEndpoint.Trim().Length == 0 && azureRun.StorageConnection.Trim().Length == 0)
@@ -117,11 +120,29 @@ if (runMode == RunModes.Azure)
     }
     if (azureRun.KeyVaultUrl.Trim().Length > 0)
         SecretProtector.UseVault(KeyVaultSecretVault.For(azureRun.KeyVaultUrl.Trim()));
+
+    // The settings blob takes the place of the package's appsettings.json (read-only in Azure, and its built-in
+    // document types would merge index by index into the blob's list). Environment and command line still win.
+    if (azureRun.SettingsBlobUrl.Trim().Length > 0)
+    {
+        var blob = AzureSettingsBlob.For(azureRun.SettingsBlobUrl.Trim(), azureRun.StorageConnection.Trim());
+        settingsBlob = new BlobSettingsProvider(blob, TimeSpan.FromSeconds(Math.Max(5, azureRun.SettingsPollSeconds)));
+        var document = new BlobSettingsDocument(blob);
+        document.Changed += settingsBlob.Refresh;
+        settingsDocument = document;
+        var sources = ((IConfigurationBuilder)builder.Configuration).Sources;
+        int at = sources.ToList().FindIndex(s => s is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource);
+        foreach (var json in sources.OfType<Microsoft.Extensions.Configuration.Json.JsonConfigurationSource>().ToList())
+            sources.Remove(json);
+        sources.Insert(Math.Max(0, at), settingsBlob);
+    }
+
     builder.Services.AddSingleton(sp => new TableStateStore(
         AzureTableRows.For(azureRun.StorageConnection.Trim(), azureRun.TableEndpoint.Trim()),
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("TableStateStore"), azureRun.TablePrefix.Trim()));
     builder.Services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<TableStateStore>());
-    builder.Services.AddSingleton<IProcessingGate>(sp => new AzureProcessingGate(sp.GetRequiredService<TableStateStore>(), SecretProtector.Current));
+    builder.Services.AddSingleton<IProcessingGate>(sp => new AzureProcessingGate(
+        sp.GetRequiredService<TableStateStore>(), SecretProtector.Current, () => settingsBlob?.Problem));
 }
 else if (runMode == RunModes.Local)
 {
@@ -135,9 +156,8 @@ else
     Console.Error.WriteLine($"Unknown run mode '{runMode}'; use local or azure.");
     return 3;
 }
-string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 builder.Services.AddSingleton(sp =>
-    new DocumentTypeRegistry(settingsPath, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
+    new DocumentTypeRegistry(settingsDocument, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
 builder.Services.AddHostedService<Worker>();
 
 // ── Logging: route everything through Serilog (console + rolling daily file) ─
@@ -181,6 +201,11 @@ if (runMode == RunModes.Azure)
     log.LogInformation("Azure run mode: state in Table Storage ({Tables}, prefix {Prefix}), secrets {Secrets}.",
         azureRun.TableEndpoint.Trim().Length > 0 ? azureRun.TableEndpoint.Trim() : "connection string", azureRun.TablePrefix.Trim(),
         SecretProtector.Current.UsesVault ? "from Key Vault " + azureRun.KeyVaultUrl.Trim() : "not in Key Vault (no vault configured)");
+    if (settingsBlob is null)
+        log.LogWarning("Azure run mode without a settings blob: the settings come from the package's appsettings.json, which is read-only; a document type the service registers itself is kept for this run only.");
+    else
+        log.LogInformation("Settings from {Blob}{Problem}.", settingsDocument.Where,
+            settingsBlob.Problem is { } p ? ", which cannot be read now (" + p + ")" : "");
     foreach (var problem in AzureSettingsCheck.Problems(opts))
         log.LogWarning("Not usable in Azure: {Problem}", problem);
 }

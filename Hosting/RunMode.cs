@@ -25,6 +25,15 @@ public sealed class AzureRunOptions
 
     /// <summary>https://{vault}.vault.azure.net; every secret in the settings is then a "kv:" reference.</summary>
     public string KeyVaultUrl { get; set; } = "";
+
+    /// <summary>
+    /// https://{account}.blob.core.windows.net/{container}/{name}.json: the settings of this instance, read in place of the
+    /// package's appsettings.json (read-only in Azure) and written back by the service.
+    /// </summary>
+    public string SettingsBlobUrl { get; set; } = "";
+
+    /// <summary>How often the settings blob is checked for a change.</summary>
+    public int SettingsPollSeconds { get; set; } = 15;
 }
 
 /// <summary>
@@ -87,23 +96,27 @@ public sealed class LocalProcessingGate : IProcessingGate
 }
 
 /// <summary>
-/// The Azure run mode takes nothing from a source while the settings use what only a local install has (case 18),
-/// Table Storage cannot be reached (case 37) or Key Vault cannot be reached (case 17). The documents stay where they
-/// are and are taken once the reason is gone.
+/// The Azure run mode takes nothing from a source while its settings blob cannot be read, the settings use what only a
+/// local install has (case 18), Table Storage cannot be reached (case 37) or Key Vault cannot be reached (case 17). The
+/// documents stay where they are and are taken once the reason is gone.
 /// </summary>
 public sealed class AzureProcessingGate : IProcessingGate
 {
     private readonly TableStateStore _state;
     private readonly SecretResolver _secrets;
+    private readonly Func<string?> _settingsProblem;
 
-    public AzureProcessingGate(TableStateStore state, SecretResolver secrets)
+    public AzureProcessingGate(TableStateStore state, SecretResolver secrets, Func<string?>? settingsProblem = null)
     {
         _state = state;
         _secrets = secrets;
+        _settingsProblem = settingsProblem ?? (() => null);
     }
 
     public string? Hold(BDCOptions opts)
     {
+        if (_settingsProblem() is { } unreadable)
+            return "the settings in Blob Storage cannot be read: " + unreadable;
         var problems = AzureSettingsCheck.Problems(opts);
         if (problems.Count > 0)
             return "the settings use what only a local install has: " + string.Join(" ", problems);

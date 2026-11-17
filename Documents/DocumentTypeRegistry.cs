@@ -18,14 +18,19 @@ namespace Balsoft.Hive.BDC.Documents;
 /// </summary>
 public sealed class DocumentTypeRegistry
 {
-    private readonly string _settingsPath;
+    private readonly ISettingsDocument _settings;
     private readonly ILogger _log;
     private readonly Dictionary<string, DocumentTypeOptions> _discovered = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
 
-    public DocumentTypeRegistry(string settingsPath, ILogger log)
+    public DocumentTypeRegistry(string settingsPath, ILogger log) : this(new FileSettingsDocument(settingsPath), log)
     {
-        _settingsPath = settingsPath;
+    }
+
+    /// <summary>With the settings of an Azure instance (a blob) or any other place the settings live.</summary>
+    public DocumentTypeRegistry(ISettingsDocument settings, ILogger log)
+    {
+        _settings = settings;
         _log = log;
     }
 
@@ -61,7 +66,7 @@ public sealed class DocumentTypeRegistry
 
             try
             {
-                bool written = SettingsFile.Update(_settingsPath, section =>
+                bool written = _settings.Update(section =>
                 {
                     if (section["DocumentTypes"] is not JsonArray arr)
                     {
@@ -84,8 +89,8 @@ public sealed class DocumentTypeRegistry
             catch (Exception ex)
             {
                 _log.LogWarning(ex,
-                    "New document type '{Type}' could not be written to appsettings.json; it is handled with defaults " +
-                    "for this run only.", clean);
+                    "New document type '{Type}' could not be written to the settings ({Where}); it is handled with defaults " +
+                    "for this run only.", clean, _settings.Where);
             }
             return entry;
         }
@@ -109,7 +114,7 @@ public sealed class DocumentTypeRegistry
             type.Companies.Add(route);
             try
             {
-                bool written = SettingsFile.Update(_settingsPath, section =>
+                bool written = _settings.Update(section =>
                 {
                     if (section["DocumentTypes"] is not JsonArray arr) return false;
                     for (int i = 0; i < arr.Count; i++)
@@ -129,8 +134,8 @@ public sealed class DocumentTypeRegistry
             catch (Exception ex)
             {
                 _log.LogWarning(ex,
-                    "Company {Area} for document type '{Type}' could not be written to appsettings.json; it is used for this run only.",
-                    route.DataAreaId, type.Id);
+                    "Company {Area} for document type '{Type}' could not be written to the settings ({Where}); it is used for this run only.",
+                    route.DataAreaId, type.Id, _settings.Where);
             }
             return route;
         }

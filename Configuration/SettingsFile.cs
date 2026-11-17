@@ -62,23 +62,36 @@ public static class SettingsFile
             if (root is null && File.Exists(path))
                 throw new InvalidOperationException($"{path} could not be read as JSON, so it was not changed.");
             root ??= new JsonObject();
-            var section = SectionOf(root);
-            if (section is null)
-            {
-                section = new JsonObject();
-                root[Section] = section;
-            }
-            else if (root[Section] is null)
-            {
-                root.Remove(LegacySection);
-                root[Section] = section;
-            }
-
-            if (!mutate(section)) return false;
+            if (!mutate(ProductSection(root))) return false;
             AtomicWrite(path, root);
             return true;
         }
     }
+
+    /// <summary>Settings text as JSON (// comments and trailing commas allowed); throws when it is not a JSON object.</summary>
+    public static JsonObject Parse(string text)
+    {
+        var o = new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+        return JsonNode.Parse(text, null, o) as JsonObject ?? throw new JsonException("The settings are not a JSON object.");
+    }
+
+    /// <summary>The product section of <paramref name="root"/>, created when absent; a legacy section is renamed on the way.</summary>
+    public static JsonObject ProductSection(JsonObject root)
+    {
+        var section = SectionOf(root);
+        if (section is null)
+        {
+            section = new JsonObject();
+            root[Section] = section;
+        }
+        else if (root[Section] is null)
+        {
+            root.Remove(LegacySection);
+            root[Section] = section;
+        }
+        return section;
+    }
+
 
     /// <summary>Serialize one document type the way the dashboard writes it, so both writers produce the same shape.</summary>
     public static JsonObject DocumentTypeNode(DocumentTypeOptions t)
@@ -206,4 +219,23 @@ public static class SettingsFile
             ["Fields"] = fields,
         };
     }
+}
+
+
+/// <summary>Where the service's settings live and how a change is written back: a file locally, a blob in Azure.</summary>
+public interface ISettingsDocument
+{
+    /// <summary>For log lines: the file path or the blob address.</summary>
+    string Where { get; }
+
+    /// <summary>Read-modify-write of the product section; false when <c>mutate</c> changed nothing, so nothing was written.</summary>
+    bool Update(Func<JsonObject, bool> mutate);
+}
+
+/// <summary>appsettings.json next to the service, written atomically (<see cref="SettingsFile"/>).</summary>
+public sealed class FileSettingsDocument(string path) : ISettingsDocument
+{
+    public string Where => path;
+
+    public bool Update(Func<JsonObject, bool> mutate) => SettingsFile.Update(path, mutate);
 }

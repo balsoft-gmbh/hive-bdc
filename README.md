@@ -595,7 +595,8 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
   Storage/                    IStateStore, ExportLedger (SQLite: exports, deliveries, document history),
                               TableStateStore (the same in Azure Table Storage, for the Azure run mode;
                               AzureTableRows behind ITableRows), SecretProtector (DPAPI locally, "kv:" Key Vault
-                              references in Azure; KeyVaultSecretVault)
+                              references in Azure; KeyVaultSecretVault), SettingsBlob (settings of an
+                              Azure instance: AzureSettingsBlob, BlobSettingsDocument, BlobSettingsProvider)
   Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate),
                               LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
                               ServiceAccount, SampleData
@@ -823,11 +824,22 @@ The same program runs as an Azure web app. The deployment sets, as app settings:
 | `HiveBDC__Azure__StorageConnection` | instead of the endpoint, a storage connection string (as an App Service Key Vault reference) |
 | `HiveBDC__Azure__TablePrefix` | table name prefix, default `HiveBDC` |
 | `HiveBDC__Azure__KeyVaultUrl` | `https://{vault}.vault.azure.net`; every secret in the settings is then `kv:{secret name}` |
+| `HiveBDC__Azure__SettingsBlobUrl` | `https://{account}.blob.core.windows.net/{container}/{name}.json`; the settings of the instance, in place of the package's `appsettings.json` |
+| `HiveBDC__Azure__SettingsPollSeconds` | how often the settings blob is checked for a change, default 15 (at least 5) |
+
+The settings blob has the same shape as `appsettings.json` (section `HiveBDC`). The
+service checks its ETag every poll interval and reloads it when it changed. A
+document type the service registers by itself is written back to the blob only if
+nobody wrote it in between; otherwise it reads the blob again and makes its change
+on that version. A missing blob means empty settings. Without a settings blob the
+package's `appsettings.json` is used; it is read-only in Azure, so a type the service
+registers lasts for that run only.
 
 In Azure there is no loopback API for the Windows app. The service takes no document
 from a source while one of these holds, and says why in the log (when the reason
 changes, then every 5 minutes):
 
+- the settings blob cannot be read (the last settings read stay in use);
 - the settings use what only a local install has: a company that reads a folder
   instead of Blob Storage, Word input, a company that only writes to its output
   folder, an inbound flow that writes to a folder, or a secret kept in the settings
