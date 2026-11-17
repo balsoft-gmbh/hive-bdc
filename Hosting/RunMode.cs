@@ -54,8 +54,8 @@ public static class AzureSettingsCheck
                 string name = $"Outbound {type.Id} for company {route.DataAreaId}";
                 if (InputFormats.IsWord(route.InputFormat))
                     problems.Add($"{name} reads Word files from a folder, which an Azure instance does not have.");
-                else if (route.Source is not { Kind: "blob" or ConnectionKinds.ServiceBus })
-                    problems.Add($"{name} reads the folder '{route.Input}'; in Azure documents come from Blob Storage or Service Bus (source kind blob or servicebus).");
+                else if (route.Source is not { Kind: "blob" or ConnectionKinds.ServiceBus or ConnectionKinds.Https })
+                    problems.Add($"{name} reads the folder '{route.Input}'; in Azure documents come from Blob Storage, Service Bus or HTTPS (source kind blob, servicebus or https).");
                 if (WindowsPath(route.Input) || WindowsPath(route.Output))
                     problems.Add($"{name} uses a Windows path ('{(WindowsPath(route.Input) ? route.Input : route.Output)}') as its work folder.");
                 bool delivers = route.SharePoint.Enabled || route.Targets.Any(t => t.Enabled) || (route.MailsFor(type) && opts.Mail.Enabled);

@@ -212,7 +212,13 @@ else
         sp.GetRequiredService<ILogger<LocalStatusServer>>(),
         resolvedLogDir, appVersion, settingsPath, settings: settingsDocument, licenseStore: licenseStore, licenseTenant: licenseTenant));
     builder.Services.AddSingleton<IHostedService>(sp => new AzureWebHost(
-        sp.GetRequiredService<LocalStatusServer>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("AzureWebHost"), appVersion, azureTenant));
+        sp.GetRequiredService<LocalStatusServer>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("AzureWebHost"), appVersion, azureTenant,
+        options: () =>
+        {
+            var current = sp.GetRequiredService<IOptionsMonitor<BDCOptions>>().CurrentValue;
+            current.Normalize();
+            return current;
+        }));
 }
 
 using var host = builder.Build();

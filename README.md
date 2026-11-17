@@ -600,7 +600,7 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
   Documents/                  AxDocument (the JSON envelope), DocumentProcessor (scan, resolve,
                               produce, deliver, meter), DocumentHandlers (EInvoice, Pdf),
                               DocumentTypeRegistry (auto-registration), SharePointFieldTemplate,
-                              BlobStager and ServiceBusStager (Azure sources staged into the input folder)
+                              BlobStager, ServiceBusStager and HttpsInbound (Azure sources staged into the input folder)
   EInvoice/                   InvoiceMapper (JSON -> EN 16931), EInvoiceGenerator, PdfRepair
   Delivery/                   MailSender (Graph), SharePointUploader (Graph)
   Connectors/                 IDocumentTarget, ConnectorRegistry (target kinds by name), SharePoint, mail, DocuWare,
@@ -924,6 +924,16 @@ authentication with Microsoft Entra ID:
 - the calls are the same as the local API's (`/status`, `/config`, `/history`, ...);
   settings are saved into the settings blob, secrets into Key Vault, and every change
   is logged with the user who made it.
+- `POST /inbound/{documentType}/{company}` is the HTTPS source: a company entry with
+  a `Source` of kind `https` takes documents an ERP, a Logic App or a Power Automate
+  flow posts there, as `{"document": {the ERP export JSON}, "pdf": "base64"}`. The
+  caller sends the key of the entry's `https` connection in its header (default
+  `x-api-key`; it needs no Entra sign-in, so the deployment excludes `/inbound` from
+  App Service authentication). `?id=` names the document, else its `documentNumber`.
+  The answer is 202 when the document is staged, 200 when it arrived before (no
+  second copy), 401 for a missing or wrong key, 413 above 50 MB, 400 for another
+  body and 404 when no company of that type takes HTTPS; nothing is stored on a
+  refusal.
 
 The service takes no document
 from a source while one of these holds, and says why in the log (when the reason

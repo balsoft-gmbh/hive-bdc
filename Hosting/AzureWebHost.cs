@@ -88,12 +88,16 @@ public sealed class AzureWebHost : BackgroundService
     private readonly Func<bool> _signInEnabled;
     private readonly IPEndPoint _listen;
     private readonly string _version;
+    private readonly Func<BDCOptions> _options;
+    private readonly HttpsInbound _inbound;
     private bool _warnedSignInOff;
 
     public AzureWebHost(LocalStatusServer api, ILogger log, string version, InstanceTenant? tenant = null,
-        Func<bool>? signInEnabled = null, IPEndPoint? listen = null)
+        Func<bool>? signInEnabled = null, IPEndPoint? listen = null, Func<BDCOptions>? options = null)
     {
         _api = api;
+        _options = options ?? (() => new BDCOptions());
+        _inbound = new HttpsInbound(log);
         _log = log;
         _version = version;
         _tenant = tenant;
@@ -139,6 +143,31 @@ public sealed class AzureWebHost : BackgroundService
         if (path == "/healthz")
         {
             await Write(http, 200, new { status = "ok", version = _version });
+            return;
+        }
+        // The HTTPS source: a machine caller with the key of the company's https connection, not a signed-in user.
+        if (path.StartsWith("/inbound/", StringComparison.Ordinal) && HttpMethods.IsPost(http.Request.Method))
+        {
+            var parts = (http.Request.Path.Value ?? "").Trim('/').Split('/');
+            if (parts.Length != 3)
+            {
+                await Write(http, 404, new { error = "Use POST /inbound/{documentType}/{company}." });
+                return;
+            }
+            InboundAnswer answer;
+            try
+            {
+                answer = _inbound.Receive(_options(), Uri.UnescapeDataString(parts[1]), Uri.UnescapeDataString(parts[2]),
+                    name => http.Request.Headers[name].ToString() is { Length: > 0 } v ? v : null,
+                    http.Request.Query["id"].ToString() is { Length: > 0 } id ? id : null,
+                    http.Request.ContentLength,
+                    () => new StreamReader(http.Request.Body, Encoding.UTF8).ReadToEndAsync(http.RequestAborted).GetAwaiter().GetResult());
+            }
+            catch (BadHttpRequestException ex) when (ex.StatusCode == 413)
+            {
+                answer = new InboundAnswer(413, new { error = $"The document is larger than {HttpsInbound.MaxBytes / (1024 * 1024)} MB." });
+            }
+            await Write(http, answer.Status, answer.Body);
             return;
         }
         if (!_signInEnabled())
