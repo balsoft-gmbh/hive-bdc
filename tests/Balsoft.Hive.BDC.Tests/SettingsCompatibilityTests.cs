@@ -167,6 +167,26 @@ public sealed class SettingsCompatibilityTests
     }
 
     [Fact]
+    public void OlderFilesMailAsTheTypeSaysAndACompanySwitchIsWrittenOnlyWhenSet()
+    {
+        var invoices134 = Load(Version134).DocumentTypes.Single(t => t.Id == "SalesInvoice");
+        var invoices140 = Load(Version140).DocumentTypes.Single(t => t.Id == "SalesInvoice");
+        Assert.All(invoices134.Companies, r => Assert.Null(r.Mail));
+        Assert.All(invoices134.Companies, r => Assert.True(r.MailsFor(invoices134)));
+        Assert.All(invoices140.Companies, r => Assert.False(r.MailsFor(invoices140)));
+
+        invoices134.Companies[1].Mail = false;
+        var file = new JsonObject { ["HiveBDC"] = new JsonObject { ["DocumentTypes"] = new JsonArray(SettingsFile.DocumentTypeNode(invoices134)) } };
+
+        Assert.False(SettingsFile.RouteNode(invoices134.Companies[1])["Mail"]!.GetValue<bool>());
+        Assert.False(SettingsFile.RouteNode(invoices134.Companies[0]).ContainsKey("Mail"));
+        var reloaded = Load(file.ToJsonString()).DocumentTypes.Single(t => t.Id == "SalesInvoice");
+        Assert.Null(reloaded.Companies[0].Mail);
+        Assert.True(reloaded.Companies[0].MailsFor(reloaded));
+        Assert.False(reloaded.Companies[1].MailsFor(reloaded));
+    }
+
+    [Fact]
     public void AChangedTargetChangesTheWorkerSignature()
     {
         var a = Load(WithTargets);

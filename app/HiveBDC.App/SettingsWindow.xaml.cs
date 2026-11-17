@@ -80,10 +80,54 @@ public partial class SettingsWindow : Window
     private async void OnTestDocuWare(object sender, RoutedEventArgs e)
         => await _vm.TestDocuWareAsync(DocuWareSecretBox.Password);
 
+    private void OnAskRemove(object sender, RoutedEventArgs e) => SetConfirm(sender, true);
+
+    private void OnKeepItem(object sender, RoutedEventArgs e) => SetConfirm(sender, false);
+
+    private static void SetConfirm(object sender, bool ask)
+    {
+        switch ((sender as FrameworkElement)?.DataContext)
+        {
+            case DocumentTypeEditViewModel t: t.ConfirmRemove = ask; break;
+            case RouteRow r: r.ConfirmRemove = ask; break;
+            case TargetRow d: d.ConfirmRemove = ask; break;
+            case ImportFlowRow i: i.ConfirmRemove = ask; break;
+        }
+    }
+
+    private void OnOpenType(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DocumentTypeEditViewModel type) _vm.OpenType(type);
+    }
+
+    private void OnRemoveType(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DocumentTypeEditViewModel type) _vm.RemoveType(type);
+    }
+
+    private void OnAddCompany(object sender, RoutedEventArgs e) => _vm.AddCompanyToOpenType();
+
+    private void OnOpenCompany(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is RouteRow company) _vm.OpenCompany(company);
+    }
+
+    private void OnRemoveCompany(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is RouteRow company) _vm.RemoveCompany(company);
+    }
+
+    private void OnConnectMail(object sender, RoutedEventArgs e)
+    {
+        _vm.ShowPageCommand.Execute("Connections");
+        _vm.OpenCommand.Execute("mail");
+    }
+
     private async void OnAddDocuWareTarget(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not ViewModels.RouteRow row) return;
+        if (_vm.SelectedDocumentType?.SelectedCompany is not { } row) return;
         await EditDocuWareTarget(row, null);
+        _vm.RefreshSummaries();
     }
 
     private async void OnEditTargetCard(object sender, RoutedEventArgs e)
@@ -96,19 +140,29 @@ public partial class SettingsWindow : Window
             return;
         }
         await EditDocuWareTarget(row, target);
+        _vm.RefreshSummaries();
     }
 
     private void OnRemoveTargetCard(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: ViewModels.TargetRow target, Tag: ViewModels.RouteRow row })
             row.RemoveTarget(target);
+        _vm.RefreshSummaries();
     }
 
     private async void OnAddImport(object sender, RoutedEventArgs e) => await EditImport(null);
 
-    private async void OnEditImport(object sender, RoutedEventArgs e)
+    private void OnRemoveImportCard(object sender, RoutedEventArgs e)
     {
-        if (_vm.SelectedFlow is not { } flow) return;
+        if ((sender as FrameworkElement)?.DataContext is not ImportFlowRow flow) return;
+        _vm.SelectedFlow = flow;
+        _vm.RemoveFlowCommand.Execute(null);
+    }
+
+    private async void OnEditImportCard(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ImportFlowRow flow) return;
+        _vm.SelectedFlow = flow;
         if (!flow.IsDocuWare)
         {
             MessageBox.Show(this, "This import was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
@@ -122,7 +176,7 @@ public partial class SettingsWindow : Window
     {
         if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))
         {
-            MessageBox.Show(this, "Set up the DocuWare sign-in on the Connections tab first (address, user name, password), then add the import.",
+            MessageBox.Show(this, "Connect DocuWare under Connections first (address, user name, password), then add the import.",
                 "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -136,7 +190,7 @@ public partial class SettingsWindow : Window
     {
         if (string.IsNullOrWhiteSpace(_vm.DocuWareUrl))
         {
-            MessageBox.Show(this, "Set up the DocuWare sign-in on the Connections tab first (address, user name, password), then add the target.",
+            MessageBox.Show(this, "Connect DocuWare under Connections first (address, user name, password), then add it as a destination.",
                 "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }

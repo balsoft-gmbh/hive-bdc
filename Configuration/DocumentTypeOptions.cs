@@ -51,7 +51,8 @@ public sealed class DocumentTypeOptions
     /// <summary>A disabled type is not processed: its pairs are routed to error\ with a clear reason.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Whether documents of this type are mailed (when mail is configured at all).</summary>
+    /// <summary>Whether documents of this type are mailed (when mail is configured at all), for every company
+    /// entry that does not set its own <see cref="DocumentRoute.Mail"/>.</summary>
     public bool Mail { get; set; } = true;
 
     /// <summary>The AX companies this type is picked up for, each with its own folders and SharePoint target.</summary>
@@ -107,6 +108,11 @@ public sealed class DocumentRoute
 
     /// <summary>Further targets next to the SharePoint block, of any kind the installed version knows.</summary>
     public List<TargetOptions> Targets { get; set; } = new();
+
+    /// <summary>Whether this company's documents are mailed. Null (files written before 1.5.0) = as the type says.</summary>
+    public bool? Mail { get; set; }
+
+    public bool MailsFor(DocumentTypeOptions type) => Mail ?? type.Mail;
 
     /// <summary>
     /// Where the documents come from when not the input folder itself: Kind "blob" downloads them from Azure Blob

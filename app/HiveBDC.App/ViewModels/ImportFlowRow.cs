@@ -4,11 +4,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Balsoft.Hive.BDC.App.ViewModels;
 
 /// <summary>
-/// One import flow on the Imports tab. The flow is kept as the JSON the service sent, so properties this dashboard does
+/// One import flow on the Import page of Settings. The flow is kept as the JSON the service sent, so properties this dashboard does
 /// not know survive a save; flows it cannot edit are sent back unchanged.
 /// </summary>
 public sealed partial class ImportFlowRow : ObservableObject
 {
+    /// <summary>Remove was clicked once; the card asks before the item goes.</summary>
+    [ObservableProperty] private bool _confirmRemove;
+
     [ObservableProperty] private bool _enabled;
 
     public JsonObject Json { get; }

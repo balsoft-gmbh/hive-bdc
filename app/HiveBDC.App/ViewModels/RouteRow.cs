@@ -13,6 +13,12 @@ namespace Balsoft.Hive.BDC.App.ViewModels;
 /// </summary>
 public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportRoute
 {
+    /// <summary>Mail each document of this company to the recipient the ERP names.</summary>
+    [ObservableProperty] private bool _mail = true;
+
+    /// <summary>Remove was clicked once; the card asks before the item goes.</summary>
+    [ObservableProperty] private bool _confirmRemove;
+
     [ObservableProperty] private string _dataAreaId = "";
     [ObservableProperty] private string _input = "";
     [ObservableProperty] private string _output = "";
@@ -59,11 +65,12 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         }
     }
 
-    partial void OnDataAreaIdChanged(string value) => OnPropertyChanged(nameof(Label));
+    partial void OnDataAreaIdChanged(string value) { OnPropertyChanged(nameof(Label)); OnPropertyChanged(nameof(TabTitle)); }
     partial void OnInputChanged(string value) => OnPropertyChanged(nameof(Summary));
+    partial void OnMailChanged(bool value) => OnPropertyChanged(nameof(DestinationLine));
     partial void OnIsWordChanged(bool value) { OnPropertyChanged(nameof(IsJson)); OnPropertyChanged(nameof(Summary)); }
-    partial void OnSharePointEnabledChanged(bool value) => OnPropertyChanged(nameof(Summary));
-    partial void OnLibraryChanged(string value) => OnPropertyChanged(nameof(Summary));
+    partial void OnSharePointEnabledChanged(bool value) { OnPropertyChanged(nameof(Summary)); OnPropertyChanged(nameof(SharePointDetail)); }
+    partial void OnLibraryChanged(string value) { OnPropertyChanged(nameof(Summary)); OnPropertyChanged(nameof(SharePointDetail)); }
 
     public RouteRow() { }
 
@@ -73,6 +80,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         Input = dto.Input ?? "";
         IsWord = InputFormats.IsWord(dto.InputFormat);
         Output = dto.Output ?? "";
+        Mail = dto.Mail ?? true;
         var sp = dto.SharePoint;
         SharePointEnabled = sp?.Enabled ?? false;
         SiteUrl = sp?.SiteUrl ?? "";
@@ -84,6 +92,44 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         foreach (var t in dto.Targets ?? new())
             Targets.Add(TargetRow.FromDto(t));
         Targets.CollectionChanged += (_, _) => OnPropertyChanged(nameof(Summary));
+    }
+
+    public string TabTitle => string.IsNullOrWhiteSpace(DataAreaId) ? "New company" : "Company " + DataAreaId.Trim();
+
+    /// <summary>The SharePoint line in "Goes to".</summary>
+    public string SharePointDetail
+    {
+        get
+        {
+            if (!SharePointEnabled) return "Off";
+            if (string.IsNullOrWhiteSpace(SiteUrl) || string.IsNullOrWhiteSpace(Library)) return "On, but the site or library is missing. Configure it.";
+            string site = SiteUrl.Trim().TrimEnd('/');
+            site = site[(site.LastIndexOf('/') + 1)..];
+            string place = site + " › " + Library.Trim() + (string.IsNullOrWhiteSpace(Folder) ? "" : " › " + Folder.Trim());
+            return $"{place} · {Columns.Count(c => !string.IsNullOrWhiteSpace(c.Column))} column(s)";
+        }
+    }
+
+    /// <summary>Lines on the company card of a document type.</summary>
+    public string SourceLine => (IsWord ? "Word documents" : "ERP export")
+        + (string.IsNullOrWhiteSpace(Input) ? ", no folder set yet" : " from " + Input.Trim());
+
+    public string DestinationLine
+    {
+        get
+        {
+            var places = new List<string>();
+            if (SharePointEnabled) places.Add("SharePoint");
+            places.AddRange(Targets.Where(t => t.Enabled).Select(t => t.KindLabel));
+            if (Mail) places.Add("Mail");
+            return places.Count == 0 ? "No destination yet" : "Goes to " + string.Join(", ", places);
+        }
+    }
+
+    public void RefreshSummary()
+    {
+        foreach (var name in new[] { nameof(SharePointDetail), nameof(TabTitle), nameof(Summary), nameof(SourceLine), nameof(DestinationLine) })
+            OnPropertyChanged(name);
     }
 
     /// <summary>Adds <paramref name="target"/>, or puts it in place of <paramref name="replaces"/>.</summary>
@@ -106,6 +152,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         Input = Input?.Trim() ?? "",
         InputFormat = IsWord ? InputFormats.Word : InputFormats.Json,
         Output = Output?.Trim() ?? "",
+        Mail = Mail,
         SharePoint = new CompanySharePointConfigDto
         {
             Enabled = SharePointEnabled,

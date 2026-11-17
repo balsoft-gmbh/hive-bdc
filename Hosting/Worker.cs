@@ -251,7 +251,7 @@ public sealed class Worker : BackgroundService
         {
             _log.LogInformation("document type {Type}: {Party}, {Handler}{Flags}, {Count} company entr(y/ies)",
                 t.Id, t.Party, t.Handler,
-                (t.Enabled ? "" : ", DISABLED") + (t.Mail ? "" : ", no mail") + (t.Discovered ? ", auto-registered" : ""),
+                (t.Enabled ? "" : ", DISABLED") + (t.Companies.Any(r => r.MailsFor(t)) ? "" : ", no mail") + (t.Discovered ? ", auto-registered" : ""),
                 t.Companies.Count);
             foreach (var r in t.Companies)
             {

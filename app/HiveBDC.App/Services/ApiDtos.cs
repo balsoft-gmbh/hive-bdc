@@ -147,6 +147,8 @@ public sealed class RouteConfigDto
     /// <summary>"Json" (ERP export pairs) or "Word" (filled Word invoices).</summary>
     [JsonPropertyName("inputFormat")] public string? InputFormat { get; set; }
     [JsonPropertyName("output")] public string? Output { get; set; }
+    /// <summary>Whether this company's documents are mailed. GET sends the effective value; a service before 1.5.0 sends none.</summary>
+    [JsonPropertyName("mail")] public bool? Mail { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
     [JsonPropertyName("targets")] public List<TargetConfigDto>? Targets { get; set; }
 }

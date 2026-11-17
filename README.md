@@ -186,8 +186,8 @@ They resume automatically after the input or configuration is repaired.
 
 ## Word input (filled Word invoices instead of an ERP export)
 
-A company entry can take **Word documents** instead of ERP export pairs (**Settings, Document types, company entry,
-Input: Word documents (.docx)**, or `InputFormat: "Word"` on the entry). Hive BDC then reads every `.docx` in the
+A company entry can take **Word documents** instead of ERP export pairs (**Settings > Export >** a document type **>** a company **>
+Comes from: Word**, or `InputFormat: "Word"` on the entry). Hive BDC then reads every `.docx` in the
 input folder, builds the same JSON an ERP export would drop, renders the PDF itself and runs the normal pipeline:
 XRechnung or ZUGFeRD, SharePoint, mail, ledger. Local folders and network shares work the same way as for JSON (a
 share needs the service under a domain account).
@@ -354,13 +354,13 @@ Prerequisite: an Entra ID app registration in the target tenant with the
   `{documentType}` is a handy column value to tell invoices from confirmations
   in one library.
 - `HiveBDC.exe --test-sharepoint` verifies auth and the first enabled
-  target without uploading anything (the dashboard's **Test SharePoint** does the
-  same for the selected company entry).
+  target without uploading anything (the dashboard's **Test this library** on a
+  company's SharePoint library screen does the same for that company).
 
 ### Importing column templates
 
-Settings, Document types, select the type and the company entry, then
-**Import columns…** in that entry's SharePoint card reads a JSON file and
+Settings > Export > a document type > a company > SharePoint **Edit**, then
+**Import columns…** on the SharePoint library screen reads a JSON file and
 applies the entry for exactly that type and company (target and column
 templates), so nobody types internal column names by hand. One file can carry
 every type and company of a customer; each company entry imports its own part
@@ -514,6 +514,7 @@ DPAPI-encrypts the secrets. Schema:
             "DataAreaId": "002",
             "Input": "\\\\server\\share\\HiveBDC\\002",   // shared with the other customer documents
             "Output": "",                                     // blank => <Input>\out\SalesInvoice
+            "Mail": true,                                     // this company mails; absent => the type's "Mail"
             "SharePoint": {
               "Enabled": true,
               "SiteUrl": "https://contoso.sharepoint.com/sites/Documents",
@@ -679,15 +680,30 @@ without further targets is saved without the `Targets` key, so the file stays
 readable by earlier versions, and a save from a dashboard that does not send targets
 keeps the stored ones.
 
-### Document types in Settings
+### Settings
 
-Each document type lists its companies as chips. A company is set up in three steps:
-**1 Where the documents come from** (the ERP export, JSON and PDF, or Word documents,
-and the folder), **2 What is made** (from the type's "Produced as": an e-invoice or the
-PDF as the ERP made it) and **3 Where they go**: SharePoint (its site, library and
-columns appear when switched on), one row per DocuWare file cabinet, and mail, which
-is set per type and needs document mail switched on under Connections. Every
-destination can be switched off without losing its settings.
+Settings opens on four entries: **Export** (documents from the ERP), **Import**
+(documents into the ERP), **Connections** and **Service**. Each screen holds one level
+and the adding and removing of the level below it; a breadcrumb leads back:
+
+- **Export** lists the document types. Add a type here, or remove one.
+- **A document type** holds its name, the ID the ERP writes, who it is sent to and what
+  Hive BDC makes (an e-invoice or the PDF as the ERP made it), and lists its companies.
+  Add or remove a company here.
+- **A company** holds where its documents come from (the ERP export, JSON and PDF, or
+  Word documents, and the folder) and where they go: SharePoint, one row per DocuWare
+  file cabinet, and mail. Each destination has its own switch and keeps its settings
+  when switched off. Mail needs Document mail under Connections.
+- **SharePoint library** (from a company) holds the site, library, folder and columns.
+- **Connections** shows SharePoint, DocuWare and Document mail as cards; each opens its
+  own screen.
+
+Remove asks in the card before anything goes, and nothing is written until **Save
+changes**.
+
+Mail is set per company (`"Mail"` on the company entry). A file written before 1.5.0
+has it on the document type only; its companies follow the type until the first save
+from Settings writes each company's own value.
 
 ### DocuWare target
 
@@ -695,7 +711,7 @@ In the dashboard:
 
 1. **Settings > Connections > DocuWare:** address, user name and password, then
    **Test connection**. It signs in and lists the file cabinets the user can see.
-2. **Settings > Document types >** a type **>** a company **> 3 Where they go >
+2. **Settings > Export >** a document type **>** a company **> Goes to >
    + Add a DocuWare file cabinet:** choose the file cabinet by name. Its fields are listed with their
    kind and whether they are required; fill the ones you want with templates. Choose
    the field that holds the document number under **Never store a document twice**.
@@ -780,7 +796,7 @@ identity.
 
 ### Import from DocuWare
 
-**Settings > Imports > Add import from DocuWare…** sets up a flow that runs on every
+**Settings > Import > + New import from DocuWare** sets up a flow that runs on every
 scan: documents in a file cabinet whose field (for example `STATUS`) has the ready
 value become a CSV file in the folder the ERP reads, and the field is then set to
 the done value, so a document is imported once. The document's file can be saved

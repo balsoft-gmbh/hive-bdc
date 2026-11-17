@@ -25,6 +25,9 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
         new("Pdf", "PDF as the ERP made it"),
     };
 
+    /// <summary>Remove was clicked once; the card asks before the item goes.</summary>
+    [ObservableProperty] private bool _confirmRemove;
+
     [ObservableProperty] private string _id = "";
     [ObservableProperty] private string _displayName = "";
     [ObservableProperty] private string _party = "Customer";
@@ -50,11 +53,89 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
         + (Companies.Any(c => c.IsWord) ? " · Word" : "")
         + (Enabled ? "" : " · disabled") + (Discovered ? " · auto-registered" : "");
 
+    /// <summary>Card lines on the Export page.</summary>
+    public string StatusText => !Enabled ? "Switched off"
+        : Companies.Count == 0 ? "Needs setup · no company yet"
+        : $"Active · {Companies.Count} compan{(Companies.Count == 1 ? "y" : "ies")}";
+
+    /// <summary>ok, setup or off: picks the colour of the status dot.</summary>
+    public string StatusKind => !Enabled ? "off" : Companies.Count == 0 ? "setup" : "ok";
+
+    public string SourceText
+    {
+        get
+        {
+            var kinds = new List<string>();
+            if (Companies.Any(c => c.IsJson)) kinds.Add("ERP export");
+            if (Companies.Any(c => c.IsWord)) kinds.Add("Word");
+            return kinds.Count == 0 ? "ERP export" : string.Join(" · ", kinds);
+        }
+    }
+
+    /// <summary>Set by Settings: whether Document mail is connected, for the mail chip on the card.</summary>
+    [ObservableProperty] private bool _mailConnected;
+
+    /// <summary>on, waiting (switched on but mail is not connected) or off.</summary>
+    public string MailState => !Companies.Any(c => c.Mail) ? "off" : MailConnected ? "on" : "waiting";
+
+    partial void OnMailConnectedChanged(bool value) => OnPropertyChanged(nameof(MailState));
+
+    public bool IsCustomer
+    {
+        get => Party != "Vendor";
+        set { if (value) Party = "Customer"; }
+    }
+
+    public bool IsVendor
+    {
+        get => Party == "Vendor";
+        set { if (value) Party = "Vendor"; }
+    }
+
+    public bool MakesEInvoice
+    {
+        get => Handler == "EInvoice";
+        set { if (value) Handler = "EInvoice"; }
+    }
+
+    public bool MakesPdf
+    {
+        get => Handler != "EInvoice";
+        set { if (value) Handler = "Pdf"; }
+    }
+
+    public string ProducedText => Handler == "EInvoice" ? "E-invoice" : "PDF as it is";
+
+    public string ProducedDetail => Handler == "EInvoice"
+        ? "XRechnung or ZUGFeRD, as each document says."
+        : "The PDF the ERP made, unchanged.";
+
+    public string PartyText => Party == "Vendor" ? "to vendors" : "to customers";
+
+    public bool AnySharePoint => Companies.Any(c => c.SharePointEnabled);
+    public bool AnyDocuWare => Companies.Any(c => c.Targets.Any(t => t.Enabled && t.IsDocuWare));
+
+    public void RefreshSummary()
+    {
+        foreach (var name in new[] { nameof(StatusText), nameof(StatusKind), nameof(SourceText), nameof(ProducedText), nameof(ProducedDetail),
+                     nameof(PartyText), nameof(AnySharePoint), nameof(AnyDocuWare), nameof(Label), nameof(Detail), nameof(MailState) })
+            OnPropertyChanged(name);
+        foreach (var c in Companies) c.RefreshSummary();
+    }
+
     partial void OnIdChanged(string value) { OnPropertyChanged(nameof(Label)); OnPropertyChanged(nameof(Detail)); }
     partial void OnDisplayNameChanged(string value) => OnPropertyChanged(nameof(Label));
-    partial void OnPartyChanged(string value) => OnPropertyChanged(nameof(Detail));
-    partial void OnHandlerChanged(string value) => OnPropertyChanged(nameof(Detail));
-    partial void OnEnabledChanged(bool value) => OnPropertyChanged(nameof(Detail));
+    partial void OnPartyChanged(string value)
+    {
+        foreach (var name in new[] { nameof(Detail), nameof(PartyText), nameof(IsCustomer), nameof(IsVendor) })
+            OnPropertyChanged(name);
+    }
+    partial void OnHandlerChanged(string value)
+    {
+        foreach (var name in new[] { nameof(Detail), nameof(ProducedText), nameof(ProducedDetail), nameof(MakesEInvoice), nameof(MakesPdf) })
+            OnPropertyChanged(name);
+    }
+    partial void OnEnabledChanged(bool value) { OnPropertyChanged(nameof(Detail)); OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(StatusKind)); }
 
     public DocumentTypeEditViewModel()
     {

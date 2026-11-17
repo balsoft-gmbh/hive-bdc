@@ -70,6 +70,7 @@ public sealed partial class LocalStatusServer
                     input = r.Input,
                     inputFormat = r.InputFormat,
                     output = r.Output,
+                    mail = r.MailsFor(t),
                     sharePoint = new
                     {
                         enabled = r.SharePoint.Enabled,
@@ -244,6 +245,7 @@ public sealed partial class LocalStatusServer
                         Input = r.Input?.Trim() ?? "",
                         InputFormat = InputFormats.IsWord(r.InputFormat) ? InputFormats.Word : InputFormats.Json,
                         Output = r.Output?.Trim() ?? "",
+                        Mail = r.Mail,
                         SharePoint = new SharePointTargetOptions
                         {
                             Enabled = r.SharePoint?.Enabled ?? false,
@@ -413,6 +415,8 @@ public sealed partial class LocalStatusServer
         public string? Input { get; set; }
         public string? InputFormat { get; set; }
         public string? Output { get; set; }
+        /// <summary>Absent => the entry follows the type's Mail (a dashboard before 1.5.0).</summary>
+        public bool? Mail { get; set; }
         public CompanySpDto? SharePoint { get; set; }
         public List<TargetPostDto>? Targets { get; set; }
         /// <summary>Absent => keep the stored source (a dashboard that does not know sources).</summary>

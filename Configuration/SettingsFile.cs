@@ -118,6 +118,8 @@ public static class SettingsFile
                 ["Fields"] = fields,
             },
         };
+        // Written only once a company has its own switch; without it the entry follows the type, as before.
+        if (r.Mail is { } mail) node["Mail"] = mail;
         if (r.Source is not null)
         {
             var sourceSettings = new JsonObject();

@@ -31,9 +31,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _secretSet;
 
     public string SecretPlaceholderHint =>
-        SecretSet ? "A secret is stored — leave blank to keep it." : "No secret stored yet.";
+        SecretSet ? "A secret is stored. Leave this empty to keep it." : "No secret stored yet.";
 
-    partial void OnSecretSetChanged(bool value) => OnPropertyChanged(nameof(SecretPlaceholderHint));
+    partial void OnSecretSetChanged(bool value) { OnPropertyChanged(nameof(SecretPlaceholderHint)); OnPropertyChanged(nameof(SharePointAppSetUp)); OnPropertyChanged(nameof(SharePointAppDetail)); }
 
     // ── Document mail (shared) ────────────────────────────────────────────────
     [ObservableProperty] private bool _mailEnabled;
@@ -43,7 +43,139 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Whether the service reports a stored mail secret — drives the PasswordBox hint.</summary>
     [ObservableProperty] private bool _mailSecretSet;
 
-    // DocuWare connection (Connections tab). Further connections in the file are kept untouched.
+    // ── navigation: one level per screen ──────────────────────────────────────
+    // Page is the entry in the left menu. Sub is the level below it: on Export "type", "company" or
+    // "sharepoint" (a company's SharePoint library); on Connections "sharepoint-app", "docuware" or "mail".
+    [ObservableProperty] private string _page = "Export";
+    [ObservableProperty] private string _sub = "";
+
+    /// <summary>The screen the content area shows, e.g. "Export", "Export/company", "Connections/docuware".</summary>
+    public string View => Sub.Length == 0 ? Page : Page + "/" + Sub;
+
+    partial void OnPageChanged(string value) => OnPropertyChanged(nameof(View));
+    partial void OnSubChanged(string value) => OnPropertyChanged(nameof(View));
+
+    [RelayCommand]
+    private void ShowPage(string page)
+    {
+        Page = page;
+        Sub = "";
+        RefreshSummaries();
+    }
+
+    /// <summary>Opens a screen below the current page: a connection, or a level of the opened document type.</summary>
+    [RelayCommand]
+    private void Open(string sub)
+    {
+        Sub = sub;
+        RefreshSummaries();
+    }
+
+    [RelayCommand]
+    private void Back()
+    {
+        Sub = Sub switch { "sharepoint" => "company", "company" => "type", _ => "" };
+        RefreshSummaries();
+    }
+
+    public void OpenType(DocumentTypeEditViewModel type)
+    {
+        SelectedDocumentType = type;
+        Page = "Export";
+        Open("type");
+    }
+
+    public void OpenCompany(RouteRow company)
+    {
+        if (SelectedDocumentType is null) return;
+        SelectedDocumentType.SelectedCompany = company;
+        Open("company");
+    }
+
+    [RelayCommand]
+    private void NewDocumentType()
+    {
+        AddDocumentType();
+        if (SelectedDocumentType is { } type) OpenType(type);
+    }
+
+    public void RemoveType(DocumentTypeEditViewModel type)
+    {
+        SelectedDocumentType = type;
+        RemoveDocumentType();
+        RefreshSummaries();
+    }
+
+    public void AddCompanyToOpenType()
+    {
+        if (SelectedDocumentType is not { } type) return;
+        type.AddCompany();
+        if (type.SelectedCompany is { } row) OpenCompany(row);
+    }
+
+    public void RemoveCompany(RouteRow company)
+    {
+        if (SelectedDocumentType is not { } type) return;
+        type.SelectedCompany = company;
+        type.RemoveCompanyCommand.Execute(null);
+        RefreshSummaries();
+    }
+
+    /// <summary>The card lines and connection states are computed; this re-reads them after edits.</summary>
+    public void RefreshSummaries()
+    {
+        foreach (var t in DocumentTypes)
+        {
+            t.MailConnected = MailSetUp;
+            t.RefreshSummary();
+        }
+        foreach (var name in new[] { nameof(SharePointAppSetUp), nameof(SharePointAppDetail), nameof(MailSetUp), nameof(MailDetail),
+                     nameof(DocuWareSetUp), nameof(DocuWareDetail), nameof(ExportDestinations) })
+            OnPropertyChanged(name);
+    }
+
+    public bool SharePointAppSetUp => TenantId.Trim().Length > 0 && ClientId.Trim().Length > 0 && SecretSet;
+
+    public string SharePointAppDetail
+    {
+        get
+        {
+            int used = DocumentTypes.Count(t => t.Companies.Any(c => c.SharePointEnabled));
+            return SharePointAppSetUp
+                ? $"Microsoft 365 app of your company. Used by {used} document type(s)."
+                : "Needed before documents can go to a SharePoint library.";
+        }
+    }
+
+    public bool MailSetUp => MailEnabled && MailClientId.Trim().Length > 0 && MailFrom.Trim().Length > 0 && MailSecretSet;
+
+    public string MailDetail => MailSetUp
+        ? $"Sends from {MailFrom.Trim()}."
+        : MailEnabled ? "Switched on, but the app or the sending mailbox is missing." : "Send each document to the customer or vendor from a company mailbox.";
+
+    public bool DocuWareSetUp => DocuWareUrl.Trim().Length > 0 && DocuWareUserName.Trim().Length > 0 && DocuWareSecretSet;
+
+    public string DocuWareDetail => DocuWareSetUp
+        ? $"{HostOf(DocuWareUrl)} as {DocuWareUserName.Trim()}."
+        : "Store documents in DocuWare file cabinets, or import from them.";
+
+    /// <summary>The places export documents go to, for the direction strip on the Export page.</summary>
+    public string ExportDestinations
+    {
+        get
+        {
+            var places = new List<string>();
+            if (DocumentTypes.Any(t => t.AnySharePoint)) places.Add("SharePoint");
+            if (DocumentTypes.Any(t => t.AnyDocuWare)) places.Add("DocuWare");
+            if (MailEnabled && DocumentTypes.Any(t => t.Companies.Any(c => c.Mail))) places.Add("Mail");
+            return places.Count == 0 ? "no destination yet" : string.Join(" · ", places);
+        }
+    }
+
+    private static string HostOf(string url)
+        => Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u) ? u.Host : url.Trim();
+
+    // DocuWare connection (Connections page). Further connections in the file are kept untouched.
     public const string DocuWareConnectionId = "docuware";
     private List<ConnectionConfigDto> _connections = new();
     [ObservableProperty] private string _docuWareUrl = "";
@@ -55,7 +187,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string DocuWareSecretHint =>
         DocuWareSecretSet ? "A password is stored; leave blank to keep it." : "No password stored yet.";
 
-    partial void OnDocuWareSecretSetChanged(bool value) => OnPropertyChanged(nameof(DocuWareSecretHint));
+    partial void OnDocuWareSecretSetChanged(bool value) { OnPropertyChanged(nameof(DocuWareSecretHint)); OnPropertyChanged(nameof(DocuWareSetUp)); OnPropertyChanged(nameof(DocuWareDetail)); }
+    partial void OnDocuWareUrlChanged(string value) { OnPropertyChanged(nameof(DocuWareSetUp)); OnPropertyChanged(nameof(DocuWareDetail)); }
+    partial void OnDocuWareUserNameChanged(string value) { OnPropertyChanged(nameof(DocuWareSetUp)); OnPropertyChanged(nameof(DocuWareDetail)); }
+    partial void OnTenantIdChanged(string value) { OnPropertyChanged(nameof(SharePointAppSetUp)); OnPropertyChanged(nameof(SharePointAppDetail)); }
+    partial void OnClientIdChanged(string value) { OnPropertyChanged(nameof(SharePointAppSetUp)); OnPropertyChanged(nameof(SharePointAppDetail)); }
+    partial void OnMailEnabledChanged(bool value) { OnPropertyChanged(nameof(MailSetUp)); OnPropertyChanged(nameof(MailDetail)); OnPropertyChanged(nameof(ExportDestinations)); }
+    partial void OnMailClientIdChanged(string value) { OnPropertyChanged(nameof(MailSetUp)); OnPropertyChanged(nameof(MailDetail)); }
+    partial void OnMailFromChanged(string value) { OnPropertyChanged(nameof(MailSetUp)); OnPropertyChanged(nameof(MailDetail)); }
 
     /// <summary>The DocuWare connection as the form shows it now; a blank password means the stored one.</summary>
     public DocuWareRequestDto CurrentDocuWare(string? password) => new()
@@ -98,7 +237,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private string? _pendingDocuWareSecret;
 
-    // Imports tab
+    // Import page
     public System.Collections.ObjectModel.ObservableCollection<ImportFlowRow> Flows { get; } = new();
     [ObservableProperty] private ImportFlowRow? _selectedFlow;
 
@@ -141,9 +280,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _mailSaveToSentItems = true;
 
     public string MailSecretPlaceholderHint =>
-        MailSecretSet ? "A secret is stored — leave blank to keep it." : "No secret stored yet.";
+        MailSecretSet ? "A secret is stored. Leave this empty to keep it." : "No secret stored yet.";
 
-    partial void OnMailSecretSetChanged(bool value) => OnPropertyChanged(nameof(MailSecretPlaceholderHint));
+    partial void OnMailSecretSetChanged(bool value) { OnPropertyChanged(nameof(MailSecretPlaceholderHint)); OnPropertyChanged(nameof(MailSetUp)); OnPropertyChanged(nameof(MailDetail)); }
 
     private List<string> RedirectAddresses() =>
         (MailRedirectTo ?? "")
@@ -182,7 +321,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             var res = await _client.GetConfigAsync();
             if (res is not { Reachable: true, Data: { } c })
             {
-                StatusMessage = res.Error ?? "Service not reachable — cannot load settings.";
+                StatusMessage = res.Error ?? "The service is not reachable, so the settings could not be loaded.";
                 StatusIsError = true;
                 return;
             }
@@ -221,9 +360,10 @@ public sealed partial class SettingsViewModel : ObservableObject
                 foreach (var t in c.DocumentTypes)
                     DocumentTypes.Add(new DocumentTypeEditViewModel(t));
             SelectedDocumentType = DocumentTypes.FirstOrDefault();
+            RefreshSummaries();
 
             int entries = DocumentTypes.Sum(t => t.Companies.Count);
-            StatusMessage = $"Settings loaded — {DocumentTypes.Count} document type(s), {entries} company entr{(entries == 1 ? "y" : "ies")}.";
+            StatusMessage = $"Settings loaded: {DocumentTypes.Count} document type(s), {entries} company entr{(entries == 1 ? "y" : "ies")}.";
         }
         finally
         {
@@ -435,7 +575,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (res is not { Reachable: true, Data: { } r })
             {
                 AppLog.Warn("Save settings: " + (res.Error ?? "service not reachable — nothing saved."));
-                StatusMessage = res.Error ?? "Service not reachable — nothing saved.";
+                StatusMessage = res.Error ?? "The service is not reachable. Nothing was saved.";
                 StatusIsError = true;
                 return false;
             }
@@ -445,13 +585,13 @@ public sealed partial class SettingsViewModel : ObservableObject
                 if (r.Errors is { Count: > 0 })
                     foreach (var e in r.Errors) ValidationErrors.Add(e);
                 AppLog.Warn("Save settings rejected — " + string.Join(" | ", ValidationErrors));
-                StatusMessage = "Could not save — please fix the errors above.";
+                StatusMessage = "Not saved. Fix the points at the top first.";
                 StatusIsError = true;
                 return false;
             }
 
             AppLog.Info("Save settings: saved and applied live.");
-            StatusMessage = "Saved — applied live.";
+            StatusMessage = "Saved. The service uses it from now on.";
             StatusIsError = false;
             return true;
         }
@@ -493,7 +633,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (res is not { Reachable: true, Data: { } r })
             {
                 AppLog.Warn("Test SharePoint: " + (res.Error ?? "service not reachable — test could not run."));
-                StatusMessage = res.Error ?? "Service not reachable — test could not run.";
+                StatusMessage = res.Error ?? "The service is not reachable, so the test could not run.";
                 StatusIsError = true;
                 return;
             }
@@ -532,7 +672,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (res is not { Reachable: true, Data: { } r })
             {
                 AppLog.Warn("Test document mail: " + (res.Error ?? "service not reachable — test could not run."));
-                StatusMessage = res.Error ?? "Service not reachable — test could not run.";
+                StatusMessage = res.Error ?? "The service is not reachable, so the test could not run.";
                 StatusIsError = true;
                 return;
             }

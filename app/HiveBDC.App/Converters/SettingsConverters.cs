@@ -37,3 +37,31 @@ public sealed class CountToVisibilityConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// Visible when the value's text is one of the "|"-separated options in the parameter; a leading "!" turns it round.
+/// "!" alone: visible when the value is not empty.
+/// </summary>
+public sealed class MatchToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        string p = parameter as string ?? "";
+        bool negate = p.StartsWith('!');
+        bool match = p.TrimStart('!').Split('|').Contains(value?.ToString() ?? "");
+        return match != negate ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>True when all bound values have the same text (a navigation item's Tag against the current page).</summary>
+public sealed class AllEqualConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
+        => values.Length > 1 && values.All(v => Equals(v?.ToString(), values[0]?.ToString()));
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

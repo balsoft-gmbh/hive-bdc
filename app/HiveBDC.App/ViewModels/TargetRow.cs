@@ -11,6 +11,9 @@ public sealed partial class TargetRow : ObservableObject
 {
     public const string DocuWareKind = "docuware";
 
+    /// <summary>Remove was clicked once; the card asks before the item goes.</summary>
+    [ObservableProperty] private bool _confirmRemove;
+
     [ObservableProperty] private bool _enabled = true;
 
     public string Kind { get; init; } = "";

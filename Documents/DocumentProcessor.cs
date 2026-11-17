@@ -308,8 +308,8 @@ public sealed partial class DocumentProcessor
             _ledger?.RecordDelivery(deliveryKey, options.Key, options.Kind, delivered.Location, delivered.RemoteId);
         }
 
-        if (!type.Mail)
-            _log.LogInformation("[{Tag}] {Id}: mail skipped: mail is off for document type {Type}.", tag, documentId, type.Id);
+        if (!route.MailsFor(type))
+            _log.LogInformation("[{Tag}] {Id}: mail skipped: mail is off for document type {Type}, company {Company}.", tag, documentId, type.Id, route.DataAreaId);
 
         // ── 5. meter + move ───────────────────────────────────────────────
         // Best-effort: a metering hiccup (including the size stat) must never route an
@@ -410,7 +410,7 @@ public sealed partial class DocumentProcessor
 
     /// <summary>
     /// The targets one document goes to: the entry's SharePoint block, its further targets, then
-    /// mail when the type mails. A kind this version does not know holds the document with a
+    /// mail when the company (or, without its own switch, the type) mails. A kind this version does not know holds the document with a
     /// reason, so a settings file from a newer version stops that entry only.
     /// </summary>
     private List<(TargetOptions Options, IDocumentTarget Target)> ResolveTargets(BDCOptions opts, DocumentRoute route,
@@ -419,7 +419,7 @@ public sealed partial class DocumentProcessor
         var runtime = new TargetRuntime(opts, uploader, mailer, _log);
         var wanted = route.EffectiveTargets().ToList();
         // Mail switched off in Settings is a setting, not an event of the document: no target, no history line.
-        if (type.Mail && opts.Mail.Enabled) wanted.Add(new TargetOptions { Kind = TargetKinds.Mail });
+        if (route.MailsFor(type) && opts.Mail.Enabled) wanted.Add(new TargetOptions { Kind = TargetKinds.Mail });
 
         var list = new List<(TargetOptions, IDocumentTarget)>();
         foreach (var options in wanted)

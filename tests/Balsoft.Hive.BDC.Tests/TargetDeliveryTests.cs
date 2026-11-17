@@ -242,6 +242,26 @@ public sealed class TargetDeliveryTests : IDisposable
         Assert.Contains("share", steps);
     }
 
+    [Theory]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, null, true)]
+    [InlineData(false, null, false)]
+    public void TheCompanyDecidesAboutMailAndFollowsTheTypeWhenItSaysNothing(bool typeMail, bool? companyMail, bool mailed)
+    {
+        var route = Route(Target("share"));
+        route.Mail = companyMail;
+        var options = Options(route);
+        options.DocumentTypes[0].Mail = typeMail;
+        options.Mail.Enabled = true;
+        Pair(route, "order");
+        var mail = new FakeTarget("mail", replaces: false);
+
+        Assert.Equal(1, Scan(options, Registry(new FakeTarget("share", replaces: true), mail)).Processed);
+
+        Assert.Equal(mailed ? 1 : 0, mail.Calls.Count);
+    }
+
     [Fact]
     public void AMailWithoutRecipientIsASkippedLineNotADelivery()
     {
