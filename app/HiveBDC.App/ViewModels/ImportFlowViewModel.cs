@@ -32,7 +32,7 @@ public sealed partial class ImportFlowViewModel : ObservableObject
         _client = client;
         _connection = connection;
         _existing = existing;
-        _name = existing?.Name ?? "Purchase requisitions from DocuWare";
+        _name = existing?.Name ?? "Import from DocuWare";
         _readyField = existing?.Setting("Source", "ReadyField") ?? "";
         _readyValue = existing?.Setting("Source", "ReadyValue") ?? "";
         _doneValue = existing?.Setting("Source", "DoneValue") ?? "";

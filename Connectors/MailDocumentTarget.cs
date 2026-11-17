@@ -27,7 +27,7 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
         if (mailer is null)
         {
             log.LogInformation("[{Tag}] {Id}: mail skipped: document mail is not enabled.", tag, documentId);
-            return new DeliveryResult(Summary: "Not mailed: document mail is not switched on in Settings.");
+            return new DeliveryResult(Summary: "Not mailed: document mail is not switched on in Settings.", Skipped: true);
         }
 
         var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc);
@@ -46,7 +46,7 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
                     "recipients are configured. Add them in Settings > Connections > Document mail > Test recipients.");
 
             log.LogWarning("[{Tag}] {Id}: no recipient e-mail in the document — mail skipped.", tag, documentId);
-            return new DeliveryResult(Summary: "Not mailed: the document names no recipient.");
+            return new DeliveryResult(Summary: "Not mailed: the document names no recipient.", Skipped: true);
         }
 
         if (string.IsNullOrWhiteSpace(data.EmailBody))

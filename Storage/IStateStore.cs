@@ -19,8 +19,8 @@ public interface IStateStore
     void RecordEvent(DocumentEvent entry);
 
     /// <summary>
-    /// The history of the documents matching <paramref name="search"/> (document id or number, oldest step first), or
-    /// the newest events of all documents when it is blank.
+    /// Every step of the documents whose number, id or input file name contains <paramref name="search"/> (any case,
+    /// oldest step first, at most 20 documents), or the newest events of all documents when it is blank.
     /// </summary>
     IReadOnlyList<DocumentEvent> Events(string? search, int limit);
 
@@ -41,6 +41,7 @@ public static class EventSteps
     public const string Read = "read";
     public const string Produced = "produced";
     public const string Delivered = "delivered";
+    public const string Skipped = "skipped";
     public const string Waiting = "waiting";
     public const string Failed = "failed";
     public const string Done = "done";

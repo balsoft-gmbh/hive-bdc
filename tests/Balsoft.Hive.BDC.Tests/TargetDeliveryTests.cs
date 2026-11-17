@@ -227,6 +227,30 @@ public sealed class TargetDeliveryTests : IDisposable
     }
 
     [Fact]
+    public void MailSwitchedOffInSettingsLeavesNoLineInTheHistory()
+    {
+        var route = Route(Target("share"));
+        var options = Options(route);
+        options.DocumentTypes[0].Mail = true;
+        options.Mail.Enabled = false;
+        Pair(route, "order");
+
+        Assert.Equal(1, Scan(options, Registry(new FakeTarget("share", replaces: true))).Processed);
+
+        var steps = _ledger.Events("order", 50).Select(e => e.Target ?? "").ToList();
+        Assert.DoesNotContain("mail", steps);
+        Assert.Contains("share", steps);
+    }
+
+    [Fact]
+    public void AMailWithoutRecipientIsASkippedLineNotADelivery()
+    {
+        var mail = new MailDocumentTarget(new MailOptions { Enabled = false }, null);
+        Assert.True(mail.Deliver(new DeliveryContext(new DocumentRoute(), new DocumentTypeOptions { Id = "X" }, new TargetOptions(),
+            new AxDocument(), default, "id", "no", DocumentFile.FromBytes("a.pdf", new byte[1]), null, "t", _ => { }, NullLogger.Instance)).Skipped);
+    }
+
+    [Fact]
     public void ARenamedFileCabinetIsStillTheSameDestination()
     {
         var before = new TargetOptions { Kind = "docuware", Connection = "dms", Settings = { ["FileCabinet"] = "c-1", ["FileCabinetName"] = "Invoices" } };

@@ -158,10 +158,24 @@ public sealed class EventHistoryTests : IDisposable
         _ledger.RecordEvent(new DocumentEvent("b", "b_1.json", "received", "ok", "second", DocumentNumber: "RE-2"));
         _ledger.RecordEvent(new DocumentEvent("a", "a_1.json", "done", "ok", "third"));
 
-        Assert.Equal(new[] { "first", "third" }, _ledger.Events("a", 10).Select(e => e.Message));
-        Assert.Equal(new[] { "second" }, _ledger.Events("RE-2", 10).Select(e => e.Message));
+        Assert.Equal(new[] { "first", "third" }, _ledger.Events("a_1", 10).Select(e => e.Message));
+        Assert.Equal(new[] { "second" }, _ledger.Events("re-2", 10).Select(e => e.Message));
         Assert.Equal(new[] { "second", "third" }, _ledger.Events(null, 2).Select(e => e.Message));
         Assert.Empty(_ledger.Events("nothing", 10));
+    }
+
+    [Fact]
+    public void ASearchFindsPartOfTheNumberIdOrFileNameAndTreatsWildcardsAsText()
+    {
+        _ledger.RecordEvent(new DocumentEvent("DEMO-02-Rechnung-ZUGFeRD-4Pos", "DEMO-02_Rechnung_ZUGFeRD_4Pos.docx", "received", "ok", "word"));
+        _ledger.RecordEvent(new DocumentEvent("RE-260042", "RE-260042_K-10010.json", "read", "ok", "pair", DocumentNumber: "RE-260042"));
+        _ledger.RecordEvent(new DocumentEvent("x", "50%_off.json", "read", "ok", "percent"));
+
+        Assert.Equal(new[] { "word" }, _ledger.Events("demo-02", 10).Select(e => e.Message));
+        Assert.Equal(new[] { "pair" }, _ledger.Events("260042", 10).Select(e => e.Message));
+        Assert.Equal(new[] { "word" }, _ledger.Events("Rechnung_ZUGFeRD", 10).Select(e => e.Message));
+        Assert.Equal(new[] { "percent" }, _ledger.Events("50%", 10).Select(e => e.Message));
+        Assert.Empty(_ledger.Events("%%", 10));
     }
 
     [Fact]

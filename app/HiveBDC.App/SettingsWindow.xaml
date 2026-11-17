@@ -363,14 +363,18 @@
                                                         <TextBlock Text="ALSO DELIVER TO" Style="{StaticResource CardTitle}" Margin="0"/>
                                                         <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
                                                                    Text="Every document of this type and company also goes here, after SharePoint and before mail. Untick a line to pause it."/>
+                                                        <TextBlock Margin="0,8,0,0" Foreground="#6B7280" FontStyle="Italic" TextWrapping="Wrap"
+                                                                   Text="Nothing else yet. Add DocuWare… stores every document of this type and company in DocuWare as well."
+                                                                   Visibility="{Binding Targets.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
                                                         <ListBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" MinHeight="36" Margin="0,8,0,0"
-                                                                 MouseDoubleClick="OnEditTarget">
+                                                                 MouseDoubleClick="OnEditTarget" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                                 Visibility="{Binding Targets.Count, Converter={StaticResource CountToVis}}">
                                                             <ListBox.ItemTemplate>
                                                                 <DataTemplate>
-                                                                    <StackPanel Orientation="Horizontal">
-                                                                        <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                                                        <TextBlock Text="{Binding Summary}" VerticalAlignment="Center"/>
-                                                                    </StackPanel>
+                                                                    <DockPanel>
+                                                                        <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Enabled}" VerticalAlignment="Top" Margin="0,2,8,0"/>
+                                                                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
+                                                                    </DockPanel>
                                                                 </DataTemplate>
                                                             </ListBox.ItemTemplate>
                                                         </ListBox>
@@ -516,7 +520,11 @@
                                 <TextBlock Text="IMPORT INTO THE ERP" Style="{StaticResource CardTitle}"/>
                                 <TextBlock Style="{StaticResource Hint}" Margin="0,-6,0,8"
                                            Text="Documents that are ready in DocuWare become a CSV file in the folder the ERP reads, then get marked as imported in DocuWare. Set up the DocuWare sign-in on the Connections tab first."/>
-                                <ListBox ItemsSource="{Binding Flows}" SelectedItem="{Binding SelectedFlow}" MinHeight="80" MouseDoubleClick="OnEditImport">
+                                <TextBlock Foreground="#6B7280" FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,8"
+                                           Text="No import yet. Add import from DocuWare… sets one up in a few steps."
+                                           Visibility="{Binding Flows.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
+                                <ListBox ItemsSource="{Binding Flows}" SelectedItem="{Binding SelectedFlow}" MinHeight="80" MouseDoubleClick="OnEditImport"
+                                         Visibility="{Binding Flows.Count, Converter={StaticResource CountToVis}}">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" Margin="0,3">

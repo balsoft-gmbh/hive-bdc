@@ -301,7 +301,7 @@ public sealed partial class DocumentProcessor
                 throw;
             }
             known.DeliveredTargets.Add(options.Key);
-            Note(input, documentId, EventSteps.Delivered, EventStates.Ok,
+            Note(input, documentId, delivered.Skipped ? EventSteps.Skipped : EventSteps.Delivered, EventStates.Ok,
                 delivered.Summary ?? $"Delivered to {TargetLabel(options.Kind)}.", options.Kind);
             if (options.Kind == TargetKinds.Mail) continue;
             targetSite ??= delivered.Location;
@@ -418,7 +418,8 @@ public sealed partial class DocumentProcessor
     {
         var runtime = new TargetRuntime(opts, uploader, mailer, _log);
         var wanted = route.EffectiveTargets().ToList();
-        if (type.Mail) wanted.Add(new TargetOptions { Kind = TargetKinds.Mail });
+        // Mail switched off in Settings is a setting, not an event of the document: no target, no history line.
+        if (type.Mail && opts.Mail.Enabled) wanted.Add(new TargetOptions { Kind = TargetKinds.Mail });
 
         var list = new List<(TargetOptions, IDocumentTarget)>();
         foreach (var options in wanted)

@@ -268,14 +268,18 @@ public sealed class ExportLedger : IStateStore
                 cmd.CommandText = $"SELECT {columns} FROM (SELECT {columns} FROM events ORDER BY id DESC LIMIT $n) ORDER BY id";
             else
             {
-                // A search names one document: its id from the file name or its ERP number. Every arrival of that
-                // document is returned, oldest step first.
+                // A search is part of a document number, a document id or an input file name, in any case. Every step
+                // of every matching document is returned, oldest first; the newest documents win when there are many.
                 cmd.CommandText = $"""
                     SELECT {columns} FROM events
-                    WHERE document_id IN (SELECT document_id FROM events WHERE document_id = $s OR document_number = $s)
+                    WHERE document_id IN (
+                        SELECT document_id FROM events
+                        WHERE document_id LIKE $s ESCAPE '\' OR document_number LIKE $s ESCAPE '\' OR input LIKE $s ESCAPE '\'
+                        GROUP BY document_id ORDER BY MAX(id) DESC LIMIT 20)
                     ORDER BY id LIMIT $n
                     """;
-                cmd.Parameters.AddWithValue("$s", search.Trim());
+                string term = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                cmd.Parameters.AddWithValue("$s", "%" + term + "%");
             }
             cmd.Parameters.AddWithValue("$n", Math.Clamp(limit, 1, 5000));
             using var r = cmd.ExecuteReader();

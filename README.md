@@ -805,12 +805,14 @@ mark cannot be written, the next scan only repeats the mark. Settings:
 ### Document history
 
 Every document gets a history in `hive.db` (table `events`): received, read,
-produced, one line per target, waiting, failed and done, in plain words. A waiting
-document's reason is written once, not on every scan. Mail addresses are masked,
-line breaks flattened and a line is capped at 2000 characters. The history is pruned
-with the export ledger. The loopback API serves it as
-`GET /history?search=<document id or number>&limit=<n>`; without `search` it returns
-the newest lines of all documents. `GET /history/attention` lists the documents whose
+produced, one line per target (or "skipped", for example a mail without recipient),
+waiting, failed and done, in plain words. Mail switched off in Settings writes no line.
+A waiting document's reason is written once, not on every scan. Mail addresses are
+masked, line breaks flattened and a line is capped at 2000 characters. The history is
+pruned with the export ledger. The loopback API serves it as
+`GET /history?search=<text>&limit=<n>`: every step of the documents (at most 20) whose
+number, id or input file name contains the text, in any case; without `search` it
+returns the newest lines of all documents. `GET /history/attention` lists the documents whose
 last line failed or is waiting, and `POST /history/retry` with `{"documentId": "..."}`
 moves that document's files from the error folder back into its input folder.
 

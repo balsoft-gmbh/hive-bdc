@@ -11,11 +11,25 @@ public sealed record HistoryRow(string At, string DocumentId, string Document, s
     public bool IsFailed => State == "failed";
     public bool IsWaiting => State == "waiting";
 
+    /// <summary>"SalesInvoice" as "Sales invoice"; a name with spaces (an import's own name) stays as it is.</summary>
+    internal static string Words(string? id)
+    {
+        if (string.IsNullOrEmpty(id) || id.Contains(' ')) return id ?? "";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < id.Length; i++)
+        {
+            char c = id[i];
+            if (i > 0 && char.IsUpper(c) && !char.IsUpper(id[i - 1])) { sb.Append(' '); sb.Append(char.ToLowerInvariant(c)); }
+            else sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
     public static HistoryRow From(HistoryEventDto e) => new(
         e.At ?? "",
         e.DocumentId ?? "",
         string.IsNullOrWhiteSpace(e.DocumentNumber) ? e.DocumentId ?? "" : e.DocumentNumber,
-        e.DocumentType ?? "",
+        Words(e.DocumentType),
         e.Step switch
         {
             "received" => "Received",
@@ -24,6 +38,7 @@ public sealed record HistoryRow(string At, string DocumentId, string Document, s
             "delivered" => "Delivered",
             "waiting" => "Waiting",
             "failed" => "Stopped",
+            "skipped" => "Skipped",
             "done" => "Finished",
             _ => e.Step ?? "",
         },
@@ -82,7 +97,7 @@ public sealed partial class HistoryViewModel : ObservableObject
         foreach (var r in rows) Rows.Add(r);
         StatusIsError = false;
         StatusMessage = search.Length > 0
-            ? rows.Count == 0 ? $"Nothing found for \"{search}\". Search by document number or by the file name's first part." : $"{rows.Count} step(s) of \"{search}\", oldest first."
+            ? rows.Count == 0 ? $"Nothing found for \"{search}\". Search by any part of the document number or the file name." : $"{rows.Count} step(s) of \"{search}\", oldest first."
             : AttentionOnly
                 ? rows.Count == 0 ? "Nothing needs attention: no document is stopped or waiting." : $"{rows.Count} document(s) need attention, newest first."
                 : $"The newest {rows.Count} step(s) of all documents.";

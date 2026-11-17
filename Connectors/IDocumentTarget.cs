@@ -25,7 +25,7 @@ public sealed record DeliveryContext(
 /// Where the document went: a location for the ledger, the id the target gave it if it gives one, and one sentence for
 /// the document's history in words a user understands.
 /// </summary>
-public sealed record DeliveryResult(string? Location = null, string? RemoteId = null, string? Summary = null);
+public sealed record DeliveryResult(string? Location = null, string? RemoteId = null, string? Summary = null, bool Skipped = false);
 
 /// <summary>
 /// A place a produced document is delivered to. One class per kind, found through

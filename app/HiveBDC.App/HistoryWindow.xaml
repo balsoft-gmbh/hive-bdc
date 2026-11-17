@@ -17,7 +17,7 @@
                 <TextBlock Text="Document history" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="24,0,0,0" VerticalAlignment="Center">
                     <TextBox x:Name="SearchBox" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Width="260" KeyDown="OnSearchKeyDown"
-                             ToolTip="Document number, or the first part of the file name"/>
+                             ToolTip="Any part of the document number or the file name"/>
                     <Button Content="Find" Command="{Binding RefreshCommand}" Margin="6,0,0,0" Padding="12,3"/>
                     <Button Content="Clear" Command="{Binding ClearSearchCommand}" Margin="6,0,0,0" Padding="10,3"/>
                 </StackPanel>
@@ -59,6 +59,7 @@
 
         <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutoGenerateColumns="False" IsReadOnly="True"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0" Margin="20,12,20,12"
+                  RowHeight="NaN" MinRowHeight="30" VerticalContentAlignment="Top"
                   Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderSoft}" MouseDoubleClick="OnRowDoubleClick">
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
@@ -74,14 +75,20 @@
             </DataGrid.RowStyle>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Time" Binding="{Binding At}" Width="140"/>
-                <DataGridTextColumn Header="Document" Binding="{Binding Document}" Width="150"/>
+                <DataGridTemplateColumn Header="Document" Width="170">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Document}" TextWrapping="Wrap" Margin="2,6"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="120"/>
                 <DataGridTextColumn Header="Step" Binding="{Binding Step}" Width="90"/>
                 <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="90"/>
                 <DataGridTemplateColumn Header="What happened" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="2,2"/>
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="2,6"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
