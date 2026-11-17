@@ -679,6 +679,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (!value.StartsWith(SavedMessage, StringComparison.Ordinal)) JustSaved = false;
     }
 
+    /// <summary>The form as it stands differs from what was loaded or saved (an open page's values not yet included).</summary>
+    public bool FormDiffersFromSaved() => _unsaved.Differ(BuildConfig(null), passwordTyped: false);
+
     /// <summary>True when the form holds anything the service does not have yet; an open page's values count.</summary>
     public bool HasUnsavedChanges(bool passwordTyped)
     {

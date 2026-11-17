@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using Balsoft.Hive.BDC.App.Services;
 using Balsoft.Hive.BDC.App.ViewModels;
 
@@ -29,6 +30,15 @@ public partial class SettingsWindow : Window
         vm.ClearConnectionSecret = () => ConnectionSecretBox.Clear();
         Loaded += OnLoaded;
         Closing += OnWindowClosing;
+
+        // "Saved" stays only while it is true: the first change after a save clears it.
+        var savedWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        savedWatch.Tick += (_, _) =>
+        {
+            if (_vm.JustSaved && (PasswordTyped || _vm.FormDiffersFromSaved())) _vm.StatusMessage = "";
+        };
+        savedWatch.Start();
+        Closed += (_, _) => savedWatch.Stop();
     }
 
     private bool PasswordTyped
