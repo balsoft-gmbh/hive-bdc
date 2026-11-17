@@ -20,6 +20,84 @@
             <Setter Property="Padding" Value="10,3"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
         </Style>
+
+        <!-- Document types: choice tiles, company chips, destination rows, step headers -->
+        <Style x:Key="ChoiceTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="tile" Background="White" BorderBrush="#D3D9E1" BorderThickness="1.5" CornerRadius="8" Padding="12,10">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="tile" Property="BorderBrush" Value="#FCB608"/>
+                                <Setter TargetName="tile" Property="Background" Value="#FFFBEB"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="tile" Property="BorderBrush" Value="#F59E0B"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="StepHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="Margin" Value="0,16,0,8"/>
+        </Style>
+        <Style x:Key="DestRow" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E4E8EE"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="DestName" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="Width" Value="110"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="CompanyChips" TargetType="ListBox">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="chip" Margin="0,0,8,8" Padding="12,6" CornerRadius="16" BorderThickness="1.5"
+                                            BorderBrush="#D3D9E1" Background="White" MaxWidth="300">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="chip" Property="Background" Value="#FFFBEB"/>
+                                            <Setter TargetName="chip" Property="BorderBrush" Value="#FCB608"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="Hint" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#6B7280"/>
             <Setter Property="FontSize" Value="11"/>
@@ -154,7 +232,7 @@
             <TabItem Header="Document types">
                 <Grid Margin="0,10,0,8">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="290"/>
+                        <ColumnDefinition Width="240"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
@@ -205,10 +283,11 @@
                                             <ComboBox ItemsSource="{x:Static vm:DocumentTypeEditViewModel.Parties}"
                                                       SelectedItem="{Binding Party}" Width="160" HorizontalAlignment="Left"/>
                                             <TextBlock Text="Produced as" Style="{StaticResource FieldLabel}"/>
-                                            <ComboBox ItemsSource="{x:Static vm:DocumentTypeEditViewModel.Handlers}"
-                                                      SelectedItem="{Binding Handler}" Width="160" HorizontalAlignment="Left"/>
+                                            <ComboBox ItemsSource="{x:Static vm:DocumentTypeEditViewModel.HandlerChoices}"
+                                                      DisplayMemberPath="Label" SelectedValuePath="Value"
+                                                      SelectedValue="{Binding Handler}" Width="280" HorizontalAlignment="Left"/>
                                             <TextBlock Style="{StaticResource Hint}"
-                                                       Text="Pdf delivers the ERP's PDF as it is. EInvoice turns the JSON into XRechnung or ZUGFeRD (sales invoices)."/>
+                                                       Text="An e-invoice is written from the document's data (sales invoices); any other document goes out as the PDF the ERP made."/>
                                         </StackPanel>
                                     </Grid>
                                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
@@ -224,72 +303,82 @@
                                 <StackPanel>
                                     <TextBlock Text="COMPANIES" Style="{StaticResource CardTitle}"/>
                                     <TextBlock Style="{StaticResource Hint}" Margin="0,-6,0,10"
-                                               Text="One entry per AX company this type is picked up for. Select an entry to edit where the ERP drops the files, where the produced files go and which SharePoint library they are uploaded to."/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="210"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
+                                               Text="One entry per ERP company this type is picked up for. Choose a company to set where its documents come from and where they go."/>
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                            <Button Content="+ Add company" Command="{Binding AddCompanyRowCommand}" Padding="12,5" Margin="0,0,6,0"/>
+                                            <Button Content="Remove company" Command="{Binding RemoveCompanyCommand}" Padding="12,5"
+                                                    IsEnabled="{Binding HasCompanySelection}"/>
+                                        </StackPanel>
+                                        <ListBox ItemsSource="{Binding Companies}" SelectedItem="{Binding SelectedCompany}" Style="{StaticResource CompanyChips}">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{Binding Summary}" Foreground="#6B7280" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </DockPanel>
+                                    <TextBlock Margin="0,4,0,0" Foreground="#6B7280" FontStyle="Italic" TextWrapping="Wrap"
+                                               Text="No company yet. + Add company sets up where this type's documents come from."
+                                               Visibility="{Binding Companies.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
 
-                                        <!-- Entry list -->
-                                        <DockPanel Grid.Column="0" Margin="0,0,14,0" LastChildFill="True">
-                                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-                                                <Button Content="Add company" Command="{Binding AddCompanyRowCommand}" Style="{StaticResource SmallBtn}"/>
-                                                <Button Content="Remove" Command="{Binding RemoveCompanyCommand}" Style="{StaticResource SmallBtn}" Margin="0"
-                                                        IsEnabled="{Binding HasCompanySelection}"/>
-                                            </StackPanel>
-                                            <ListBox ItemsSource="{Binding Companies}" SelectedItem="{Binding SelectedCompany}"
-                                                     Style="{StaticResource MasterList}" MinHeight="140">
-                                                <ListBox.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <StackPanel Margin="2,4">
-                                                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" FontSize="13"/>
-                                                            <TextBlock Text="{Binding Summary}" Foreground="#9CA3AF" FontSize="11" TextTrimming="CharacterEllipsis"/>
-                                                        </StackPanel>
-                                                    </DataTemplate>
-                                                </ListBox.ItemTemplate>
-                                            </ListBox>
-                                        </DockPanel>
+                                    <!-- The chosen company entry -->
+                                    <StackPanel DataContext="{Binding SelectedCompany}" Margin="0,6,0,0"
+                                                Visibility="{Binding DataContext.HasCompanySelection, RelativeSource={RelativeSource AncestorType=ScrollViewer}, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock Text="Company (ERP dataAreaId)" VerticalAlignment="Center" Foreground="#475569" Margin="0,0,10,0"/>
+                                            <TextBox Width="160" Text="{Binding DataAreaId, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
 
-                                        <!-- Entry form -->
-                                        <Border Grid.Column="1" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="14"
-                                                IsEnabled="{Binding HasCompanySelection}">
-                                            <StackPanel DataContext="{Binding SelectedCompany}">
-                                                <TextBlock Text="Company (AX dataAreaId)" Style="{StaticResource FieldLabel}"/>
-                                                <TextBox Width="180" HorizontalAlignment="Left" Text="{Binding DataAreaId, UpdateSourceTrigger=PropertyChanged}"/>
-
-                                                <TextBlock Text="Input" Style="{StaticResource FieldLabel}"/>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <RadioButton Content="ERP export: JSON + PDF" IsChecked="{Binding IsJson}" Margin="0,0,20,0"/>
-                                                    <RadioButton Content="Word documents (.docx)" IsChecked="{Binding IsWord}"/>
+                                        <TextBlock Text="1   Where the documents come from" Style="{StaticResource StepHeader}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <RadioButton Grid.Column="0" Style="{StaticResource ChoiceTile}" IsChecked="{Binding IsJson}">
+                                                <StackPanel>
+                                                    <TextBlock Text="ERP export: JSON + PDF" FontWeight="SemiBold" FontSize="13"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#6B7280" FontSize="12" Margin="0,3,0,0"
+                                                               Text="AX or Dynamics 365 writes each posted document as a JSON file and its PDF into a folder."/>
                                                 </StackPanel>
-
-                                                <TextBlock Text="Input folder" Style="{StaticResource FieldLabel}"/>
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBox Grid.Column="0" Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}"/>
-                                                    <Button Grid.Column="1" Content="Browse…" Style="{StaticResource BrowseBtn}"
-                                                            Command="{Binding DataContext.BrowseInputCommand, RelativeSource={RelativeSource AncestorType=Border, AncestorLevel=2}}"/>
-                                                </Grid>
-                                                <TextBlock Style="{StaticResource Hint}"
-                                                           Visibility="{Binding IsJson, Converter={StaticResource BoolToVis}}"
-                                                           Text="Where the ERP drops this type's {documentId}_xxx.json + .pdf pairs. Several types may share one folder; a folder used by one type alone implies that type."/>
-                                                <StackPanel Visibility="{Binding IsWord, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock Style="{StaticResource Hint}"
-                                                               Text="Every .docx with Hive BDC fields is read when it is closed, and turned into a PDF by Hive BDC; a PDF with the same name next to it is used instead. XRechnung or ZUGFeRD comes from the document's E-Rechnung field. Failed files go to the error folder with a reason file."/>
-                                                    <WrapPanel Margin="0,6,0,0">
-                                                        <Button Content="Word template…" Padding="10,3" Margin="0,0,6,4"
-                                                                Command="{Binding DataContext.SaveWordTemplateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                ToolTip="Save the Hive BDC Word invoice template: every field a content control tagged with its BT number"/>
-                                                        <Button Content="Check a Word file…" Padding="10,3" Margin="0,0,0,4" Click="OnCheckWordFile"
-                                                                ToolTip="Open a filled .docx and see what Hive BDC reads from it, before it goes into the folder"/>
-                                                    </WrapPanel>
+                                            </RadioButton>
+                                            <RadioButton Grid.Column="1" Style="{StaticResource ChoiceTile}" IsChecked="{Binding IsWord}" Margin="0">
+                                                <StackPanel>
+                                                    <TextBlock Text="Word documents" FontWeight="SemiBold" FontSize="13"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#6B7280" FontSize="12" Margin="0,3,0,0"
+                                                               Text="Invoices written in Word from the Hive BDC template. Hive BDC reads the fields and makes the PDF."/>
                                                 </StackPanel>
-
-                                                <TextBlock Text="Output folder (blank = input\out\type)" Style="{StaticResource FieldLabel}"/>
+                                            </RadioButton>
+                                        </Grid>
+                                        <TextBlock Text="Folder" Style="{StaticResource FieldLabel}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <Button Grid.Column="1" Content="Browse…" Style="{StaticResource BrowseBtn}"
+                                                    Command="{Binding DataContext.BrowseInputCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"/>
+                                        </Grid>
+                                        <TextBlock Style="{StaticResource Hint}" Visibility="{Binding IsJson, Converter={StaticResource BoolToVis}}"
+                                                   Text="A local folder or a network share. Several types may share one folder; the JSON says which type it is."/>
+                                        <StackPanel Visibility="{Binding IsWord, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Style="{StaticResource Hint}"
+                                                       Text="Every .docx is read once it is closed. A PDF with the same name next to it is used instead of the one Hive BDC makes."/>
+                                            <WrapPanel Margin="0,6,0,0">
+                                                <Button Content="Word template…" Padding="10,3" Margin="0,0,6,4"
+                                                        Command="{Binding DataContext.SaveWordTemplateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        ToolTip="Save the Hive BDC Word invoice template: every field a content control tagged with its BT number"/>
+                                                <Button Content="Check a Word file…" Padding="10,3" Margin="0,0,0,4" Click="OnCheckWordFile"
+                                                        ToolTip="Open a filled .docx and see what Hive BDC reads from it, before it goes into the folder"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                        <Expander Header="More: where the produced files are kept" Margin="0,8,0,0" Foreground="#475569">
+                                            <StackPanel Margin="0,4,0,0">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -297,98 +386,147 @@
                                                     </Grid.ColumnDefinitions>
                                                     <TextBox Grid.Column="0" Text="{Binding Output, UpdateSourceTrigger=PropertyChanged}"/>
                                                     <Button Grid.Column="1" Content="Browse…" Style="{StaticResource BrowseBtn}"
-                                                            Command="{Binding DataContext.BrowseOutputCommand, RelativeSource={RelativeSource AncestorType=Border, AncestorLevel=2}}"/>
+                                                            Command="{Binding DataContext.BrowseOutputCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"/>
                                                 </Grid>
+                                                <TextBlock Style="{StaticResource Hint}" Text="Blank keeps them in the folder above, under out\{type}."/>
+                                            </StackPanel>
+                                        </Expander>
 
-                                                <!-- SharePoint target for this company + type -->
-                                                <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,14,0,0">
-                                                    <StackPanel>
-                                                        <Grid>
-                                                            <TextBlock Text="SHAREPOINT" Style="{StaticResource CardTitle}" Margin="0"/>
-                                                            <CheckBox Content="Upload to SharePoint" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                                      IsChecked="{Binding SharePointEnabled}"/>
-                                                        </Grid>
-                                                        <StackPanel IsEnabled="{Binding SharePointEnabled}" Margin="0,8,0,0">
-                                                            <TextBlock Text="Site URL" Style="{StaticResource FieldLabel}"/>
-                                                            <TextBox Text="{Binding SiteUrl, UpdateSourceTrigger=PropertyChanged}"/>
-                                                            <TextBlock Style="{StaticResource Hint}" Text="https://tenant.sharepoint.com/sites/Name"/>
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                </Grid.ColumnDefinitions>
-                                                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                                                    <TextBlock Text="Library" Style="{StaticResource FieldLabel}"/>
-                                                                    <TextBox Text="{Binding Library, UpdateSourceTrigger=PropertyChanged}"/>
-                                                                    <TextBlock Style="{StaticResource Hint}"
-                                                                               Text="The name from the library's URL (e.g. SalesInvoices) or its display name; a pasted library URL works too."/>
-                                                                </StackPanel>
-                                                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                                    <TextBlock Text="Folder (optional)" Style="{StaticResource FieldLabel}"/>
-                                                                    <TextBox Text="{Binding Folder, UpdateSourceTrigger=PropertyChanged}"/>
-                                                                </StackPanel>
-                                                            </Grid>
+                                        <TextBlock Text="2   What is made" Style="{StaticResource StepHeader}"/>
+                                        <TextBlock TextWrapping="Wrap" Foreground="#334155">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="The PDF the ERP made, as it is. Change it under Produced as above."/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding DataContext.Handler, RelativeSource={RelativeSource AncestorType=ScrollViewer}}" Value="EInvoice">
+                                                            <Setter Property="Text" Value="An e-invoice: XRechnung or ZUGFeRD, as each document says. Change it under Produced as above."/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
 
-                                                            <TextBlock Text="Column templates (SharePoint column → value)" Foreground="#6B7280" FontSize="12"
-                                                                       TextWrapping="Wrap" Margin="0,14,0,4"/>
-                                                            <DataGrid ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn}"
-                                                                      Style="{StaticResource EditGrid}" MinHeight="70" MaxHeight="180">
-                                                                <DataGrid.Columns>
-                                                                    <DataGridTextColumn Header="Column" Width="*" Binding="{Binding Column, UpdateSourceTrigger=PropertyChanged}"/>
-                                                                    <DataGridTextColumn Header="Template" Width="*" Binding="{Binding Template, UpdateSourceTrigger=PropertyChanged}"/>
-                                                                </DataGrid.Columns>
-                                                            </DataGrid>
-                                                            <!-- Below the grid like Add type / Add company; beside the label they covered it in narrower windows -->
-                                                            <WrapPanel Margin="0,8,0,0">
-                                                                <Button Content="Add row" Command="{Binding AddColumnCommand}" Padding="10,3" Margin="0,0,6,4"/>
-                                                                <Button Content="Remove" Command="{Binding RemoveColumnCommand}" Padding="10,3" Margin="0,0,6,4"/>
-                                                                <Button Content="Sample JSON…" Padding="10,3" Margin="0,0,6,4"
-                                                                        Command="{Binding DataContext.SaveFieldTemplateSampleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        ToolTip="Save a HiveBDC.SharePointFields JSON file for THIS type and company: the current target and columns, examples where empty. Edit it, then use Import columns…"/>
-                                                                <Button Content="Import columns…" Padding="10,3" Margin="0,0,0,4"
-                                                                        Command="{Binding DataContext.ImportFieldTemplatesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        ToolTip="Import the SharePoint target and column templates for THIS type and company from a HiveBDC.SharePointFields JSON file. Review, then Save."/>
-                                                            </WrapPanel>
+                                        <TextBlock Text="3   Where they go" Style="{StaticResource StepHeader}"/>
+                                        <TextBlock Style="{StaticResource Hint}" Margin="0,-4,0,8"
+                                                   Text="Every document goes to each place that is switched on, in this order. Switching one off keeps its settings."/>
+
+                                        <!-- SharePoint -->
+                                        <Border Style="{StaticResource DestRow}">
+                                            <StackPanel>
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Left" Text="SharePoint" Style="{StaticResource DestName}"/>
+                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Button Content="Test" Click="OnTestSharePoint" Padding="10,3" Margin="0,0,10,0"
+                                                                Visibility="{Binding SharePointEnabled, Converter={StaticResource BoolToVis}}"/>
+                                                        <CheckBox Content="On" IsChecked="{Binding SharePointEnabled}" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#475569" Margin="0,0,10,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="Off. Switch on to upload every document to a SharePoint library."/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding SharePointEnabled}" Value="True">
+                                                                        <Setter Property="Text" Value="Each document is uploaded to the library below, with its columns filled."/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </DockPanel>
+                                                <StackPanel Margin="0,10,0,0" Visibility="{Binding SharePointEnabled, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="Site address" Style="{StaticResource FieldLabel}"/>
+                                                    <TextBox Text="{Binding SiteUrl, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    <TextBlock Style="{StaticResource Hint}" Text="https://yourcompany.sharepoint.com/sites/Name"/>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                            <TextBlock Text="Library" Style="{StaticResource FieldLabel}"/>
+                                                            <TextBox Text="{Binding Library, UpdateSourceTrigger=PropertyChanged}"/>
                                                             <TextBlock Style="{StaticResource Hint}"
-                                                                       Text="{}{property} takes any top-level field of the ERP JSON, {property:date} normalizes to yyyy-MM-dd. Example: Title = {DocumentNumber}, DocType = {documentType}."/>
+                                                                       Text="The name from the library's address (e.g. SalesInvoices) or its display name; a pasted library address works too."/>
                                                         </StackPanel>
-                                                    </StackPanel>
-                                                </Border>
-
-                                                <!-- Further targets of this company + type (DocuWare, ...) -->
-                                                <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,14,0,0">
-                                                    <StackPanel>
-                                                        <TextBlock Text="ALSO DELIVER TO" Style="{StaticResource CardTitle}" Margin="0"/>
-                                                        <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
-                                                                   Text="Every document of this type and company also goes here, after SharePoint and before mail. Untick a line to pause it."/>
-                                                        <TextBlock Margin="0,8,0,0" Foreground="#6B7280" FontStyle="Italic" TextWrapping="Wrap"
-                                                                   Text="Nothing else yet. Add DocuWare… stores every document of this type and company in DocuWare as well."
-                                                                   Visibility="{Binding Targets.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
-                                                        <ListBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" MinHeight="36" Margin="0,8,0,0"
-                                                                 MouseDoubleClick="OnEditTarget" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                                                 Visibility="{Binding Targets.Count, Converter={StaticResource CountToVis}}">
-                                                            <ListBox.ItemTemplate>
-                                                                <DataTemplate>
-                                                                    <DockPanel>
-                                                                        <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Enabled}" VerticalAlignment="Top" Margin="0,2,8,0"/>
-                                                                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
-                                                                    </DockPanel>
-                                                                </DataTemplate>
-                                                            </ListBox.ItemTemplate>
-                                                        </ListBox>
-                                                        <WrapPanel Margin="0,8,0,0">
-                                                            <Button Content="Add DocuWare…" Click="OnAddDocuWareTarget" Padding="10,3" Margin="0,0,6,4"
-                                                                    ToolTip="Store every document of this type and company in a DocuWare file cabinet. Set up the DocuWare sign-in on the Connections tab first."/>
-                                                            <Button Content="Edit…" Click="OnEditTarget" Padding="10,3" Margin="0,0,6,4"/>
-                                                            <Button Content="Remove" Command="{Binding RemoveTargetCommand}" Padding="10,3" Margin="0,0,0,4"/>
-                                                        </WrapPanel>
-                                                    </StackPanel>
-                                                </Border>
+                                                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                            <TextBlock Text="Folder (optional)" Style="{StaticResource FieldLabel}"/>
+                                                            <TextBox Text="{Binding Folder, UpdateSourceTrigger=PropertyChanged}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                    <TextBlock Text="Columns (SharePoint column → value)" Foreground="#6B7280" FontSize="12" Margin="0,12,0,4"/>
+                                                    <DataGrid ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn}"
+                                                              Style="{StaticResource EditGrid}" MinHeight="70" MaxHeight="180">
+                                                        <DataGrid.Columns>
+                                                            <DataGridTextColumn Header="Column" Width="*" Binding="{Binding Column, UpdateSourceTrigger=PropertyChanged}"/>
+                                                            <DataGridTextColumn Header="Value" Width="*" Binding="{Binding Template, UpdateSourceTrigger=PropertyChanged}"/>
+                                                        </DataGrid.Columns>
+                                                    </DataGrid>
+                                                    <WrapPanel Margin="0,8,0,0">
+                                                        <Button Content="Add row" Command="{Binding AddColumnCommand}" Padding="10,3" Margin="0,0,6,4"/>
+                                                        <Button Content="Remove" Command="{Binding RemoveColumnCommand}" Padding="10,3" Margin="0,0,6,4"/>
+                                                        <Button Content="Sample JSON…" Padding="10,3" Margin="0,0,6,4"
+                                                                Command="{Binding DataContext.SaveFieldTemplateSampleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                ToolTip="Save a HiveBDC.SharePointFields JSON file for THIS type and company: the current target and columns, examples where empty. Edit it, then use Import columns…"/>
+                                                        <Button Content="Import columns…" Padding="10,3" Margin="0,0,0,4"
+                                                                Command="{Binding DataContext.ImportFieldTemplatesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                ToolTip="Import the SharePoint target and column templates for THIS type and company from a HiveBDC.SharePointFields JSON file. Review, then Save."/>
+                                                    </WrapPanel>
+                                                    <TextBlock Style="{StaticResource Hint}"
+                                                               Text="{}{property} takes any field of the ERP JSON, {property:date} writes a date as yyyy-MM-dd. Example: Title = {DocumentNumber}."/>
+                                                </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                    </Grid>
+
+                                        <!-- DocuWare and other targets -->
+                                        <ItemsControl ItemsSource="{Binding Targets}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource DestRow}">
+                                                        <DockPanel>
+                                                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource DestName}" Text="{Binding KindLabel}"/>
+                                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <Button Content="Edit…" Click="OnEditTargetCard" Padding="10,3" Margin="0,0,6,0"
+                                                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                                <Button Content="Remove" Click="OnRemoveTargetCard" Padding="10,3" Margin="0,0,10,0"
+                                                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                                <CheckBox Content="On" IsChecked="{Binding Enabled}" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Detail}" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#475569" Margin="0,0,10,0"/>
+                                                        </DockPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Button Click="OnAddDocuWareTarget" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,8" Margin="0,0,0,8"
+                                                Background="Transparent" BorderBrush="#CBD5E1" Cursor="Hand"
+                                                ToolTip="Store every document of this type and company in a DocuWare file cabinet. Set up the DocuWare sign-in on the Connections tab first.">
+                                            <TextBlock Text="+ Add a DocuWare file cabinet" Foreground="#2563EB" FontWeight="SemiBold"/>
+                                        </Button>
+
+                                        <!-- Mail -->
+                                        <Border Style="{StaticResource DestRow}">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Left" Text="Mail" Style="{StaticResource DestName}"/>
+                                                <CheckBox DockPanel.Dock="Right" Content="On" VerticalAlignment="Center"
+                                                          IsChecked="{Binding DataContext.Mail, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"/>
+                                                <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#475569" Margin="0,0,10,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="Last, to the recipient the ERP names in the document. For every company of this type."/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding DataContext.MailEnabled, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                                                                    <Setter Property="Text" Value="Document mail is switched off on the Connections tab, so nothing is mailed yet. For every company of this type."/>
+                                                                    <Setter Property="Foreground" Value="#B45309"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DockPanel>
+                                        </Border>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

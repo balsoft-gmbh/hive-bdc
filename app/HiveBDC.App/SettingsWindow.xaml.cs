@@ -86,16 +86,22 @@ public partial class SettingsWindow : Window
         await EditDocuWareTarget(row, null);
     }
 
-    private async void OnEditTarget(object sender, RoutedEventArgs e)
+    private async void OnEditTargetCard(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not ViewModels.RouteRow row || row.SelectedTarget is not { } target) return;
+        if (sender is not FrameworkElement { DataContext: ViewModels.TargetRow target, Tag: ViewModels.RouteRow row }) return;
         if (!target.IsDocuWare)
         {
-            MessageBox.Show(this, "This target was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
+            MessageBox.Show(this, "This destination was set up with a newer version of Hive BDC and is kept as it is.", "Hive BDC",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         await EditDocuWareTarget(row, target);
+    }
+
+    private void OnRemoveTargetCard(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ViewModels.TargetRow target, Tag: ViewModels.RouteRow row })
+            row.RemoveTarget(target);
     }
 
     private async void OnAddImport(object sender, RoutedEventArgs e) => await EditImport(null);

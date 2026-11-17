@@ -679,14 +679,24 @@ without further targets is saved without the `Targets` key, so the file stays
 readable by earlier versions, and a save from a dashboard that does not send targets
 keeps the stored ones.
 
+### Document types in Settings
+
+Each document type lists its companies as chips. A company is set up in three steps:
+**1 Where the documents come from** (the ERP export, JSON and PDF, or Word documents,
+and the folder), **2 What is made** (from the type's "Produced as": an e-invoice or the
+PDF as the ERP made it) and **3 Where they go**: SharePoint (its site, library and
+columns appear when switched on), one row per DocuWare file cabinet, and mail, which
+is set per type and needs document mail switched on under Connections. Every
+destination can be switched off without losing its settings.
+
 ### DocuWare target
 
 In the dashboard:
 
 1. **Settings > Connections > DocuWare:** address, user name and password, then
    **Test connection**. It signs in and lists the file cabinets the user can see.
-2. **Settings > Document types >** a type **>** a company entry **> Also deliver to >
-   Add DocuWare…:** choose the file cabinet by name. Its fields are listed with their
+2. **Settings > Document types >** a type **>** a company **> 3 Where they go >
+   + Add a DocuWare file cabinet:** choose the file cabinet by name. Its fields are listed with their
    kind and whether they are required; fill the ones you want with templates. Choose
    the field that holds the document number under **Never store a document twice**.
 3. **Save.** Every document of that type and company now also goes to DocuWare.

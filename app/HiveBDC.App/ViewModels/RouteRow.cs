@@ -36,7 +36,6 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     /// <summary>Further places this entry delivers to (DocuWare, ...), after SharePoint and before mail.</summary>
     public ObservableCollection<TargetRow> Targets { get; } = new();
 
-    [ObservableProperty] private TargetRow? _selectedTarget;
     [ObservableProperty] private ColumnRow? _selectedColumn;
 
     /// <summary>First line in the entry list: the company, or a placeholder.</summary>
@@ -92,16 +91,12 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     {
         int at = replaces is null ? -1 : Targets.IndexOf(replaces);
         if (at >= 0) Targets[at] = target; else Targets.Add(target);
-        SelectedTarget = target;
         OnPropertyChanged(nameof(Summary));
     }
 
-    [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void RemoveTarget()
+    public void RemoveTarget(TargetRow target)
     {
-        if (SelectedTarget is null) return;
-        Targets.Remove(SelectedTarget);
-        SelectedTarget = Targets.FirstOrDefault();
+        Targets.Remove(target);
         OnPropertyChanged(nameof(Summary));
     }
 

@@ -16,6 +16,15 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
     public static readonly string[] Parties = { "Customer", "Vendor" };
     public static readonly string[] Handlers = { "Pdf", "EInvoice" };
 
+    public sealed record Choice(string Value, string Label);
+
+    /// <summary>"Produced as" in words; the value stays the handler name the settings file stores.</summary>
+    public static readonly Choice[] HandlerChoices =
+    {
+        new("EInvoice", "E-invoice (XRechnung or ZUGFeRD)"),
+        new("Pdf", "PDF as the ERP made it"),
+    };
+
     [ObservableProperty] private string _id = "";
     [ObservableProperty] private string _displayName = "";
     [ObservableProperty] private string _party = "Customer";

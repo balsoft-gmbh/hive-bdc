@@ -20,6 +20,14 @@ public sealed partial class TargetRow : ObservableObject
 
     public bool IsDocuWare => string.Equals(Kind, DocuWareKind, StringComparison.OrdinalIgnoreCase);
 
+    public string KindLabel => IsDocuWare ? "DocuWare" : Kind;
+
+    /// <summary>The line next to the name in the destination list.</summary>
+    public string Detail => IsDocuWare
+        ? $"File cabinet \"{Setting("FileCabinetName", Setting("FileCabinet"))}\", {Fields.Count} field(s) filled" +
+          (Setting("MatchField").Length > 0 ? $"; never stored twice (by {Setting("MatchField")})." : ".")
+        : "Set up with a newer version of Hive BDC; kept as it is.";
+
     public string Summary => IsDocuWare
         ? $"DocuWare: file cabinet \"{Setting("FileCabinetName", Setting("FileCabinet"))}\", {Fields.Count} field(s)" +
           (Setting("MatchField").Length > 0 ? $", never stored twice (by {Setting("MatchField")})" : "")
