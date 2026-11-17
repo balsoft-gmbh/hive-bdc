@@ -22,6 +22,7 @@ grant for these components.
 | CommunityToolkit.Mvvm | 8.4.0 | dashboard view models | Copyright (c) .NET Foundation and Contributors | MIT |
 | Azure.Storage.Blobs, Azure.Data.Tables, Azure.Messaging.ServiceBus, Azure.Identity, Azure.Security.KeyVault.Secrets (with Azure.Core and their dependencies) | 12.30.1, 12.13.0, 7.21.0, 1.21.0, 4.12.0 | Azure Blob Storage source and target, Azure run mode | Copyright (c) Microsoft Corporation | MIT |
 | .NET runtime (bundled, self-contained build) | 10.0 | runs the service and the dashboard | Copyright (c) .NET Foundation and Contributors | MIT, plus the runtime's own third-party notices: https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT |
+| ASP.NET Core runtime (bundled, self-contained build) | 10.0 | the service's local API (Kestrel) | Copyright (c) .NET Foundation and Contributors | MIT, plus its own third-party notices: https://github.com/dotnet/aspnetcore/blob/main/THIRD-PARTY-NOTICES.txt |
 
 Build and test tools that are not shipped (validators, test frameworks, signing
 tools) are not listed.

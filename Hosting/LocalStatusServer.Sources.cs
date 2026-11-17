@@ -95,14 +95,14 @@ public sealed partial class LocalStatusServer
         return source;
     }
 
-    private async Task PostSourceChoices(HttpListenerContext ctx, HttpListenerRequest req)
+    private async Task PostSourceChoices(ApiCall call)
     {
         SourceRequestDto? dto;
-        try { dto = JsonSerializer.Deserialize<SourceRequestDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { dto = JsonSerializer.Deserialize<SourceRequestDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
         dto ??= new();
         var result = await SourceCatalog.ChoicesAsync(ConnectorRegistry.BuiltIn(), DraftRuntime(dto), dto.Kind ?? "", dto.Lookup ?? "", SourceOf(dto));
-        Respond(ctx, 200, new
+        Respond(call, 200, new
         {
             ok = result.Error is null,
             message = result.Error ?? "",
@@ -110,27 +110,27 @@ public sealed partial class LocalStatusServer
         });
     }
 
-    private async Task PostSourceSample(HttpListenerContext ctx, HttpListenerRequest req)
+    private async Task PostSourceSample(ApiCall call)
     {
         SourceRequestDto? dto;
-        try { dto = JsonSerializer.Deserialize<SourceRequestDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { dto = JsonSerializer.Deserialize<SourceRequestDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
         dto ??= new();
         var source = ConnectorRegistry.BuiltIn().Source(dto.Kind ?? "", DraftRuntime(dto));
-        if (source is null) { Respond(ctx, 200, new { ok = false, message = $"The document system '{dto.Kind}' is not known to this version of Hive BDC." }); return; }
+        if (source is null) { Respond(call, 200, new { ok = false, message = $"The document system '{dto.Kind}' is not known to this version of Hive BDC." }); return; }
         var options = SourceOf(dto);
         var problems = source.Problems(options);
-        if (problems.Count > 0) { Respond(ctx, 200, new { ok = false, message = string.Join(" ", problems) }); return; }
+        if (problems.Count > 0) { Respond(call, 200, new { ok = false, message = string.Join(" ", problems) }); return; }
         try
         {
             var ready = await source.ReadyAsync(options, 1);
             if (ready.Count == 0)
             {
-                Respond(ctx, 200, new { ok = false, message = $"No {source.Descriptor.RecordNoun} is ready in {source.Descriptor.Name} right now, so there is nothing to preview." });
+                Respond(call, 200, new { ok = false, message = $"No {source.Descriptor.RecordNoun} is ready in {source.Descriptor.Name} right now, so there is nothing to preview." });
                 return;
             }
             var record = await source.ReadAsync(options, ready[0]);
-            Respond(ctx, 200, new
+            Respond(call, 200, new
             {
                 ok = true,
                 message = $"{source.Descriptor.Name} {source.Descriptor.RecordNoun} {record.Id}.",
@@ -138,6 +138,6 @@ public sealed partial class LocalStatusServer
                 tables = record.Tables.Select(t => new { name = t.Key, rows = t.Value.Count }).ToArray(),
             });
         }
-        catch (ConnectorException ex) { Respond(ctx, 200, new { ok = false, message = ex.Message }); }
+        catch (ConnectorException ex) { Respond(call, 200, new { ok = false, message = ex.Message }); }
     }
 }

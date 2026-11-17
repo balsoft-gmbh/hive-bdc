@@ -20,7 +20,7 @@ public sealed partial class LocalStatusServer
     // Structure comes from Snapshot(), which migrates every older shape (top-level companies,
     // single-config) on the fly, so an old file reads back in the new form.
 
-    private void GetConfig(HttpListenerContext ctx) => Respond(ctx, 200, BuildConfigResponse());
+    private void GetConfig(ApiCall call) => Respond(call, 200, BuildConfigResponse());
 
     private object BuildConfigResponse()
     {
@@ -105,11 +105,11 @@ public sealed partial class LocalStatusServer
     // service seeds the six built-ins into an empty one on load. Any legacy "Companies" list is
     // dropped on write, since it was migrated into the types on read.
 
-    private void PostConfig(HttpListenerContext ctx, HttpListenerRequest req)
+    private void PostConfig(ApiCall call)
     {
         ConfigPostDto? dto;
-        try { dto = JsonSerializer.Deserialize<ConfigPostDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, errors = new[] { "Invalid JSON: " + ex.Message } }); return; }
+        try { dto = JsonSerializer.Deserialize<ConfigPostDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, errors = new[] { "Invalid JSON: " + ex.Message } }); return; }
         dto ??= new ConfigPostDto();
 
         // Stored (on-disk) shared secret — reused when the POST omits/blanks clientSecret.
@@ -118,7 +118,7 @@ public sealed partial class LocalStatusServer
         {
             // Never replace an unreadable settings file with a near-empty one: everything
             // not in this POST (and any hand edits) would be lost without a trace.
-            Respond(ctx, 500, new { ok = false, errors = new[] { "appsettings.json could not be read, so it was not overwritten. Fix or restore the file, then save again." } });
+            Respond(call, 500, new { ok = false, errors = new[] { "appsettings.json could not be read, so it was not overwritten. Fix or restore the file, then save again." } });
             return;
         }
         root ??= new JsonObject();
@@ -230,7 +230,7 @@ public sealed partial class LocalStatusServer
                 errors.Add($"mail.redirectTo contains '{bad}', which is not a valid e-mail address.");
         }
 
-        if (errors.Count > 0) { Respond(ctx, 400, new { ok = false, errors }); return; }
+        if (errors.Count > 0) { Respond(call, 400, new { ok = false, errors }); return; }
 
         // ── build the new HiveBDC section ─────────────────────────────
         string secretToStore = !string.IsNullOrWhiteSpace(postedSecret)
@@ -334,7 +334,7 @@ public sealed partial class LocalStatusServer
 
         try { SettingsFile.AtomicWrite(_settingsPath, root); }
         catch (Exception ex)
-        { Respond(ctx, 500, new { ok = false, errors = new[] { "Failed to write appsettings.json: " + ex.Message } }); return; }
+        { Respond(call, 500, new { ok = false, errors = new[] { "Failed to write appsettings.json: " + ex.Message } }); return; }
 
         bool secretChanged = !string.IsNullOrWhiteSpace(postedSecret);
         string mailSummary = mail?.Enabled == true
@@ -347,7 +347,7 @@ public sealed partial class LocalStatusServer
             "Configuration updated via /config — poll={Poll}s, logDir={LogDir}, sharedSecret={Secret}, mail={Mail}, documentTypes: {Types}",
             poll, string.IsNullOrWhiteSpace(dto.LogDir) ? "(default)" : dto.LogDir,
             secretChanged ? "changed" : "unchanged", mailSummary, typeSummary);
-        Respond(ctx, 200, new { ok = true });
+        Respond(call, 200, new { ok = true });
     }
 
     // ── request DTOs (camelCase JSON, case-insensitive binding) ─────────────

@@ -1,9 +1,11 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,8 +13,8 @@ using Microsoft.Extensions.Options;
 namespace Balsoft.Hive.BDC.Hosting;
 
 /// <summary>
-/// Loopback control/status API for the companion desktop app. Binds an HttpListener
-/// to 127.0.0.1 on an ephemeral port and publishes {port, token} to
+/// Loopback control/status API for the companion desktop app. Runs a minimal ASP.NET Core
+/// (Kestrel) server on 127.0.0.1 on an ephemeral port and publishes {port, token} to
 /// %ProgramData%\HiveBDC\app-endpoint.json. Every request must present the
 /// bearer token and originate from loopback. Endpoints:
 ///   GET  /status                 — running, version, config, document types, license state
@@ -40,15 +42,15 @@ public sealed partial class LocalStatusServer : BackgroundService
     private readonly string? _logDir;
     private readonly string _version;
     private readonly string _settingsPath;
+    private readonly string _endpointDir;
 
-    private readonly HttpListener _listener = new();
     private readonly string _token = Base64Url(RandomNumberGenerator.GetBytes(32));
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     public LocalStatusServer(
         IOptionsMonitor<BDCOptions> opts, IStateStore ledger, ILogger<LocalStatusServer> log,
-        string? logDir, string version, string settingsPath)
+        string? logDir, string version, string settingsPath, string? endpointDir = null)
     {
         _optsMonitor = opts;
         _ledger = ledger;
@@ -56,6 +58,7 @@ public sealed partial class LocalStatusServer : BackgroundService
         _logDir = logDir;
         _version = version;
         _settingsPath = settingsPath;
+        _endpointDir = endpointDir ?? Path.GetDirectoryName(ExportLedger.DefaultDbPath)!;
     }
 
     /// <summary>Current options snapshot, normalized (idempotent) for display.</summary>
@@ -68,12 +71,18 @@ public sealed partial class LocalStatusServer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        WebApplication app;
         int port;
         try
         {
-            port = FreeLoopbackPort();
-            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            _listener.Start();
+            // An empty builder: no configuration files, no environment (ASPNETCORE_URLS would move the listener), no
+            // logging providers of its own; only Kestrel on the loopback address with a port the OS picks.
+            var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
+            builder.WebHost.UseKestrelCore().ConfigureKestrel(k => k.Listen(IPAddress.Loopback, 0));
+            app = builder.Build();
+            app.Run(Serve);
+            await app.StartAsync(stoppingToken);
+            port = new Uri(app.Urls.First()).Port;
             WriteEndpointFile(port);
         }
         catch (Exception ex)
@@ -82,70 +91,70 @@ public sealed partial class LocalStatusServer : BackgroundService
             return;
         }
 
-        _log.LogInformation("Local status API listening on http://127.0.0.1:{Port} (token in %ProgramData%\\HiveBDC\\{File}).", port, EndpointFileName);
-        using var reg = stoppingToken.Register(() => { try { _listener.Stop(); } catch { /* shutting down */ } });
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            HttpListenerContext ctx;
-            try { ctx = await _listener.GetContextAsync(); }
-            catch when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception ex) { _log.LogWarning(ex, "Local API: accepting a request failed; listening continues."); continue; }
-
-            _ = Handle(ctx);
-        }
-
-        try { _listener.Close(); } catch { /* ignore */ }
+        _log.LogInformation("Local status API listening on http://127.0.0.1:{Port} (token in {File}).", port, Path.Combine(_endpointDir, EndpointFileName));
+        try { await Task.Delay(Timeout.Infinite, stoppingToken); }
+        catch (OperationCanceledException) { /* shutting down */ }
+        await app.StopAsync(CancellationToken.None);
+        await app.DisposeAsync();
         _log.LogInformation("Local status API stopped.");
     }
 
-    private async Task Handle(HttpListenerContext ctx)
+    /// <summary>Kestrel's side: the request becomes an <see cref="ApiCall"/>, the handler's answer goes back as JSON.</summary>
+    private async Task Serve(HttpContext http)
+    {
+        string body;
+        using (var reader = new StreamReader(http.Request.Body, Encoding.UTF8))
+            body = await reader.ReadToEndAsync(http.RequestAborted);
+        var query = http.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        var call = new ApiCall(http.Request.Method, http.Request.Path.Value ?? "", query, body);
+        await Handle(call, http.Connection.RemoteIpAddress, http.Request.Headers.Authorization.ToString());
+        http.Response.StatusCode = call.Status;
+        http.Response.ContentType = "application/json";
+        http.Response.ContentLength = call.Answer.Length;
+        await http.Response.Body.WriteAsync(call.Answer, http.RequestAborted);
+    }
+
+    internal async Task Handle(ApiCall call, IPAddress? remote, string? auth)
     {
         try
         {
-            var req = ctx.Request;
+            if (remote is null || !IPAddress.IsLoopback(remote))
+            { Respond(call, 403, new { error = "loopback only" }); return; }
 
-            if (req.RemoteEndPoint is null || !IPAddress.IsLoopback(req.RemoteEndPoint.Address))
-            { Respond(ctx, 403, new { error = "loopback only" }); return; }
-
-            string? auth = req.Headers["Authorization"];
             if (auth is null || !auth.StartsWith("Bearer ", StringComparison.Ordinal)
                 || !CryptographicOperations.FixedTimeEquals(
                     Encoding.UTF8.GetBytes(auth["Bearer ".Length..]), Encoding.UTF8.GetBytes(_token)))
-            { Respond(ctx, 401, new { error = "unauthorized" }); return; }
+            { Respond(call, 401, new { error = "unauthorized" }); return; }
 
-            string method = req.HttpMethod.ToUpperInvariant();
-            string path = req.Url?.AbsolutePath.TrimEnd('/').ToLowerInvariant() ?? "";
-
-            switch ((method, path))
+            switch ((call.Method, call.Path))
             {
-                case ("GET", "/status"): Respond(ctx, 200, Status()); return;
-                case ("GET", "/metrics"): Respond(ctx, 200, Metrics(RecentParam(req))); return;
-                case ("GET", "/logs"): Respond(ctx, 200, Logs(TailParam(req))); return;
-                case ("GET", "/history"): Respond(ctx, 200, History(req)); return;
-                case ("GET", "/history/attention"): Respond(ctx, 200, Attention(req)); return;
-                case ("POST", "/history/retry"): PostRetry(ctx, req); return;
-                case ("POST", "/config/test-docuware"): await PostTestDocuWare(ctx, req); return;
-                case ("POST", "/config/docuware-fields"): await PostDocuWareFields(ctx, req); return;
-                case ("GET", "/sources"): Respond(ctx, 200, Sources()); return;
-                case ("POST", "/sources/choices"): await PostSourceChoices(ctx, req); return;
-                case ("POST", "/sources/sample"): await PostSourceSample(ctx, req); return;
-                case ("GET", "/targets"): Respond(ctx, 200, Targets()); return;
-                case ("POST", "/targets/choices"): await PostTargetChoices(ctx, req); return;
-                case ("GET", "/connections/kinds"): Respond(ctx, 200, ConnectionKindsList()); return;
-                case ("POST", "/connections/test"): await PostConnectionTest(ctx, req); return;
-                case ("GET", "/config"): GetConfig(ctx); return;
-                case ("POST", "/config"): PostConfig(ctx, req); return;
-                case ("POST", "/config/test-sharepoint"): await PostTestSharePoint(ctx, req); return;
-                case ("POST", "/config/test-mail"): await PostTestMail(ctx, req); return;
-                case ("POST", "/license"): PostLicense(ctx, req); return;
-                default: Respond(ctx, 404, new { error = "not found" }); return;
+                case ("GET", "/status"): Respond(call, 200, Status()); return;
+                case ("GET", "/metrics"): Respond(call, 200, Metrics(RecentParam(call))); return;
+                case ("GET", "/logs"): Respond(call, 200, Logs(TailParam(call))); return;
+                case ("GET", "/history"): Respond(call, 200, History(call)); return;
+                case ("GET", "/history/attention"): Respond(call, 200, Attention(call)); return;
+                case ("POST", "/history/retry"): PostRetry(call); return;
+                case ("POST", "/config/test-docuware"): await PostTestDocuWare(call); return;
+                case ("POST", "/config/docuware-fields"): await PostDocuWareFields(call); return;
+                case ("GET", "/sources"): Respond(call, 200, Sources()); return;
+                case ("POST", "/sources/choices"): await PostSourceChoices(call); return;
+                case ("POST", "/sources/sample"): await PostSourceSample(call); return;
+                case ("GET", "/targets"): Respond(call, 200, Targets()); return;
+                case ("POST", "/targets/choices"): await PostTargetChoices(call); return;
+                case ("GET", "/connections/kinds"): Respond(call, 200, ConnectionKindsList()); return;
+                case ("POST", "/connections/test"): await PostConnectionTest(call); return;
+                case ("GET", "/config"): GetConfig(call); return;
+                case ("POST", "/config"): PostConfig(call); return;
+                case ("POST", "/config/test-sharepoint"): await PostTestSharePoint(call); return;
+                case ("POST", "/config/test-mail"): await PostTestMail(call); return;
+                case ("POST", "/license"): PostLicense(call); return;
+                default: Respond(call, 404, new { error = "not found" }); return;
             }
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "Local API {Request} failed.", ForLog($"{ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}"));
-            try { Respond(ctx, 500, new { error = "internal error" }); } catch { /* ignore */ }
+            _log.LogError(ex, "Local API {Request} failed.", ForLog($"{call.Method} {call.Path}"));
+            try { Respond(call, 500, new { error = "internal error" }); } catch { /* ignore */ }
         }
     }
 
@@ -246,10 +255,10 @@ public sealed partial class LocalStatusServer : BackgroundService
     /// GET /history?search=&amp;limit=: the steps of one document (search by its id or number), or the newest steps of
     /// all documents when search is blank.
     /// </summary>
-    private object History(HttpListenerRequest req)
+    private object History(ApiCall call)
     {
-        string? search = req.QueryString["search"];
-        int limit = int.TryParse(req.QueryString["limit"], out var n) ? Math.Clamp(n, 1, 5000) : 500;
+        string? search = call.Query("search");
+        int limit = int.TryParse(call.Query("limit"), out var n) ? Math.Clamp(n, 1, 5000) : 500;
         var events = _ledger.Events(search, limit);
         return new
         {
@@ -315,21 +324,15 @@ public sealed partial class LocalStatusServer : BackgroundService
         return root;
     }
 
-    private static string ReadBody(HttpListenerRequest req)
-    {
-        using var sr = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
-        return sr.ReadToEnd();
-    }
+    private static int TailParam(ApiCall call)
+        => int.TryParse(call.Query("tail"), out var n) ? n : 200;
 
-    private static int TailParam(HttpListenerRequest req)
-        => int.TryParse(req.QueryString["tail"], out var n) ? n : 200;
-
-    private static int RecentParam(HttpListenerRequest req)
-        => int.TryParse(req.QueryString["recent"], out var n) ? Math.Clamp(n, 1, 5000) : 20;
+    private static int RecentParam(ApiCall call)
+        => int.TryParse(call.Query("recent"), out var n) ? Math.Clamp(n, 1, 5000) : 20;
 
     private void WriteEndpointFile(int port)
     {
-        string dir = Path.GetDirectoryName(ExportLedger.DefaultDbPath)!;
+        string dir = _endpointDir;
         Directory.CreateDirectory(dir);
         // Publish the resolved log directory too, so the dashboard app can co-log into
         // the SAME rolling file the service writes (one unified, app-visible log).
@@ -340,7 +343,7 @@ public sealed partial class LocalStatusServer : BackgroundService
     /// <summary>A caller-supplied value for the log, without line breaks that could fake further log entries.</summary>
     internal static string ForLog(string value) => value.Replace("\r", " ").Replace("\n", " ");
 
-    private void Respond(HttpListenerContext ctx, int status, object body)
+    private void Respond(ApiCall call, int status, object body)
     {
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(body);
         // Every refused or failed dashboard request lands in the log with its reason, so a
@@ -348,27 +351,13 @@ public sealed partial class LocalStatusServer : BackgroundService
         // error answers carry messages and validation errors only, never settings or secrets.
         if (status >= 400)
         {
-            string what = ForLog($"{ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}");
+            string what = ForLog($"{call.Method} {call.Path}");
             string reason = ForLog(Encoding.UTF8.GetString(bytes));
             if (reason.Length > 1000) reason = reason[..1000] + "…";
             if (status >= 500) _log.LogError("Local API {Request} answered {Status}: {Reason}", what, status, reason);
             else _log.LogWarning("Local API {Request} answered {Status}: {Reason}", what, status, reason);
         }
-        ctx.Response.StatusCode = status;
-        ctx.Response.ContentType = "application/json";
-        ctx.Response.ContentLength64 = bytes.Length;
-        ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
-        ctx.Response.OutputStream.Close();
-    }
-
-    /// <summary>Grab a free 127.0.0.1 port from the OS (bind :0), then hand it to HttpListener.</summary>
-    private static int FreeLoopbackPort()
-    {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        int port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        return port;
+        call.Respond(status, bytes);
     }
 
     private static string Base64Url(byte[] bytes)

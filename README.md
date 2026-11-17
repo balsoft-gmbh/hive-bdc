@@ -25,7 +25,10 @@ and/or uploads it to **SharePoint**. It ships as two parts:
 
 Everything runs **100% on the customer's machine** — document content never
 leaves it except to the recipients you configure. The dashboard talks to the
-service only over a loopback (`127.0.0.1`) API.
+service only over a loopback (`127.0.0.1`) API: a minimal ASP.NET Core (Kestrel)
+server on a port the system picks, with a bearer token; port and token are in
+`%ProgramData%\HiveBDC\app-endpoint.json`, and a request from any other address
+is refused.
 
 ## Document types
 
@@ -611,7 +614,7 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               references in Azure; KeyVaultSecretVault), SettingsBlob (settings of an
                               Azure instance: AzureETagBlob, BlobSettingsDocument, BlobSettingsProvider)
   Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate),
-                              LocalStatusServer (+ .Config, .Probes), LogSetup, Installer,
+                              LocalStatusServer (+ .Config, .Probes; Kestrel on 127.0.0.1), ApiCall, LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
 app/HiveBDC.App/          the WPF dashboard (own project, loopback client only)

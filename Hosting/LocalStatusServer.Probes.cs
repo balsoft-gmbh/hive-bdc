@@ -12,11 +12,11 @@ public sealed partial class LocalStatusServer
     // STORED shared auth (SharePointAuth); a blank posted secret reuses the stored one.
     // Reads only — never writes.
 
-    private async Task PostTestSharePoint(HttpListenerContext ctx, HttpListenerRequest req)
+    private async Task PostTestSharePoint(ApiCall call)
     {
         TestSpDto? body;
-        try { body = JsonSerializer.Deserialize<TestSpDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { body = JsonSerializer.Deserialize<TestSpDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
         body ??= new TestSpDto();
         var sp = body.SharePoint ?? new SpTargetDto();
 
@@ -35,7 +35,7 @@ public sealed partial class LocalStatusServer
         {
             var probe = new SharePointTargetOptions { SiteUrl = sp.SiteUrl ?? "", Library = sp.Library ?? "", Folder = sp.Folder ?? "" };
             target = probe.ResolveTarget(out var reason);
-            if (target is null) { Respond(ctx, 200, new { ok = false, message = reason }); return; }
+            if (target is null) { Respond(call, 200, new { ok = false, message = reason }); return; }
         }
 
         string targetDesc = target is null ? "auth-only (no target)" : $"{target.SiteUrl} / {target.Library}";
@@ -47,14 +47,14 @@ public sealed partial class LocalStatusServer
         catch (Exception ex)
         {
             _log.LogWarning("SharePoint test FAILED — {Target}: {Message}", targetDesc, ex.Message);
-            Respond(ctx, 200, new { ok = false, message = ex.Message });
+            Respond(call, 200, new { ok = false, message = ex.Message });
             return;
         }
 
         string summary = cap.Summary(ok);
         if (ok) _log.LogInformation("SharePoint test OK — {Target}: {Summary}", targetDesc, summary);
         else _log.LogWarning("SharePoint test FAILED — {Target}: {Summary}", targetDesc, summary);
-        Respond(ctx, 200, new { ok, message = summary });
+        Respond(call, 200, new { ok, message = summary });
     }
 
     // ── POST /config/test-mail ──────────────────────────────────────────────
@@ -63,11 +63,11 @@ public sealed partial class LocalStatusServer
     // From address exists and the app may act on it. SENDS NOTHING and writes nothing. A
     // blank clientSecret reuses the stored one, so the form can be tested before saving.
 
-    private async Task PostTestMail(HttpListenerContext ctx, HttpListenerRequest req)
+    private async Task PostTestMail(ApiCall call)
     {
         TestMailDto? body;
-        try { body = JsonSerializer.Deserialize<TestMailDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { body = JsonSerializer.Deserialize<TestMailDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
         body ??= new TestMailDto();
 
         var cur = Snapshot();
@@ -101,13 +101,13 @@ public sealed partial class LocalStatusServer
         catch (Exception ex)
         {
             _log.LogWarning("Mail test FAILED — {From}: {Message}", probe.From, ex.Message);
-            Respond(ctx, 200, new { ok = false, message = ex.Message });
+            Respond(call, 200, new { ok = false, message = ex.Message });
             return;
         }
 
         if (ok) _log.LogInformation("Mail test OK — {From}: {Summary}", probe.From, message);
         else _log.LogWarning("Mail test FAILED — {From}: {Summary}", probe.From, message);
-        Respond(ctx, 200, new { ok, message });
+        Respond(call, 200, new { ok, message });
     }
 
     // ── POST /license ───────────────────────────────────────────────────────
@@ -118,15 +118,15 @@ public sealed partial class LocalStatusServer
     // no restart. Rejects Invalid/Expired so a bad or dead license can't overwrite a
     // working one. Nothing but the license file itself is written.
 
-    private void PostLicense(HttpListenerContext ctx, HttpListenerRequest req)
+    private void PostLicense(ApiCall call)
     {
         LicenseUploadDto? dto;
-        try { dto = JsonSerializer.Deserialize<LicenseUploadDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { dto = JsonSerializer.Deserialize<LicenseUploadDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
 
         string content = dto?.Content ?? "";
         if (string.IsNullOrWhiteSpace(content))
-        { Respond(ctx, 400, new { ok = false, message = "No license content provided." }); return; }
+        { Respond(call, 400, new { ok = false, message = "No license content provided." }); return; }
 
         var opts = Snapshot();
         LicenseResult result;
@@ -136,19 +136,19 @@ public sealed partial class LocalStatusServer
             (result, stored) = new FileLicenseStore().Install(opts, content, opts.SharePointAuth.TenantId, DateOnly.FromDateTime(DateTime.Today));
         }
         catch (Exception ex)
-        { Respond(ctx, 500, new { ok = false, message = "Could not install the license: " + ex.Message }); return; }
+        { Respond(call, 500, new { ok = false, message = "Could not install the license: " + ex.Message }); return; }
 
         // Refuse anything that wouldn't actually license the install (tampered/wrong-tenant/
         // wrong-product => Invalid; already past grace => Expired). Valid/Warning/Grace install.
         if (!stored)
         {
             _log.LogWarning("License upload REJECTED via /license — {State}: {Message}", result.State, result.Message);
-            Respond(ctx, 400, new { ok = false, state = result.State.ToString(), message = result.Message });
+            Respond(call, 400, new { ok = false, state = result.State.ToString(), message = result.Message });
             return;
         }
 
         _log.LogInformation("License installed via /license — {State}: {Message}", result.State, result.Message);
-        Respond(ctx, 200, new
+        Respond(call, 200, new
         {
             ok = true,
             state = result.State.ToString(),

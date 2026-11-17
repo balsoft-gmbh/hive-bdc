@@ -46,18 +46,18 @@ public sealed partial class LocalStatusServer
         return new DocuWareClient(check.Setting("Url"), check.Setting("UserName"), password);
     }
 
-    private async Task PostTestDocuWare(HttpListenerContext ctx, HttpListenerRequest req)
+    private async Task PostTestDocuWare(ApiCall call)
     {
         DocuWareRequestDto? dto;
-        try { dto = JsonSerializer.Deserialize<DocuWareRequestDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { dto = JsonSerializer.Deserialize<DocuWareRequestDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
         var client = DocuWareClientFor(dto ?? new(), out var problem);
-        if (client is null) { Respond(ctx, 200, new { ok = false, message = problem }); return; }
+        if (client is null) { Respond(call, 200, new { ok = false, message = problem }); return; }
         try
         {
             var cabinets = await client.CabinetsAsync();
             string names = string.Join(", ", cabinets.Take(5).Select(c => c.Name)) + (cabinets.Count > 5 ? ", …" : "");
-            Respond(ctx, 200, new
+            Respond(call, 200, new
             {
                 ok = true,
                 message = cabinets.Count == 0
@@ -66,21 +66,21 @@ public sealed partial class LocalStatusServer
                 cabinets = cabinets.Select(c => new { id = c.Id, name = c.Name }).ToArray(),
             });
         }
-        catch (DocuWareException ex) { Respond(ctx, 200, new { ok = false, message = ex.Message }); }
+        catch (DocuWareException ex) { Respond(call, 200, new { ok = false, message = ex.Message }); }
     }
 
-    private async Task PostDocuWareFields(HttpListenerContext ctx, HttpListenerRequest req)
+    private async Task PostDocuWareFields(ApiCall call)
     {
         DocuWareRequestDto? dto;
-        try { dto = JsonSerializer.Deserialize<DocuWareRequestDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
-        if (string.IsNullOrWhiteSpace(dto?.CabinetId)) { Respond(ctx, 200, new { ok = false, message = "Choose a file cabinet first." }); return; }
+        try { dto = JsonSerializer.Deserialize<DocuWareRequestDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        if (string.IsNullOrWhiteSpace(dto?.CabinetId)) { Respond(call, 200, new { ok = false, message = "Choose a file cabinet first." }); return; }
         var client = DocuWareClientFor(dto, out var problem);
-        if (client is null) { Respond(ctx, 200, new { ok = false, message = problem }); return; }
+        if (client is null) { Respond(call, 200, new { ok = false, message = problem }); return; }
         try
         {
             var cabinet = await client.CabinetAsync(dto.CabinetId);
-            Respond(ctx, 200, new
+            Respond(call, 200, new
             {
                 ok = true,
                 message = $"{cabinet.Fields.Count} field(s) in file cabinet \"{cabinet.Name}\".",
@@ -96,13 +96,13 @@ public sealed partial class LocalStatusServer
                 }).ToArray(),
             });
         }
-        catch (DocuWareException ex) { Respond(ctx, 200, new { ok = false, message = ex.Message }); }
+        catch (DocuWareException ex) { Respond(call, 200, new { ok = false, message = ex.Message }); }
     }
 
     /// <summary>GET /history/attention: documents whose last step failed or is waiting, newest first.</summary>
-    private object Attention(HttpListenerRequest req)
+    private object Attention(ApiCall call)
     {
-        int limit = int.TryParse(req.QueryString["limit"], out var n) ? Math.Clamp(n, 1, 1000) : 200;
+        int limit = int.TryParse(call.Query("limit"), out var n) ? Math.Clamp(n, 1, 1000) : 200;
         return new
         {
             events = _ledger.Attention(limit).Select(e => new
@@ -122,15 +122,15 @@ public sealed partial class LocalStatusServer
         };
     }
 
-    private void PostRetry(HttpListenerContext ctx, HttpListenerRequest req)
+    private void PostRetry(ApiCall call)
     {
         RetryRequestDto? dto;
-        try { dto = JsonSerializer.Deserialize<RetryRequestDto>(ReadBody(req), JsonOpts); }
-        catch (Exception ex) { Respond(ctx, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        try { dto = JsonSerializer.Deserialize<RetryRequestDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
         var options = _optsMonitor.CurrentValue;
         options.Normalize();
         var moved = DocumentProcessor.PutBackForRetry(options, dto?.DocumentId ?? "");
-        Respond(ctx, 200, new
+        Respond(call, 200, new
         {
             ok = moved.Count > 0,
             message = moved.Count > 0
