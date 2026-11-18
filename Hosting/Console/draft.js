@@ -26,7 +26,7 @@ export const go = (hash) => { if (window.location.hash === hash) window.dispatch
 export const crumbs = (...items) => trail(...items);
 
 export function badge() {
-  return el('span', { class: 'badge-export', text: 'EXPORT' });
+  return el('span', { class: 'badge-outbound', text: 'OUTBOUND' });
 }
 
 export function quiet(text, onClick) {

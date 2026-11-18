@@ -27,7 +27,7 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
         if (mailer is null)
         {
             log.LogInformation("[{Tag}] {Id}: mail skipped: document mail is not enabled.", tag, documentId);
-            return new DeliveryResult(Summary: "Not mailed: document mail is not switched on in Settings.", Skipped: true);
+            return new DeliveryResult(Summary: $"Not mailed: document mail is not switched on {SettingsPaths.Pick("in Settings", "under Connections")}.", Skipped: true);
         }
 
         var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc);
@@ -43,7 +43,7 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
             if (plan.Redirected)
                 throw new InvalidOperationException(
                     $"Mail is enabled and this document came from a '{plan.Environment}' system, but no redirect " +
-                    "recipients are configured. Add them in Settings > Connections > Document mail > Test recipients.");
+                    $"recipients are configured. Add them {SettingsPaths.Pick("in Settings > Connections > Document mail > Test recipients", "under Connections > Document mail")}.");
 
             log.LogWarning("[{Tag}] {Id}: no recipient e-mail in the document — mail skipped.", tag, documentId);
             return new DeliveryResult(Summary: "Not mailed: the document names no recipient.", Skipped: true);
@@ -65,7 +65,7 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
             // rather than letting the bare Graph error stand on its own.
             throw new InvalidOperationException(
                 $"The {type.EffectiveDisplayName} was produced and uploaded, but mailing it failed: {ex.Message} " +
-                "Fix the mail settings, then drop the pair back into the input folder to retry.", ex);
+                $"Fix the mail settings, then {SettingsPaths.Pick("drop the pair back into the input folder to retry", "press Retry in the document history")}.", ex);
         }
 
         if (plan.Redirected)

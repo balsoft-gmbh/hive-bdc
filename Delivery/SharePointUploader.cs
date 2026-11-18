@@ -128,8 +128,8 @@ public sealed class SharePointUploader
         if (fields.Count > 0)
             await SetFieldsAsync(driveId, itemId, fields);
         else
-            _log.LogWarning("SharePoint: {File} uploaded without any column values (no column templates resolved). Set them under Settings > Outbound > company > Column templates.",
-                fileName);
+            _log.LogWarning("SharePoint: {File} uploaded without any column values (no column templates resolved). Set them under {Place}.",
+                fileName, SettingsPaths.Pick("Settings > Outbound > company > Column templates", "Outbound > the document type > the company > SharePoint"));
     }
 
     // ── Graph plumbing ──────────────────────────────────────────────────────
@@ -328,8 +328,8 @@ public sealed class SharePointUploader
         string summary = ErrorSummary(await resp.Content.ReadAsStringAsync());
         _log.LogError(
             "SharePoint: the file was uploaded but its columns were NOT set ({Status}): {Error}. " +
-            "The document itself is fine and processing continues; fix the column names in Settings.",
-            (int)resp.StatusCode, summary);
+            "The document itself is fine and processing continues; fix the column names {Place}.",
+            (int)resp.StatusCode, summary, SettingsPaths.Pick("in Settings", "on its SharePoint destination under Outbound"));
 
         await LogAvailableColumnsAsync(driveId, fields.Keys);
     }

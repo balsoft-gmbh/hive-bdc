@@ -1,7 +1,7 @@
 // node --test tests/console/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attentionRows, changeLine, conflictView, dayLine, germanDate, greeting, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole } from '../../Hosting/Console/logic.js';
+import { attentionRows, canonicalPage, changeLine, conflictView, dayLine, germanDate, greeting, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole, typeLabel } from '../../Hosting/Console/logic.js';
 
 test('the highest role wins and unknown roles are ignored', () => {
   assert.equal(topRole(['viewer', 'Administrator']), 'Administrator');
@@ -104,4 +104,16 @@ test('the overview greets by first name only when the sign-in name gives one', (
 test('the overview names the weekday and the German date', () => {
   assert.equal(dayLine(new Date(2026, 10, 18, 16, 24)), 'WEDNESDAY 18.11.2026');
   assert.equal(dayLine(new Date(2027, 0, 3)), 'SUNDAY 03.01.2027');
+});
+
+test('a document type is named as in the Windows app: its name, else its ID', () => {
+  assert.equal(typeLabel({ id: 'SalesInvoice', displayName: 'Sales invoice' }), 'Sales invoice');
+  assert.equal(typeLabel({ id: 'SalesInvoice', displayName: '  ' }), 'SalesInvoice');
+  assert.equal(typeLabel({ id: 'SalesInvoice' }), 'SalesInvoice');
+});
+
+test('links to the former Export pages open the Outbound pages', () => {
+  assert.equal(canonicalPage(parseRoute('#/export/SalesInvoice/DEMF').page), 'outbound');
+  assert.equal(canonicalPage('outbound'), 'outbound');
+  assert.equal(canonicalPage('history'), 'history');
 });

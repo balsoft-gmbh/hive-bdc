@@ -1000,11 +1000,12 @@ document type (`byType`), `GET /setup/identity` names the staging root (`inputRo
 names that type and company, and works in the `.test-run` subfolder of the staging folder,
 so other waiting pairs there are not touched.
 
-**Export** (`#/export`) edits the outbound side one level per screen: the document types
-(with a waiting export of a company that has no entry yet offered as "Add company"), one
-type, one company (where documents come from: a Blob container and folder, a Service Bus
-queue or topic with the container its PDFs are in, or a web address with its own key, made
-in the browser and shown once; and where they go), and one destination (its settings with
+**Outbound** (`#/outbound`; links to the former `#/export` still open it) uses the Windows
+app's words and edits the outbound side one level per screen: the document types (with a
+waiting document of a company that has no entry yet offered as "Add company"), one type, one
+company with its Active switch (Comes from: a Blob container and folder, a Service Bus queue or
+topic with the container its PDFs are in, or a web address with its own key, made in the
+browser and shown once; Goes to: its destinations and mail), and one destination (its settings with
 lists read from the system, the connection, and for SharePoint and DocuWare the field
 mapping with the values of the last document). All screens edit one draft; the Save bar
 lists its changes and waits until every company has a complete source and somewhere to
@@ -1015,7 +1016,12 @@ read the same container, queue or subscription share one staging folder. Calls u
 completed; without access it answers the role command), and
 `GET /export/sample?type=&company=` gives the top-level fields of the newest document of
 that type and company that went through. A document that waits because its company has
-no entry names its type and company in the history.
+no entry names its type and company in the history. On an Azure instance the service's
+messages name the console's pages ("Outbound > Sales invoice > Companies", "Connections")
+and, after a switch is turned on again, Retry in the document history, which also works for
+documents from Blob Storage and Service Bus because their staged copy stays on the instance
+(the blob stays under error/, the message dead-lettered); the Windows app keeps its
+"Settings > ..." wording.
 
 **Connections** (`#/connections`) lists every connection with what it points at, who uses
 it and Test, Edit and Remove (refused while a source or destination still uses it), plus the

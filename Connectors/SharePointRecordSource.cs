@@ -52,7 +52,7 @@ public sealed class SharePointRecordSource : IRecordSource
     {
         var problems = new List<string>();
         if (!IsConnected)
-            problems.Add("Set up SharePoint under Settings > Connections first (tenant ID, client ID and secret of the SharePoint app).");
+            problems.Add($"Set up SharePoint under {SettingsPaths.Pick("Settings > Connections", "Connections")} first (tenant ID, client ID and secret of the SharePoint app).");
         if (!Uri.TryCreate(source.Setting("SiteUrl"), UriKind.Absolute, out var site) || site.Scheme != Uri.UriSchemeHttps)
             problems.Add("Set the site address, e.g. https://yourcompany.sharepoint.com/sites/Name.");
         if (source.Setting("Library").Length == 0) problems.Add("Choose the library.");
@@ -118,7 +118,7 @@ public sealed class SharePointRecordSource : IRecordSource
     public async Task<IReadOnlyList<SourceChoice>> ChoicesAsync(string lookup, SourceOptions source)
     {
         if (!IsConnected)
-            throw new ConnectorException("Set up SharePoint under Settings > Connections first (tenant ID, client ID and secret of the SharePoint app).", false);
+            throw new ConnectorException($"Set up SharePoint under {SettingsPaths.Pick("Settings > Connections", "Connections")} first (tenant ID, client ID and secret of the SharePoint app).", false);
         switch (lookup)
         {
             case "libraries":
@@ -239,7 +239,7 @@ public sealed class SharePointRecordSource : IRecordSource
     private async Task<string> TokenAsync()
     {
         if (_auth is null || _auth.Validate().Count > 0)
-            throw new ConnectorException("Set up SharePoint under Settings > Connections first (tenant ID, client ID and secret of the SharePoint app).", false);
+            throw new ConnectorException($"Set up SharePoint under {SettingsPaths.Pick("Settings > Connections", "Connections")} first (tenant ID, client ID and secret of the SharePoint app).", false);
         string secret = SecretProtector.Unprotect(_auth.ClientSecret);
         string key = AuthKey() + "|" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(secret)));
         lock (Gate)

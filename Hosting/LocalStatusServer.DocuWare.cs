@@ -134,7 +134,7 @@ public sealed partial class LocalStatusServer
         {
             ok = moved.Count > 0,
             message = moved.Count > 0
-                ? $"Put {moved.Count} file(s) back into the input folder. The document is processed on the next scan."
+                ? $"Put {moved.Count} file(s) {SettingsPaths.Pick("back into the input folder", "back for processing")}. The document is processed on the next scan."
                 : "No files of this document are in an error folder. It may have been retried already, or its files were removed.",
             files = moved.ToArray(),
         });

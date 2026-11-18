@@ -170,7 +170,7 @@ public sealed class ServiceBusDocumentTarget(BDCOptions options, Func<Connection
     {
         var connection = options.Connection(target.Connection);
         if (connection is null)
-            return $"The Service Bus target uses the connection '{target.Connection}', which is not set up. Add it in Settings > Connections.";
+            return $"The Service Bus target uses the connection '{target.Connection}', which is not set up. Add it in {SettingsPaths.Pick("Settings > Connections", "Connections")}.";
         var problems = connection.Problems();
         if (problems.Count > 0) return string.Join(" ", problems);
         return Entity(target).Length == 0 ? "The Service Bus target has no queue or topic." : null;

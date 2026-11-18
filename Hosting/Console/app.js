@@ -1,6 +1,6 @@
 // The web console of a Hive BDC instance in Azure. Every element is built with createElement and every value set with
 // textContent or setAttribute (ui.js), so nothing read from the settings or the history can become markup (failure case 52).
-import { attentionRows, dayLine, greeting, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
+import { attentionRows, canonicalPage, dayLine, greeting, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
 import { connectionsPage } from './connections.js';
 import { exportPage } from './export.js';
 import { servicePage } from './service.js';
@@ -15,7 +15,7 @@ const state = { me: null, status: null, config: null, updates: null };
 
 const groups = [
   { label: 'WORK', pages: [{ id: 'overview', label: 'Overview' }, { id: 'history', label: 'Document history' }] },
-  { label: 'SET UP', pages: [{ id: 'export', label: 'Export' }, { id: 'connections', label: 'Connections' }, { id: 'service', label: 'Service' }] },
+  { label: 'SET UP', pages: [{ id: 'outbound', label: 'Outbound', sub: 'from your ERP', icon: 'export' }, { id: 'connections', label: 'Connections' }, { id: 'service', label: 'Service' }] },
 ];
 const pages = groups.flatMap((g) => g.pages);
 const instanceName = () => window.location.hostname.split('.')[0];
@@ -24,13 +24,14 @@ const instanceName = () => window.location.hostname.split('.')[0];
 function renderNav(setup) {
   const nav = document.getElementById('nav-links');
   const count = updateBadge(state.updates);
-  const link = (p) => el('a', { class: 'nav-link', href: `#/${p.id}`, 'data-page': p.id }, icon(p.id, 'nav-icon'), el('span', { text: p.label }),
+  const link = (p) => el('a', { class: 'nav-link', href: `#/${p.id}`, 'data-page': p.id }, icon(p.icon || p.id, 'nav-icon'),
+    el('span', { class: 'nav-text' }, el('span', { text: p.label }), p.sub ? el('span', { class: 'nav-sub', text: p.sub }) : null),
     p.id === 'service' && count ? el('span', { class: 'nav-count', 'aria-label': 'Update available', text: count }) : null);
   if (setup) {
     put(nav,
       el('div', { class: 'nav-label', text: 'SET UP' }),
       el('a', { class: 'nav-link', href: '#/setup', 'data-page': 'setup' }, icon('instance', 'nav-icon'), el('span', { text: 'Set up' })),
-      pages.map((p) => el('span', { class: 'nav-off' }, icon(p.id, 'nav-icon'), el('span', { text: p.label }))),
+      pages.map((p) => el('span', { class: 'nav-off' }, icon(p.icon || p.id, 'nav-icon'), el('span', { text: p.label }))),
       el('p', { class: 'nav-note', text: 'The other pages open when Hive BDC is started at the end of the set-up.' }));
   } else {
     put(nav, groups.flatMap((g) => [el('div', { class: 'nav-label', text: g.label }), ...g.pages.map(link)]));
@@ -163,7 +164,7 @@ async function historyPage(view, route) {
 const renderers = {
   overview: overviewPage,
   history: historyPage,
-  export: (view, route) => exportPage(view, route, { me: state.me, status: state.status, config: state.config }),
+  outbound: (view, route) => exportPage(view, route, { me: state.me, status: state.status, config: state.config }),
   connections: (view, route) => connectionsPage(view, route, { me: state.me, status: state.status, config: state.config }),
   service: (view, route) => servicePage(view, route, { me: state.me, status: state.status, config: state.config, updates: state.updates }),
 };
@@ -184,7 +185,7 @@ async function show() {
       await setupPage(view, route, { me: state.me, status: state.status, config: state.config, started });
       return;
     }
-    const page = renderers[route.page] ? route.page : 'overview';
+    const page = renderers[canonicalPage(route.page)] ? canonicalPage(route.page) : 'overview';
     markCurrent(page);
     trail({ text: 'Hive BDC' }, { text: pages.find((p) => p.id === page).label });
     await renderers[page](view, route);

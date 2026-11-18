@@ -113,7 +113,7 @@ public sealed class ImportProcessor
                 if (problems.Count > 0)
                 {
                     if (filePath is not null) TryDelete(filePath);
-                    throw new InvalidOperationException(string.Join(" ", problems.Distinct()) + " Correct the columns of the flow in Settings > Inbound.");
+                    throw new InvalidOperationException(string.Join(" ", problems.Distinct()) + $" Correct the columns of the flow in {SettingsPaths.Pick("Settings > Inbound", "Inbound")}.");
                 }
                 string fileName = CsvFile.SafeFileName(CsvFile.Resolve(flow.Produce.Setting("FileName", d.DefaultFileName), record, null,
                     new Dictionary<string, object?>(), culture, extra, "file name", null));

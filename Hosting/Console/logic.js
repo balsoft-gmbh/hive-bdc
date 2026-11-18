@@ -459,6 +459,17 @@ const typeName = {
   paymentadvice: 'payment advice',
 };
 
+/** The name of a document type in titles, breadcrumbs and paths, as the Windows app shows it: its name, else its ID. */
+export function typeLabel(type) {
+  const name = String((type && type.displayName) || '').trim();
+  return name || String((type && type.id) || '').trim();
+}
+
+/** The page a route opens; links to the former Export pages open Outbound. */
+export function canonicalPage(page) {
+  return page === 'export' ? 'outbound' : page;
+}
+
 /** A document type in the words of a sentence: "sales invoices" for the built-ins (one: "sales invoice"), else its own name. */
 export function typeWords(type, count) {
   const id = String((type && type.id) || '').toLowerCase();

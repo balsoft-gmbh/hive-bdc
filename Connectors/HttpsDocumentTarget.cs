@@ -56,7 +56,7 @@ public sealed class HttpsDocumentTarget(BDCOptions options, HttpMessageHandler? 
     {
         var connection = options.Connection(target.Connection);
         if (connection is null)
-            return $"The HTTPS target uses the connection '{target.Connection}', which is not set up. Add it in Settings > Connections.";
+            return $"The HTTPS target uses the connection '{target.Connection}', which is not set up. Add it in {SettingsPaths.Pick("Settings > Connections", "Connections")}.";
         var problems = connection.Problems();
         return problems.Count > 0 ? string.Join(" ", problems) : null;
     }

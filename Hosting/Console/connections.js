@@ -237,7 +237,7 @@ export async function connectionsPage(view, route, ctx) {
       el('h2', { text: 'Add a connection' }),
       el('div', { class: 'tiles tiles-auto' }, kinds.kinds.map((k) => el('button', { type: 'button', class: 'tile tile-button', on: { click: () => { ui.adding = k.kind; rerender(); } } },
         el('span', { class: 'tile-title', text: k.name }), el('span', { class: 'tile-note', text: k.description || '' })))),
-      el('p', { class: 'muted small', text: `Azure Storage and Service Bus can sign in as this instance (identity ${identity.objectId || 'unknown'}): your IT gives it a role, the check on the Export page shows the command. A connection still in use cannot be removed.` })),
+      el('p', { class: 'muted small', text: `Azure Storage and Service Bus can sign in as this instance (identity ${identity.objectId || 'unknown'}): your IT gives it a role, the check on the Outbound page shows the command. A connection still in use cannot be removed.` })),
     bar.node);
   if (!ctx.me.canChange) lock(view);
 }

@@ -29,7 +29,7 @@ public sealed class DocuWareRecordSource(SourceRuntime runtime, Func<ConnectionO
     {
         var connection = Connection(source);
         if (connection is null || connection.Problems().Count > 0)
-            throw new ConnectorException("Connect DocuWare under Settings > Connections first.", retryLater: false);
+            throw new ConnectorException($"Connect DocuWare under {SettingsPaths.Pick("Settings > Connections", "Connections")} first.", retryLater: false);
         return clients(connection);
     }
 
@@ -37,7 +37,7 @@ public sealed class DocuWareRecordSource(SourceRuntime runtime, Func<ConnectionO
     {
         var connection = Connection(source);
         var problems = connection?.Problems().ToList()
-                       ?? new List<string> { $"The connection '{source.Connection}' is not set up (Settings > Connections)." };
+                       ?? new List<string> { $"The connection '{source.Connection}' is not set up ({SettingsPaths.Pick("Settings > Connections", "Connections")})." };
         if (Cabinet(source).Length == 0 || source.Setting("ReadyField").Length == 0 || source.Setting("ReadyValue").Length == 0
             || source.Setting("DoneValue").Length == 0)
             problems.Add("Set the file cabinet, the field and value that mark a document ready, and the value written once it is imported.");

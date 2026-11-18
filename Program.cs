@@ -121,6 +121,7 @@ builder.Services.AddWindowsService(o => o.ServiceName = "HiveBDC");
 // Key Vault references, no loopback API). The Azure settings come from the deployment (HiveBDC__RunMode,
 // HiveBDC__Azure__*), never from the dashboard.
 string runMode = RunModes.Clean(builder.Configuration[$"{sectionName}:RunMode"]);
+SettingsPaths.Azure = runMode == RunModes.Azure;
 var azureRun = builder.Configuration.GetSection($"{sectionName}:Azure").Get<AzureRunOptions>() ?? new AzureRunOptions();
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 ISettingsDocument settingsDocument = new FileSettingsDocument(settingsPath);

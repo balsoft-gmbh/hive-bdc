@@ -168,7 +168,7 @@ async function sourceStep(view, ctx, progress) {
     });
     put(planBox, el('p', { class: 'note' },
       `Hive BDC sets up ${typeWords(type)} for ${plan.companies.length === 1 ? 'company' : 'companies'} ${andList(plan.companies)}.`,
-      later.length ? ` Also waiting: ${later.join(', ')}. They stay in the container until you add them under Export.` : ''));
+      later.length ? ` Also waiting: ${later.join(', ')}. They stay in the container until you add them under Outbound.` : ''));
   };
 
   const checkButton = el('button', { type: 'button', class: 'button', text: 'Check access', on: { click: async () => {
@@ -204,7 +204,7 @@ async function sourceStep(view, ctx, progress) {
   });
 
   const tiles = el('fieldset', { class: 'tiles tiles-3' },
-    el('legend', { class: 'sr-only', text: 'Where documents come from' }),
+    el('legend', { class: 'sr-only', text: 'Comes from' }),
     sourceTile('blob', 'Azure Blob Storage', 'Standard for F&O. F&O writes each export and its PDF into a container.', true),
     sourceTile('servicebus', 'Azure Service Bus', 'F&O sends each export as a message to a queue or topic.', false),
     sourceTile('https', 'Web address (HTTPS)', 'Power Automate, a Logic App or another ERP posts to Hive BDC.', false));
@@ -220,7 +220,7 @@ async function sourceStep(view, ctx, progress) {
     el('div', { class: 'inline' }, checkButton, checkLine),
     planBox,
     el('p', { class: 'note', text: 'F&O keeps writing to this container as it does today. Hive BDC takes each export with the PDF named in it and moves both to processed/ or error/ when it is done.' }));
-  const otherNote = el('p', { class: 'note', hidden: true, text: 'The assistant checks and tests a Blob container. For Service Bus or a web address, add the companies on the Export page.' });
+  const otherNote = el('p', { class: 'note', hidden: true, text: 'The assistant checks and tests a Blob container. For Service Bus or a web address, add the companies on the Outbound page.' });
   tiles.addEventListener('change', () => {
     const blob = tiles.querySelector('input:checked').value === 'blob';
     blobForm.hidden = !blob;
@@ -321,7 +321,7 @@ async function destinationStep(view, ctx, progress, route) {
 
   const intro = [`The exports are ${typeWords(type)} for ${companies.length === 1 ? 'company' : 'companies'} ${andList(companies)}.`];
   if (type.handler === 'EInvoice') intro.push('Hive BDC makes the e-invoice each export asks for (XRechnung or ZUGFeRD).');
-  intro.push('Choose one place or several; other document types follow later under Export.');
+  intro.push('Choose one place or several; other document types follow later under Outbound.');
 
   put(view,
     stepBar(3, progress),
@@ -423,7 +423,7 @@ function destinationSection(d, pick, env) {
   for (const s of d.settings.filter((x) => x.lookup)) queueMicrotask(() => loadChoices(s));
 
   const notes = {
-    sharepoint: 'The file goes into the library with its name. Columns of the library are filled from the document once you map them under Export.',
+    sharepoint: 'The file goes into the library with its name. Columns of the library are filled from the document once you map them under Outbound.',
     mail: 'Each document goes to the customer\'s address from the export.',
   };
   return el('section', { class: 'card stack', 'aria-label': d.name },

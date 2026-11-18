@@ -125,6 +125,29 @@ public sealed class BlobTests : IDisposable
     }
 
     [Fact]
+    public void RetryProcessesAFailedBlobPairOnceFromItsStagedCopy()
+    {
+        var route = Route();
+        var staging = Options(route);
+        var processing = Options(route, typeEnabled: false);
+        processing.DocumentTypes.Add(new DocumentTypeOptions { Id = "Other", Handler = DocumentHandlerKind.Pdf, Mail = false, Companies = { new DocumentRoute { DataAreaId = "USMF", Input = route.Input } } });
+        processing.Normalize();
+        FoPair();
+        Stager().Run(staging);
+        Assert.Equal(1, Processor().ScanOnce(processing, License, null, null).Errors);
+        Stager().Run(staging);
+
+        // Design part 19 (d): the type is switched on again and Retry is pressed in the document history.
+        Assert.Equal(new[] { "5637144576_blob.json", "5637144576_blob.pdf" }, DocumentProcessor.PutBackForRetry(staging, "5637144576").Order());
+        Assert.Equal(1, Processor().ScanOnce(staging, License, null, null).Processed);
+        Stager().Run(staging);
+        Assert.Equal(0, Processor().ScanOnce(staging, License, null, null).Processed);
+
+        Assert.True(File.Exists(Path.Combine(route.Output, "SO-1001.pdf")));
+        Assert.Equal(new[] { "error/SalesConfirmation/5637144576", "error/SalesConfirmation/5637144576.pdf" }, _store.Blobs.Keys.OrderBy(k => k));
+    }
+
+    [Fact]
     public void APdfLinkOutsideTheContainerIsNotFetched()
     {
         var route = Route();

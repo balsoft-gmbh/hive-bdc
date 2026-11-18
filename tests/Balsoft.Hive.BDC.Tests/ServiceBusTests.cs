@@ -178,6 +178,28 @@ public sealed class ServiceBusTests : IDisposable
     }
 
     [Fact]
+    public void RetryProcessesADeadLetteredDocumentOnceFromItsStagedCopy()
+    {
+        var route = Route();
+        var staging = Options(route);
+        var processing = Options(route, typeEnabled: false);
+        processing.DocumentTypes.Add(new DocumentTypeOptions { Id = "Other", Handler = DocumentHandlerKind.Pdf, Mail = false, Companies = { new DocumentRoute { DataAreaId = "USMF", Input = route.Input } } });
+        processing.Normalize();
+        var message = FoMessage();
+        Stager().Run(staging);
+        Assert.Equal(1, Processor().ScanOnce(processing, License, null, null).Errors);
+        Stager().Run(staging);
+
+        // Design part 19 (d): the type is switched on again and Retry is pressed in the document history.
+        Assert.Equal(new[] { "5637144576_sb.json", "5637144576_sb.pdf" }, DocumentProcessor.PutBackForRetry(staging, "5637144576").Order());
+        Assert.Equal(1, Processor().ScanOnce(staging, License, null, null).Processed);
+        Stager().Run(staging);
+        Assert.Equal(0, Processor().ScanOnce(staging, License, null, null).Processed);
+        Assert.Equal("deadlettered", message.State);
+        Assert.Single(Directory.GetFiles(route.Output, "*.pdf"));
+    }
+
+    [Fact]
     public void AMessageSentTwiceIsCompletedWithoutASecondDocument()
     {
         var route = Route();

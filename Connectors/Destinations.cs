@@ -51,7 +51,7 @@ public sealed class DocuWareDestinationKind(SourceRuntime runtime, Func<Connecti
     {
         var connection = Connection(target);
         if (connection is null || connection.Problems().Count > 0)
-            throw new ConnectorException("Connect DocuWare under Settings > Connections first.", retryLater: false);
+            throw new ConnectorException($"Connect DocuWare under {SettingsPaths.Pick("Settings > Connections", "Connections")} first.", retryLater: false);
         var client = clients(connection);
         string cabinet = target.Setting("FileCabinet");
         switch (lookup)

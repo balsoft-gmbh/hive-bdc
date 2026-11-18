@@ -19,7 +19,7 @@ public sealed class BlobDocumentTarget(BDCOptions options, Func<ConnectionOption
     {
         var connection = options.Connection(target.Connection);
         if (connection is null)
-            return $"The blob target uses the connection '{target.Connection}', which is not set up. Add it in Settings > Connections.";
+            return $"The blob target uses the connection '{target.Connection}', which is not set up. Add it in {SettingsPaths.Pick("Settings > Connections", "Connections")}.";
         var problems = connection.Problems();
         if (problems.Count > 0) return string.Join(" ", problems);
         return target.Setting("Container").Length == 0 ? "The blob target has no container." : null;

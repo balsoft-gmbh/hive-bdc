@@ -203,7 +203,7 @@ public sealed partial class DocumentProcessor
         var type = _registry.Resolve(opts, typeId, data.Party, seed, out _);
         if (!type.Discovered && !opts.DocumentTypes.Contains(type))
             throw new InvalidOperationException(
-                $"Document type '{type.Id}' was removed in Settings > Outbound. Add it again (New document type, ID {type.Id}), then drop the pair back into the input folder.");
+                $"Document type '{type.Id}' was removed in {SettingsPaths.Pick("Settings > Outbound", "Outbound")}. Add it again (New document type, ID {type.Id}), then {SettingsPaths.Pick("drop the pair back into the input folder", "press Retry in the document history")}.");
         // Known before the route, so a document that waits for its company's entry names both in the history.
         var known = HistoryOf(input);
         known.DocumentType = type.Id;
@@ -213,7 +213,7 @@ public sealed partial class DocumentProcessor
                     ?? (type.Discovered && seed is not null ? _registry.AddCompany(type, seed) : null)
                     ?? throw new PendingDocumentException(
                         $"Document type '{type.Id}' has no route for company '{company ?? "(not in the JSON, folder serves several)"}' " +
-                        $"(Settings > Outbound > {type.EffectiveDisplayName} > Companies). Add that company; the pair remains pending.");
+                        $"({SettingsPaths.Pick("Settings > Outbound", "Outbound")} > {type.EffectiveDisplayName} > Companies). Add that company; {SettingsPaths.Pick("the pair remains pending", "the document waits until then")}.");
         var documentNumber = data.ResolveNumber(documentId);
         string area = company ?? route.DataAreaId;
         // The history names the company as it is set up (F&O sends dataAreaId in lower case); the delivery key and the
@@ -234,11 +234,11 @@ public sealed partial class DocumentProcessor
         // ── 2. may it be processed? ───────────────────────────────────────
         if (!type.Enabled)
             throw new InvalidOperationException(
-                $"Document type '{type.Id}' is switched off in Settings > Outbound. Switch it on, then drop the pair back into the input folder.");
+                $"Document type '{type.Id}' is switched off in {SettingsPaths.Pick("Settings > Outbound", "Outbound")}. Switch it on, then {SettingsPaths.Pick("drop the pair back into the input folder", "press Retry in the document history")}.");
         if (!route.IsOn)
             throw new InvalidOperationException(
-                $"Company '{route.DataAreaId}' of document type '{type.Id}' is switched off in Settings > Outbound > {type.EffectiveDisplayName}. " +
-                "Switch it on, then drop the pair back into the input folder.");
+                $"Company '{route.DataAreaId}' of document type '{type.Id}' is switched off in {SettingsPaths.Pick("Settings > Outbound", "Outbound")} > {type.EffectiveDisplayName}. " +
+                $"Switch it on, then {SettingsPaths.Pick("drop the pair back into the input folder", "press Retry in the document history")}.");
 
         var handler = DocumentHandlers.For(type.Handler);
         if (!license.HasFeature(handler.RequiredFeature))
@@ -284,8 +284,8 @@ public sealed partial class DocumentProcessor
         // replaces by name simply runs again, any other target is handed the id of its earlier
         // delivery from the ledger and updates that document.
         if (!route.SharePoint.Enabled)
-            _log.LogInformation("[{Tag}] {Id}: SharePoint upload skipped: SharePoint is off for {Type} / company {Area} (Settings > Outbound).",
-                tag, documentId, type.Id, route.DataAreaId);
+            _log.LogInformation("[{Tag}] {Id}: SharePoint upload skipped: SharePoint is off for {Type} / company {Area} ({Place}).",
+                tag, documentId, type.Id, route.DataAreaId, SettingsPaths.Pick("Settings > Outbound", "Outbound"));
 
         string? targetSite = null;
         string deliveryKey = $"{area}|{type.Id}|{documentId}|{Path.GetFileName(output.File)}";
@@ -479,8 +479,10 @@ public sealed partial class DocumentProcessor
     {
         bool afterTarget = _history.TryGetValue(input, out var known) && known.TargetFailed;
         Note(input, documentId, EventSteps.Failed, EventStates.Failed, afterTarget
-            ? "Stopped after the failed delivery above. The input files are in the error folder; put them back into the input folder to retry. Targets that already received the document are not sent a second copy."
-            : reason + " The input files are in the error folder; put them back into the input folder to retry.");
+            ? $"Stopped after the failed delivery above. {SettingsPaths.Pick("The input files are in the error folder; put them back into the input folder to retry.", "Press Retry in the document history to try again.")} Targets that already received the document are not sent a second copy."
+            : SettingsPaths.Azure && reason.Contains("Retry in the document history", StringComparison.Ordinal)
+                ? reason
+                : reason + " " + SettingsPaths.Pick("The input files are in the error folder; put them back into the input folder to retry.", "Press Retry in the document history to try again."));
     }
 
     internal static string FormatLabel(string format) => format switch

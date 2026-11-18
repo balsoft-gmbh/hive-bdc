@@ -1,6 +1,7 @@
-// The Export pages of the web console (boards W7 to W11): the document types, one type, one company, one destination.
+// The Outbound pages of the web console (boards W7 to W11, in the Windows app's words since part 19): the document types,
+// one type, one company, one destination.
 // All screens edit the one draft of draft.js; its Save bar saves with the version the settings were read at.
-import { typeWords } from './logic.js';
+import { typeLabel, typeWords } from './logic.js';
 import * as X from './exportlogic.js';
 import {
   badge, capital, change, confirmBox, connectionSelect, crumbs, go, quiet, saveBar, savedChip, segmented, state, sync, toggle,
@@ -12,7 +13,8 @@ const entryOf = (typeId, company) => {
   const t = typeOf(typeId);
   return t ? t.companies.find((c) => c.dataAreaId.toLowerCase() === String(company).toLowerCase()) : null;
 };
-const path = (...parts) => `#/export/${parts.map((p) => encodeURIComponent(p)).join('/')}`;
+const path = (...parts) => `#/outbound/${parts.map((p) => encodeURIComponent(p)).join('/')}`;
+const home = { href: '#/outbound', text: 'Outbound' };
 
 export async function exportPage(view, route, ctx) {
   sync(ctx.config);
@@ -37,35 +39,38 @@ async function listScreen(env) {
   const rerender = () => env.again();
 
   const card = (row) => {
-    const sub = [row.displayName, row.handler === 'EInvoice' ? 'e-invoice' : 'PDF', row.party === 'Vendor' ? 'to vendors' : 'to customers'].filter(Boolean).join(' · ');
+    const sub = [row.id, row.handler === 'EInvoice' ? 'e-invoice' : 'PDF', row.party === 'Vendor' ? 'to vendors' : 'to customers'].filter(Boolean).join(' · ');
     const remove = ui.confirmType === row.id
-      ? confirmBox(`Remove ${row.name.toLowerCase()}? An export F&O still sends for it then goes to error/ instead of being added again.`, () => {
+      ? confirmBox(`Remove ${row.name} with its companies and destinations? Nothing changes until you save.`, () => {
         try { change((d) => X.removeType(d, row.id)); ui.confirmType = null; rerender(); } catch (error) { ui.confirmType = null; ui.error = error.message; rerender(); }
       }, () => { ui.confirmType = null; rerender(); })
       : null;
     const waiting = row.waiting.map((w) => el('div', { class: 'waiting' },
-      el('span', { text: `${w.count} ${w.count === 1 ? 'export' : 'exports'} of company ${w.company} ${w.count === 1 ? 'is' : 'are'} waiting. Add the company and choose where ${typeWords({ id: row.id, displayName: row.displayName })} go, then Hive BDC takes ${w.count === 1 ? 'it' : 'them'}.` }),
+      el('span', { text: `${w.count} ${w.count === 1 ? 'document' : 'documents'} of company ${w.company} ${w.count === 1 ? 'is' : 'are'} waiting. Add the company and choose where ${typeWords({ id: row.id, displayName: row.displayName })} go, then Hive BDC takes ${w.count === 1 ? 'it' : 'them'}.` }),
       el('button', { type: 'button', class: 'button edit-only', text: `Add company ${w.company}`, on: { click: () => { change((d) => X.addCompany(d, row.id, w.company)); go(path(row.id, w.company)); } } })));
     return el('article', { class: row.waiting.length ? 'card type-card type-card-warn' : 'card type-card' },
       el('div', { class: 'type-row' },
         el('span', { class: 'type-name' }, el('a', { href: path(row.id), text: `${row.name} ›` }), el('span', { class: 'muted small', text: sub })),
         el('span', { class: 'cell' }, el('span', { class: 'cell-label', text: 'Companies' }), row.companies.length ? row.companies.join(', ') : 'none'),
         el('span', { class: 'cell' }, el('span', { class: 'cell-label', text: 'Goes to' }), row.goesTo),
-        el('span', { class: 'row-actions' }, chip(row.enabled, row.enabled ? 'On' : 'Off'), quiet('Remove', () => { ui.confirmType = row.id; rerender(); }))),
+        el('span', { class: 'row-actions' }, chip(row.enabled, row.enabled ? 'Active' : 'Off'), quiet('Remove', () => { ui.confirmType = row.id; rerender(); }))),
       waiting, remove);
   };
 
   const addForm = ui.addingType ? newTypeForm(rerender) : null;
   put(env.view,
     el('div', { class: 'page-head-row' },
-      el('div', { class: 'stack-tight' }, el('span', { class: 'badge-export', text: 'EXPORT · F&O TO YOUR SYSTEMS' }),
-        el('h1', { text: 'Document types' }), el('p', { class: 'muted', text: 'What Hive BDC takes from F&O and where each type goes. Open one to change it.' })),
+      el('div', { class: 'stack-tight' },
+        el('h1', { text: 'Outbound' }), el('p', { class: 'muted', text: 'Documents your ERP posts, and where Hive BDC delivers them. Open a document type to set it up.' })),
       ui.addingType ? null : el('button', { type: 'button', class: 'button button-primary button-big edit-only', text: '+ New document type', on: { click: () => { ui.addingType = true; rerender(); } } })),
+    el('div', { class: 'dir', 'aria-label': 'Direction' }, el('span', { class: 'dir-box dir-box-dark', text: 'ERP' }), el('span', { class: 'dir-arrow', 'aria-hidden': 'true', text: '→' }),
+      el('span', { class: 'dir-box', text: 'Hive BDC' }), el('span', { class: 'dir-arrow', 'aria-hidden': 'true', text: '→' }),
+      el('span', { class: 'dir-box', text: X.allDestinations(rows) }), badge()),
     ui.error ? notice('error', ui.error) : null,
     addForm,
     el('section', { class: 'stack', 'aria-label': 'Document types' }, rows.map(card)),
     folded.length ? el('p', { class: 'muted small' },
-      `${capital(folded.map((r) => r.name.toLowerCase()).join(', '))} ${folded.length === 1 ? 'is' : 'are'} off and ${folded.length === 1 ? 'has' : 'have'} no company. `,
+      `${folded.map((r) => r.name).join(', ')} ${folded.length === 1 ? 'is' : 'are'} off and ${folded.length === 1 ? 'has' : 'have'} no company. `,
       ui.showFolded ? null : el('button', { type: 'button', class: 'quiet', text: 'Show them', on: { click: () => { ui.showFolded = true; rerender(); } } })) : null,
     ui.showFolded ? el('section', { class: 'stack' }, folded.map(card)) : null,
     bar.node);
@@ -80,7 +85,7 @@ function newTypeForm(rerender) {
   const message = el('div', { class: 'slot' });
   return el('section', { class: 'card stack' },
     el('h2', { text: 'New document type' }),
-    el('div', { class: 'grid-4' }, field('Id in the export (documentType)', id), field('Name in the ERP', name), field('Made into', handler), field('Sent to', party)),
+    el('div', { class: 'grid-4' }, field('ID the ERP writes as documentType', id), field('Name', name), field('Hive BDC makes', handler), field('Sent to', party)),
     message,
     el('div', { class: 'row-actions' },
       el('button', { type: 'button', class: 'button', text: 'Cancel', on: { click: () => { state.ui.addingType = false; rerender(); } } }),
@@ -94,14 +99,14 @@ function newTypeForm(rerender) {
 
 async function typeScreen(env, typeId) {
   const type = typeOf(typeId);
-  if (!type) { put(env.view, crumbs({ href: '#/export', text: 'Export' }), notice('error', `There is no document type ${typeId}.`)); return; }
+  if (!type) { put(env.view, crumbs(home), notice('error', `There is no document type ${typeId}.`)); return; }
   const targets = await api('/targets');
   const descriptors = targets.targets || [];
   state.targets = descriptors;
   const ui = state.ui;
   const bar = saveBar(env);
   const rerender = () => env.again();
-  const name = capital(typeWords(type));
+  const name = typeLabel(type);
   const set = (changes) => { change((d) => X.setType(d, type.id, changes)); bar.paint(); };
 
   const nameInput = textInput({ value: type.displayName || '' });
@@ -116,12 +121,12 @@ async function typeScreen(env, typeId) {
     }
     return el('div', { class: 'co-wrap' },
       el('div', { class: 'co-row' },
-        el('a', { class: 'co-name', href: path(type.id, c.dataAreaId), text: `${c.dataAreaId} ›` }),
+        el('a', { class: 'co-name', href: path(type.id, c.dataAreaId), text: `Company ${c.dataAreaId} ›` }),
         el('span', { class: 'cell' }, el('span', { class: 'cell-label', text: 'Comes from' }), X.sourceWords(c.source)),
         el('span', { class: 'cell' }, el('span', { class: 'cell-label', text: 'Goes to' }), X.destinationWords(c, state.draft, descriptors)),
         el('span', { class: c.mail ? 'ok-text' : 'muted', text: c.mail ? 'Mail on' : 'Mail off' }),
         quiet('Remove', () => { ui.confirmCompany = c.dataAreaId; rerender(); })),
-      ui.confirmCompany === c.dataAreaId ? confirmBox(`Remove company ${c.dataAreaId} from ${name.toLowerCase()}? Documents still waiting in its source stay there.`,
+      ui.confirmCompany === c.dataAreaId ? confirmBox(`Remove Company ${c.dataAreaId} with its destinations? Nothing changes until you save.`,
         () => { change((d) => X.removeCompany(d, type.id, c.dataAreaId)); ui.confirmCompany = null; rerender(); },
         () => { ui.confirmCompany = null; rerender(); }) : null);
   };
@@ -138,17 +143,17 @@ async function typeScreen(env, typeId) {
   };
 
   put(env.view,
-    crumbs({ href: '#/export', text: 'Export' }, { text: name }),
+    crumbs(home, { text: name }),
     el('div', { class: 'page-head-row' }, el('span', { class: 'inline' }, el('h1', { text: name }), badge()), savedChip()),
     el('section', { class: 'card stack', 'aria-labelledby': 'type-h' },
-      el('h2', { id: 'type-h', text: 'This document type' }),
+      el('h2', { id: 'type-h', class: 'caps', text: 'Document type' }),
       el('div', { class: 'grid-4' },
-        field('Name in the ERP', nameInput),
-        el('div', { class: 'field' }, el('span', { class: 'field-label', text: 'Made into' }),
+        field('Name', nameInput),
+        el('div', { class: 'field' }, el('span', { class: 'field-label', text: 'Hive BDC makes' }),
           segmented('handler', [['EInvoice', 'E-invoice'], ['Pdf', 'PDF as it is']], type.handler, (v) => set({ handler: v }))),
         el('div', { class: 'field' }, el('span', { class: 'field-label', text: 'Sent to' }),
           segmented('party', [['Customer', 'Customers'], ['Vendor', 'Vendors']], type.party, (v) => set({ party: v }))),
-        el('label', { class: 'inline-check switch-field' }, 'On', toggle('On', type.enabled !== false, (on) => set({ enabled: on })))),
+        el('label', { class: 'inline-check switch-field' }, 'Active', toggle('Active', type.enabled !== false, (on) => set({ enabled: on })))),
       el('p', { class: 'muted small', text: type.handler === 'EInvoice'
         ? 'Hive BDC makes XRechnung or ZUGFeRD, as each export says. Off: exports of this type wait in their source.'
         : 'The PDF goes out as F&O made it. Off: exports of this type wait in their source.' })),
@@ -156,7 +161,8 @@ async function typeScreen(env, typeId) {
       el('div', { class: 'section-head' }, el('h2', { id: 'co-h', text: 'Companies' }),
         ui.addingCompany ? null : el('button', { type: 'button', class: 'button edit-only', text: '+ Add company', on: { click: () => { ui.addingCompany = true; rerender(); } } })),
       ui.addingCompany ? addCompanyForm() : null,
-      type.companies.length ? el('div', { class: 'rows' }, type.companies.map(companyRow)) : el('p', { class: 'muted', text: 'No company yet.' })),
+      el('p', { class: 'muted small', text: 'Each company in your ERP that posts this document type. Open one to set where its documents come from and where they go.' }),
+      type.companies.length ? el('div', { class: 'rows' }, type.companies.map(companyRow)) : el('p', { class: 'muted', text: 'No company yet. + Add company sets up the first one.' })),
     bar.node);
 }
 
@@ -165,14 +171,14 @@ async function typeScreen(env, typeId) {
 async function companyScreen(env, typeId, company) {
   const type = typeOf(typeId);
   const entry = entryOf(typeId, company);
-  if (!type || !entry) { put(env.view, crumbs({ href: '#/export', text: 'Export' }), notice('error', `There is no company ${company} for ${typeId}.`)); return; }
+  if (!type || !entry) { put(env.view, crumbs(home), notice('error', `There is no company ${company} for ${typeId}.`)); return; }
   const [targets, identity] = await Promise.all([api('/targets'), api('/setup/identity')]);
   const descriptors = targets.targets || [];
   state.targets = descriptors;
   const ui = state.ui;
   const bar = saveBar(env);
   const rerender = () => env.again();
-  const name = capital(typeWords(type));
+  const name = typeLabel(type);
   const key = `${type.id}|${entry.dataAreaId}`;
   const kind = (ui.sourceKind && ui.sourceKind[key]) || (entry.source && entry.source.kind) || 'blob';
   const settings = { ...((entry.source && entry.source.kind === kind && entry.source.settings) || {}) };
@@ -293,30 +299,27 @@ async function companyScreen(env, typeId, company) {
       go(path(type.id, entry.dataAreaId, d.kind));
     } } }, el('span', { class: 'tile-title', text: d.name }), el('span', { class: 'tile-note', text: d.description || '' })))) : null;
 
-  const goes = X.destinationWords(entry, state.draft, descriptors);
   put(env.view,
-    crumbs({ href: '#/export', text: 'Export' }, { href: path(type.id), text: name }, { text: `Company ${entry.dataAreaId}` }),
+    crumbs(home, { href: path(type.id), text: name }, { text: `Company ${entry.dataAreaId}` }),
     el('div', { class: 'page-head-row' },
-      el('h1', { text: `${name} of company ${entry.dataAreaId}` }),
-      el('span', { class: 'dir', 'aria-label': 'Direction' }, badge(),
-        el('span', { class: 'dir-box', text: kind === 'https' ? 'Web address' : 'F&O' }), el('span', { class: 'dir-arrow', 'aria-hidden': 'true', text: '→' }),
-        el('span', { class: 'dir-box dir-box-dark', text: type.handler === 'EInvoice' ? 'E-invoice' : 'PDF' }), el('span', { class: 'dir-arrow', 'aria-hidden': 'true', text: '→' }),
-        el('span', { class: 'dir-box', text: goes }))),
+      el('span', { class: 'inline' }, el('h1', { text: `Company ${entry.dataAreaId}` }), badge()),
+      el('label', { class: 'inline-check switch-field' }, 'Active', toggle('Active', entry.enabled !== false, (on) => { change((d) => X.setCompanyActive(d, type.id, entry.dataAreaId, on)); bar.paint(); }))),
+    el('p', { class: 'muted', text: `Where this company's documents of the type ${name} come from, and where they go.` }),
     el('section', { class: 'card stack', 'aria-labelledby': 'from-h' },
-      el('h2', { id: 'from-h', text: 'Where documents come from' }),
+      el('h2', { id: 'from-h', class: 'caps', text: 'Comes from' }),
       el('fieldset', { class: 'tiles tiles-3' }, el('legend', { class: 'sr-only', text: 'Source' }),
         tile('blob', 'Azure Blob Storage', 'F&O writes into a container'),
         tile('servicebus', 'Azure Service Bus', 'F&O sends a message'),
         tile('https', 'Web address (HTTPS)', 'Power Automate, Logic App, ERP')),
       form),
     el('section', { class: 'card stack', 'aria-labelledby': 'to-h' },
-      el('div', { class: 'section-head' }, el('h2', { id: 'to-h', text: 'Where they go' }),
+      el('div', { class: 'section-head' }, el('h2', { id: 'to-h', class: 'caps', text: 'Goes to' }),
         el('button', { type: 'button', class: 'button edit-only', text: ui.picking === key ? 'Close' : '+ Add a destination', on: { click: () => { ui.picking = ui.picking === key ? null : key; rerender(); } } })),
       picker,
       el('div', { class: 'rows' }, rows.map(destinationRow),
         el('div', { class: 'dest-row' },
-          el('span', { class: 'stack-tight' }, el('strong', { text: 'Send each document by mail' }),
-            el('span', { class: 'muted small', text: mailReady ? `To the address in the export, from ${state.draft.mail.from}` : 'Set up the mailbox under Connections first.' })),
+          el('span', { class: 'stack-tight' }, el('strong', { text: 'Mail' }),
+            el('span', { class: 'muted small', text: mailReady ? `To the recipient the ERP names in the document, from ${state.draft.mail.from}.` : 'Document mail is not connected yet. Set it up under Connections.' })),
           toggle('Mail on', entry.mail === true, (on) => { change((d) => X.setMail(d, type.id, entry.dataAreaId, on)); bar.paint(); }, !mailReady && entry.mail !== true),
           el('span')))),
     bar.node);
@@ -328,13 +331,13 @@ async function companyScreen(env, typeId, company) {
 async function destinationScreen(env, typeId, company, kind) {
   const type = typeOf(typeId);
   const entry = entryOf(typeId, company);
-  if (!type || !entry) { put(env.view, crumbs({ href: '#/export', text: 'Export' }), notice('error', `There is no company ${company} for ${typeId}.`)); return; }
+  if (!type || !entry) { put(env.view, crumbs(home), notice('error', `There is no company ${company} for ${typeId}.`)); return; }
   const [targets, sample] = await Promise.all([api('/targets'), api(`/export/sample?type=${encodeURIComponent(type.id)}&company=${encodeURIComponent(entry.dataAreaId)}`)]);
   state.targets = targets.targets || [];
   const d = state.targets.find((x) => x.kind === kind);
-  const name = capital(typeWords(type));
+  const name = typeLabel(type);
   const back = path(type.id, entry.dataAreaId);
-  const trail = crumbs({ href: '#/export', text: 'Export' }, { href: path(type.id), text: name }, { href: back, text: `Company ${entry.dataAreaId}` }, { text: d ? d.name : kind });
+  const trail = crumbs(home, { href: path(type.id), text: name }, { href: back, text: `Company ${entry.dataAreaId}` }, { text: d ? d.name : kind });
   if (!d) { put(env.view, trail, notice('warn', 'This destination was set up with a newer version of Hive BDC and is kept as it is.')); return; }
 
   const ui = state.ui;

@@ -1,6 +1,6 @@
 // Pure functions of the Export pages (boards W7 to W11): no DOM, no network, tested by tests/console/export.test.mjs.
 // Every change works on a copy of the POST /config body (postBody in logic.js), so one draft can span several screens.
-import { cleanPrefix, typeWords } from './logic.js';
+import { cleanPrefix, typeLabel } from './logic.js';
 
 const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
 const slug = (part) => String(part || '').replace(/[^A-Za-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -58,7 +58,7 @@ export function destinationRows(entry, descriptors) {
   const sp = entry.sharePoint || {};
   if (sp.enabled || sp.siteUrl || sp.library) {
     rows.push({
-      kind: 'sharepoint', name: 'SharePoint library', enabled: Boolean(sp.enabled), known: true,
+      kind: 'sharepoint', name: 'SharePoint', enabled: Boolean(sp.enabled), known: true,
       summary: [sp.library, sp.folder].filter(Boolean).join(' › ') + (Object.keys(sp.fields || {}).length ? ` · ${Object.keys(sp.fields).length} columns` : ''),
     });
   }
@@ -102,7 +102,7 @@ export function typeRows(config, attention, descriptors) {
     }
     const goes = [...new Set((t.companies || []).flatMap((c) => destinationWords(c, config, descriptors).split(', ')))].filter((w) => w !== 'nowhere yet');
     const row = {
-      id: t.id, name: capital(typeWords(t)), displayName: t.displayName || '', handler: t.handler, party: t.party,
+      id: t.id, name: typeLabel(t), displayName: t.displayName || '', handler: t.handler, party: t.party,
       enabled: t.enabled !== false, companies, goesTo: goes.length ? goes.join(', ') : 'nowhere yet',
       waiting: [...waiting.entries()].map(([company, count]) => ({ company, count })),
     };
@@ -193,6 +193,13 @@ export function setHttpsKey(body, typeId, company, key, inputRoot, connectionId)
   let next = setSource(body, typeId, company, { kind: 'https', connection: id, settings: {} }, inputRoot);
   next.connections = next.connections.filter((c) => c.id !== id);
   next.connections.push({ id, kind: 'https', settings: {}, secret: key });
+  return next;
+}
+
+/** The company's Active switch, as in the Windows app: off, its documents of this type go to error with the reason. */
+export function setCompanyActive(body, typeId, company, on) {
+  const next = structuredClone(body);
+  findEntry(next, typeId, company).enabled = Boolean(on);
   return next;
 }
 
@@ -315,6 +322,16 @@ export function words(name) {
   return capital(text);
 }
 
+/** Every destination of the listed types, once each, for the ERP to Hive BDC strip: "SharePoint, DocuWare". */
+export function allDestinations(rows) {
+  const names = [];
+  for (const row of rows || []) {
+    if (!row.goesTo || row.goesTo === 'nowhere yet') continue;
+    for (const name of row.goesTo.split(', ')) if (!names.includes(name)) names.push(name);
+  }
+  return names.length ? names.join(', ') : 'no destination yet';
+}
+
 /** The draft's changes against what was read, one plain line each, for the Save bar. */
 export function draftChanges(original, draft) {
   const lines = [];
@@ -322,16 +339,17 @@ export function draftChanges(original, draft) {
   const d = draft || { documentTypes: [], connections: [] };
   for (const t of d.documentTypes) {
     const before = findType(o, t.id);
-    const name = capital(typeWords(t));
+    const name = typeLabel(before || t);
     if (!before) { lines.push(`${name} added`); continue; }
-    if ((before.displayName || '') !== (t.displayName || '')) lines.push(`${name}: name in the ERP is now ${t.displayName}`);
-    if (before.handler !== t.handler) lines.push(`${name}: made into ${t.handler === 'EInvoice' ? 'e-invoice' : 'PDF as it is'}`);
+    if ((before.displayName || '') !== (t.displayName || '')) lines.push(`${name}: name is now ${t.displayName}`);
+    if (before.handler !== t.handler) lines.push(`${name}: Hive BDC makes ${t.handler === 'EInvoice' ? 'e-invoice' : 'PDF as it is'}`);
     if (before.party !== t.party) lines.push(`${name}: sent to ${t.party === 'Vendor' ? 'vendors' : 'customers'}`);
-    if ((before.enabled !== false) !== (t.enabled !== false)) lines.push(`${name}: ${t.enabled !== false ? 'on' : 'off'}`);
+    if ((before.enabled !== false) !== (t.enabled !== false)) lines.push(`${name}: ${t.enabled !== false ? 'active' : 'off'}`);
     for (const c of t.companies) {
       const was = before.companies.find((x) => same(x.dataAreaId, c.dataAreaId));
       if (!was) { lines.push(`${name}: company ${c.dataAreaId} added`); continue; }
       const where = `${name} › ${c.dataAreaId}`;
+      if ((was.enabled !== false) !== (c.enabled !== false)) lines.push(`${where}: ${c.enabled !== false ? 'active' : 'off'}`);
       if (JSON.stringify(was.source || null) !== JSON.stringify(c.source || null)) lines.push(`${where}: comes from ${sourceWords(c.source)}`);
       if (Boolean(was.mail) !== Boolean(c.mail)) lines.push(`${where}: mail ${c.mail ? 'on' : 'off'}`);
       const spWas = was.sharePoint || {}, sp = c.sharePoint || {};
@@ -351,7 +369,7 @@ export function draftChanges(original, draft) {
     }
     for (const c of before.companies) if (!t.companies.some((x) => same(x.dataAreaId, c.dataAreaId))) lines.push(`${name}: company ${c.dataAreaId} removed`);
   }
-  for (const t of o.documentTypes) if (!findType(d, t.id)) lines.push(`${capital(typeWords(t))} removed`);
+  for (const t of o.documentTypes) if (!findType(d, t.id)) lines.push(`${typeLabel(t)} removed`);
   lines.push(...settingsChanges(o, d));
   for (const c of d.connections) if (c.secret) lines.push(c.kind === 'https' ? `New key for ${c.id}` : `New secret for ${c.id}`);
   return lines;
@@ -367,7 +385,7 @@ export function saveProblems(draft, config, descriptors) {
   const mailOn = Boolean(draft && draft.mail && draft.mail.enabled);
   for (const t of (draft && draft.documentTypes) || []) {
     for (const c of t.companies || []) {
-      const where = `${capital(typeWords(t))} › ${c.dataAreaId}`;
+      const where = `${typeLabel(t)} › ${c.dataAreaId}`;
       const s = c.source;
       const v = (s && s.settings) || {};
       if (!s || !s.kind) { if (!c.input) problems.push(`${where}: choose where its documents come from.`); continue; }
@@ -409,7 +427,7 @@ export function connectionUses(draft, id) {
   const uses = [];
   for (const t of (draft && draft.documentTypes) || []) {
     for (const c of t.companies || []) {
-      const where = `${capital(typeWords(t))} › ${c.dataAreaId}`;
+      const where = `${typeLabel(t)} › ${c.dataAreaId}`;
       if (c.source && c.source.connection === id) uses.push(`${where} (source)`);
       if (c.source && c.source.settings && c.source.settings.PdfConnection === id) uses.push(`${where} (PDFs)`);
       for (const x of c.targets || []) if (x.connection === id) uses.push(`${where} (${kindName(x.kind)})`);
@@ -422,7 +440,7 @@ export function connectionUses(draft, id) {
 export function sharePointUses(draft) {
   const uses = [];
   for (const t of (draft && draft.documentTypes) || []) {
-    for (const c of t.companies || []) if (c.sharePoint && c.sharePoint.enabled) uses.push(`${capital(typeWords(t))} › ${c.dataAreaId}`);
+    for (const c of t.companies || []) if (c.sharePoint && c.sharePoint.enabled) uses.push(`${typeLabel(t)} › ${c.dataAreaId}`);
   }
   return uses;
 }

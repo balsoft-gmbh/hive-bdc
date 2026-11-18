@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { postBody, withBlobSource } from '../../Hosting/Console/logic.js';
 import {
-  addCompany, addDestination, addType, applyDestination, companiesWithoutSource, destinationForm, destinationRows, draftChanges,
-  folderPreview, httpsConnectionId, removeCompany, removeDestination, removeType, setDestinationEnabled, setHttpsKey, setMail,
+  addCompany, addDestination, addType, allDestinations, applyDestination, companiesWithoutSource, destinationForm, destinationRows, draftChanges,
+  folderPreview, httpsConnectionId, removeCompany, removeDestination, removeType, setCompanyActive, setDestinationEnabled, setHttpsKey, setMail,
   setSource, setType, sourceKey, sourceWords, stagingInput, templateChoices, templatePreview, typeRows, words,
 } from '../../Hosting/Console/exportlogic.js';
 
@@ -89,11 +89,13 @@ test('the Export list shows each type, folds away the unused ones and offers com
   const { rows, folded } = typeRows(config(), attention, descriptors);
   assert.deepEqual(rows.map((r) => r.id), ['SalesInvoice', 'SalesQuotation']);
   assert.deepEqual(folded.map((r) => r.id), ['CollectionLetter']);
-  assert.equal(rows[0].name, 'Sales invoices');
+  assert.equal(rows[0].name, 'Rechnung');
   assert.equal(rows[0].goesTo, 'SharePoint, DocuWare, future-dms');
   assert.deepEqual(rows[0].waiting, []);
   assert.deepEqual(rows[1].waiting, [{ company: '4000', count: 1 }]);
   assert.equal(rows[1].goesTo, 'nowhere yet');
+  assert.equal(allDestinations(rows), 'SharePoint, DocuWare, future-dms');
+  assert.equal(allDestinations([rows[1]]), 'no destination yet');
 });
 
 test('types and companies are added, changed and removed on the draft only', () => {
@@ -109,14 +111,16 @@ test('types and companies are added, changed and removed on the draft only', () 
   assert.deepEqual(companiesWithoutSource(body), [{ type: 'SalesInvoice', company: 'DEMF' }]);
   body = removeType(body, 'CollectionLetter');
   assert.deepEqual(draftChanges(start, body), [
-    'Sales invoices: name in the ERP is now Faktura',
-    'Sales invoices: made into PDF as it is',
-    'Sales invoices: sent to vendors',
-    'Sales invoices: off',
-    'Sales invoices: company DEMF added',
+    'Rechnung: name is now Faktura',
+    'Rechnung: Hive BDC makes PDF as it is',
+    'Rechnung: sent to vendors',
+    'Rechnung: off',
+    'Rechnung: company DEMF added',
     'Lieferschein added',
-    'Collection letters removed',
+    'Mahnung removed',
   ]);
+  assert.deepEqual(draftChanges(start, setCompanyActive(start, 'SalesInvoice', '1000', false)), ['Rechnung › 1000: off']);
+  assert.equal(setCompanyActive(start, 'SalesInvoice', '1000', false).documentTypes[0].companies[0].enabled, false);
   body = removeCompany(body, 'SalesInvoice', 'DEMF');
   assert.deepEqual(companiesWithoutSource(body), []);
   const one = { ...start, documentTypes: [start.documentTypes[0]] };
@@ -130,6 +134,7 @@ test('destinations are listed, switched, removed and added; a kind this version 
   assert.equal(rows[0].summary, 'Sales Invoices › {IssueDate:yyyy} · 1 columns');
   assert.equal(rows[1].summary, 'Outgoing invoices · 1 fields');
   assert.match(rows[2].summary, /newer version/);
+  assert.equal(rows[0].name, 'SharePoint');
 
   const start = postBody(config());
   let body = setDestinationEnabled(start, 'SalesInvoice', '1000', 'docuware', false);
@@ -141,10 +146,10 @@ test('destinations are listed, switched, removed and added; a kind this version 
   assert.equal(after.sharePoint.siteUrl, '');
   assert.deepEqual(after.targets.map((t) => [t.kind, t.enabled]), [['docuware', false], ['future-dms', true], ['blob', true]]);
   assert.deepEqual(draftChanges(start, body), [
-    'Sales invoices › 1000: mail on',
-    'Sales invoices › 1000: SharePoint removed',
-    'Sales invoices › 1000: DocuWare off',
-    'Sales invoices › 1000: Blob container added',
+    'Rechnung › 1000: mail on',
+    'Rechnung › 1000: SharePoint removed',
+    'Rechnung › 1000: DocuWare off',
+    'Rechnung › 1000: Blob container added',
   ]);
 });
 
@@ -209,7 +214,7 @@ test('Save waits for complete sources and names what is missing', async () => {
   let body = postBody(cfg);
   assert.deepEqual(saveProblems(body, cfg), []);
   body = addCompany(body, 'SalesInvoice', 'DEMF');
-  assert.deepEqual(saveProblems(body, cfg), ['Sales invoices › DEMF: choose where its documents come from.']);
+  assert.deepEqual(saveProblems(body, cfg), ['Rechnung › DEMF: choose where its documents come from.']);
   body = setSource(body, 'SalesInvoice', 'DEMF', { kind: 'blob', connection: 'fo', settings: { Container: '' } }, root);
   assert.match(saveProblems(body, cfg)[0], /storage connection and the container/);
   body = setSource(body, 'SalesInvoice', 'DEMF', { kind: 'servicebus', connection: 'sb', settings: { Topic: 'bdc' } }, root);
@@ -217,16 +222,16 @@ test('Save waits for complete sources and names what is missing', async () => {
   body = setSource(body, 'SalesInvoice', 'DEMF', { kind: 'https', connection: httpsConnectionId('SalesInvoice', 'DEMF'), settings: {} }, root);
   assert.match(saveProblems(body, cfg)[0], /create a key/);
   body = setHttpsKey(body, 'SalesInvoice', 'DEMF', 'k', root);
-  assert.deepEqual(saveProblems(body, cfg), ['Sales invoices › DEMF: choose where its documents go.']);
+  assert.deepEqual(saveProblems(body, cfg), ['Rechnung › DEMF: choose where its documents go.']);
   const withBlob = [...descriptors.filter((d) => d.kind !== 'blob'), { kind: 'blob', name: 'Azure Blob container', settings: [{ key: 'Container', label: 'Container' }, { key: 'Prefix', label: 'Folder', required: false }] }];
   body = addDestination(body, 'SalesInvoice', 'DEMF', 'blob', 'fo');
-  assert.deepEqual(saveProblems(body, cfg, withBlob), ['Sales invoices › DEMF › Azure Blob container: Container is missing.']);
+  assert.deepEqual(saveProblems(body, cfg, withBlob), ['Rechnung › DEMF › Azure Blob container: Container is missing.']);
   body = applyDestination(body, 'SalesInvoice', 'DEMF', { kind: 'blob', connection: 'fo', enabled: true, settings: { Container: 'out' }, fields: {} });
   assert.deepEqual(saveProblems(body, cfg, withBlob), []);
   const mailOnly = setMail(removeDestination(body, 'SalesInvoice', 'DEMF', 'blob'), 'SalesInvoice', 'DEMF', true);
   assert.deepEqual(saveProblems(mailOnly, cfg, withBlob), []);
   const halfSharePoint = addDestination(removeDestination(body, 'SalesInvoice', 'DEMF', 'blob'), 'SalesInvoice', 'DEMF', 'sharepoint');
-  assert.deepEqual(saveProblems(halfSharePoint, cfg, withBlob), ['Sales invoices › DEMF › SharePoint library: the site address and the library are needed.']);
+  assert.deepEqual(saveProblems(halfSharePoint, cfg, withBlob), ['Rechnung › DEMF › SharePoint library: the site address and the library are needed.']);
   const stored = { ...cfg, connections: [...cfg.connections, { id: 'in-salesinvoice-demf', kind: 'https', settings: {}, hasSecret: true }] };
   let kept = setSource(addCompany(postBody(stored), 'SalesInvoice', 'DEMF'), 'SalesInvoice', 'DEMF', { kind: 'https', connection: 'in-salesinvoice-demf', settings: {} }, root);
   kept = setMail(kept, 'SalesInvoice', 'DEMF', true);
@@ -247,11 +252,11 @@ test('connections name their users, refuse removal while used, and show up in th
   const X = await import('../../Hosting/Console/exportlogic.js');
   const cfg = config();
   const start = postBody(cfg);
-  assert.deepEqual(X.connectionUses(start, 'fo'), ['Sales invoices › 1000 (source)']);
-  assert.deepEqual(X.connectionUses(start, 'docuware'), ['Sales invoices › 1000 (DocuWare)']);
+  assert.deepEqual(X.connectionUses(start, 'fo'), ['Rechnung › 1000 (source)']);
+  assert.deepEqual(X.connectionUses(start, 'docuware'), ['Rechnung › 1000 (DocuWare)']);
   assert.deepEqual(X.connectionUses(start, 'sb'), []);
-  assert.deepEqual(X.sharePointUses(start), ['Sales invoices › 1000']);
-  assert.throws(() => X.removeConnection(start, 'fo'), /Still used by Sales invoices › 1000 \(source\)/);
+  assert.deepEqual(X.sharePointUses(start), ['Rechnung › 1000']);
+  assert.throws(() => X.removeConnection(start, 'fo'), /Still used by Rechnung › 1000 \(source\)/);
 
   let body = X.removeConnection(start, 'sb');
   body = X.addConnection(body, { id: 'sb2', kind: 'servicebus', settings: { Namespace: 'sb2.servicebus.windows.net' } });
