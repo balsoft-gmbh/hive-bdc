@@ -969,7 +969,11 @@ and `saveBoth` keeps both when they changed different settings. A refused save s
 no secret. For the setup assistant, `GET /setup/identity` names the instance's own
 identity and `POST /setup/check-source` checks that it can read the container F&O
 writes to (waiting exports per company, or the role command for your IT); a check
-stores nothing.
+stores nothing. While the assistant is not finished the settings say `Paused` and the
+service takes no document (`POST /setup/pause`, `POST /setup/start`); `POST
+/setup/test-run` still runs the first waiting export of one company with a Blob source
+through every step and answers with its steps. A success is settled as usual; a failed or
+waiting run leaves the export where it was in the container.
 
 #### Installing in Azure (managed application)
 

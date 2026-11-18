@@ -165,6 +165,9 @@ public sealed partial class LocalStatusServer : BackgroundService
                 case ("GET", "/connections/kinds"): Respond(call, 200, ConnectionKindsList()); return;
                 case ("GET", "/setup/identity"): GetSetupIdentity(call); return;
                 case ("POST", "/setup/check-source"): PostCheckSource(call); return;
+                case ("POST", "/setup/test-run"): await PostTestRun(call); return;
+                case ("POST", "/setup/start"): PostPaused(call, paused: false); return;
+                case ("POST", "/setup/pause"): PostPaused(call, paused: true); return;
                 case ("POST", "/connections/test"): await PostConnectionTest(call); return;
                 case ("GET", "/config"): GetConfig(call); return;
                 case ("POST", "/config"): PostConfig(call); return;

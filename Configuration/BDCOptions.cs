@@ -42,6 +42,12 @@ public sealed class BDCOptions
     /// <summary>Flows that start outside the ERP, such as documents ready in DocuWare that become a CSV for the ERP.</summary>
     public List<FlowOptions> Flows { get; set; } = new();
 
+    /// <summary>
+    /// Set by the setup assistant while it is not finished: nothing is taken from a source except by a test run, until
+    /// Start. Settings without the key are not paused (failure case 57).
+    /// </summary>
+    public bool Paused { get; set; }
+
     public ConnectionOptions? Connection(string? id)
         => Connections.FirstOrDefault(c => string.Equals(c.Id, id?.Trim(), StringComparison.OrdinalIgnoreCase));
 

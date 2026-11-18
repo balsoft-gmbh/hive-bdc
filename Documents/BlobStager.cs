@@ -34,6 +34,49 @@ public sealed partial class BlobStager
     [GeneratedRegex(@"[^A-Za-z0-9\-]")]
     private static partial Regex UnsafeIdChars();
 
+    /// <summary>The staged JSON of an export id, as the pipeline sees it in the input folder.</summary>
+    public static string StagedJson(string id) => id + StagedSuffix + ".json";
+
+    /// <summary>
+    /// Stages only the first waiting export of one company (a test run, failure case 56) and returns its id, or null with
+    /// the reason when none can be staged.
+    /// </summary>
+    public string? StageOne(BDCOptions opts, DocumentRoute route, out string? problem)
+    {
+        problem = null;
+        var source = route.Source;
+        if (source is not { Kind: "blob" } || opts.Connection(source.Connection) is null || source.Setting("Container").Length == 0)
+        {
+            problem = "The Blob source of this company has no connection or container yet.";
+            return null;
+        }
+        Settle(opts, route);
+        return Stage(opts, route, limit: 1).FirstOrDefault();
+    }
+
+    /// <summary>Moves the blobs of the pairs the pipeline finished with, for one company, without staging new ones.</summary>
+    public void SettleRoute(BDCOptions opts, DocumentRoute route) => Settle(opts, route);
+
+    /// <summary>
+    /// Forgets a staged export without touching its blobs: the local copies and the note go, the export stays where it
+    /// is in the container and is taken again by the next run.
+    /// </summary>
+    public void Abandon(DocumentRoute route, string id)
+    {
+        foreach (var folder in new[] { route.Input, Path.Combine(route.Input, "error"), Path.Combine(route.Input, "processed") })
+            foreach (var name in new[] { id + StagedSuffix + ".json", id + StagedSuffix + ".pdf" })
+            {
+                string path = Path.Combine(folder, name);
+                if (File.Exists(path)) File.Delete(path);
+            }
+        string note = Path.Combine(route.Input, NotesFolder, id + ".json");
+        if (File.Exists(note)) File.Delete(note);
+        // The pipeline's last line speaks of the error folder; for a test run the export never left the container.
+        _state?.RecordEvent(new DocumentEvent(id, StagedJson(id), EventSteps.Waiting, EventStates.Waiting,
+            "Test run: nothing was moved, the export stays where it was in the container. The next test run or Start takes it again."));
+        _log.LogInformation("[blob] test run of {Id} not settled; the export stays in the container.", id);
+    }
+
     public void Run(BDCOptions opts)
     {
         foreach (var t in opts.DocumentTypes.Where(t => t.Enabled))
@@ -44,13 +87,14 @@ public sealed partial class BlobStager
             }
     }
 
-    private void Stage(BDCOptions opts, DocumentRoute route)
+    private List<string> Stage(BDCOptions opts, DocumentRoute route, int limit = int.MaxValue)
     {
+        var stagedIds = new List<string>();
         var source = route.Source!;
         var connection = opts.Connection(source.Connection);
         string container = source.Setting("Container");
         if (connection is null || container.Length == 0)
-        { WarnOnce(route.Input, $"blob source for {route.Input}: set the connection and the container."); return; }
+        { WarnOnce(route.Input, $"blob source for {route.Input}: set the connection and the container."); return stagedIds; }
         string prefix = source.Setting("Prefix");
         string processed = PrefixOr(source.Setting("ProcessedPrefix"), "processed/" + prefix);
         string error = PrefixOr(source.Setting("ErrorPrefix"), "error/" + prefix);
@@ -63,6 +107,7 @@ public sealed partial class BlobStager
         var all = new HashSet<string>(names, StringComparer.Ordinal);
         foreach (var name in names.Where(n => !n.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)))
         {
+            if (stagedIds.Count >= limit) break;
             string id = IdFor(name);
             string staged = id + StagedSuffix + ".json";
             bool known = File.Exists(Path.Combine(notes, id + ".json"));
@@ -86,7 +131,9 @@ public sealed partial class BlobStager
             CsvFile.WriteAtomic(Path.Combine(route.Input, staged), json);
             _log.LogInformation("[blob] {Container}/{Name} staged as {Id}{Suffix}.json{Pdf}", container, name, id, StagedSuffix,
                 pdf is null ? "" : " with " + pdf);
+            stagedIds.Add(id);
         }
+        return stagedIds;
     }
 
     /// <summary>Moves the blobs of every pair the pipeline has finished with, and removes its note.</summary>

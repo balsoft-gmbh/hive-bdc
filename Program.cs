@@ -177,6 +177,8 @@ builder.Services.AddSingleton(licenseTenant);
 builder.Services.AddSingleton(licenseStore);
 builder.Services.AddSingleton(sp =>
     new DocumentTypeRegistry(settingsDocument, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DocumentTypes")));
+var testRuns = new TestRuns();
+builder.Services.AddSingleton(testRuns);
 builder.Services.AddHostedService<Worker>();
 
 // ── Logging: route everything through Serilog (console + rolling daily file) ─
@@ -201,7 +203,7 @@ if (runMode == RunModes.Local)
         sp.GetRequiredService<IOptionsMonitor<BDCOptions>>(),
         sp.GetRequiredService<IStateStore>(),
         sp.GetRequiredService<ILogger<LocalStatusServer>>(),
-        resolvedLogDir, appVersion, settingsPath));
+        resolvedLogDir, appVersion, settingsPath) { TestRuns = testRuns });
 else
 {
     // Azure: the same API handlers, with the instance's settings blob, licence blob and tenant, served by the web host
@@ -210,7 +212,8 @@ else
         sp.GetRequiredService<IOptionsMonitor<BDCOptions>>(),
         sp.GetRequiredService<IStateStore>(),
         sp.GetRequiredService<ILogger<LocalStatusServer>>(),
-        resolvedLogDir, appVersion, settingsPath, settings: settingsDocument, licenseStore: licenseStore, licenseTenant: licenseTenant));
+        resolvedLogDir, appVersion, settingsPath, settings: settingsDocument, licenseStore: licenseStore, licenseTenant: licenseTenant)
+        { TestRuns = testRuns });
     builder.Services.AddSingleton<IHostedService>(sp => new AzureWebHost(
         sp.GetRequiredService<LocalStatusServer>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("AzureWebHost"), appVersion, azureTenant,
         options: () =>

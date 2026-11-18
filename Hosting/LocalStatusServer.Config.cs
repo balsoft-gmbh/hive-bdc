@@ -58,6 +58,7 @@ public sealed partial class LocalStatusServer
         {
             pollSeconds = opts.PollSeconds,
             logDir = opts.LogDir,
+            paused = opts.Paused,
             license = new { file = opts.License.File },
             sharePointAuth = new
             {
@@ -359,6 +360,8 @@ public sealed partial class LocalStatusServer
             ["DocumentTypes"] = typesNode,
         };
 
+        if (dto.Paused is bool paused) section["Paused"] = paused;
+        else if (prevSection?["Paused"] is JsonNode storedPause) section["Paused"] = storedPause.DeepClone();
         section["Connections"] = ConnectionsNode(dto.Connections, prevSection, protect);
         section["Flows"] = dto.Flows?.DeepClone() ?? prevSection?["Flows"]?.DeepClone() ?? new JsonArray();
         return section;
@@ -543,6 +546,8 @@ public sealed partial class LocalStatusServer
         public string? BaseVersion { get; set; }
         /// <summary>After a refusal: merge with the newer settings when no setting overlaps.</summary>
         public bool? SaveBoth { get; set; }
+        /// <summary>Absent (the Windows app) => the stored pause is kept.</summary>
+        public bool? Paused { get; set; }
     }
 
     private sealed class ConnectionPostDto

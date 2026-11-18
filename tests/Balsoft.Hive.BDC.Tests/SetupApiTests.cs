@@ -167,6 +167,85 @@ public sealed class SetupApiTests : IDisposable
         Assert.Equal(before, _settings.Text);
     }
 
+    [Fact]
+    public async Task PauseAndStartWriteOnlyThePausedSetting()
+    {
+        var api = Api(Instance(), (_, _, _) => new Store(new()));
+        var (status, body, _) = await Call(api, "POST", "/setup/pause");
+        Assert.Equal(200, status);
+        Assert.True(body["paused"]!.GetValue<bool>());
+        Assert.True(JsonNode.Parse(_settings.Text!)!["HiveBDC"]!["Paused"]!.GetValue<bool>());
+        Assert.Equal(30, JsonNode.Parse(_settings.Text!)!["HiveBDC"]!["PollSeconds"]!.GetValue<int>());
+
+        Assert.Equal(200, (await Call(api, "POST", "/setup/start")).Status);
+        Assert.False(JsonNode.Parse(_settings.Text!)!["HiveBDC"]!["Paused"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task AConsoleSaveWithoutThePauseKeepsIt()
+    {
+        var api = Api(Instance(), (_, _, _) => new Store(new()));
+        await Call(api, "POST", "/setup/pause");
+        var (_, config, _) = await Call(api, "GET", "/config");
+        config.Remove("paused");
+        config["baseVersion"] = config["version"]!.GetValue<string>();
+        var call = new ApiCall("POST", "/config", new Dictionary<string, string>(), config.ToJsonString());
+        await api.Route(call);
+        Assert.Equal(200, call.Status);
+        Assert.True(JsonNode.Parse(_settings.Text!)!["HiveBDC"]!["Paused"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task ATestRunAnswersWhatTheWorkerDidWithTheDocumentsOwnSteps()
+    {
+        var runs = new TestRuns();
+        var state = new TableStateStore(new MemoryTableRows(), NullLogger.Instance);
+        state.RecordEvent(new DocumentEvent("RE-1", "RE-1_blob.json", EventSteps.Received, EventStates.Ok, "Received."));
+        state.RecordEvent(new DocumentEvent("RE-10", "RE-10_blob.json", EventSteps.Received, EventStates.Ok, "Another document."));
+        state.RecordEvent(new DocumentEvent("RE-1", "RE-1_blob.json", EventSteps.Done, EventStates.Ok, "Finished."));
+        var api = new LocalStatusServer(new Monitor(new BDCOptions()), state, NullLogger<LocalStatusServer>.Instance, null, "9.9.9",
+            Path.Combine(_root, "unused.json"), _root, new BlobSettingsDocument(_settings), new BlobLicenseStore(new MemoryETagBlob()), Instance())
+        { TestRuns = runs };
+
+        var worker = Task.Run(async () =>
+        {
+            TestRunRequest? request = null;
+            for (int i = 0; i < 200 && (request = runs.Take()) is null; i++) await Task.Delay(10);
+            Assert.Equal("SalesInvoice", request!.DocumentType);
+            Assert.Equal("1000", request.Company);
+            request.Complete(new TestRunResult(true, "RE-1", "Done. The export went through every step."));
+        });
+        var (status, body, _) = await Call(api, "POST", "/setup/test-run", new { documentType = "SalesInvoice", company = "1000" });
+        await worker;
+        Assert.Equal(200, status);
+        Assert.True(body["ok"]!.GetValue<bool>());
+        Assert.Equal("RE-1", body["documentId"]!.GetValue<string>());
+        Assert.Equal(new[] { "Received.", "Finished." }, body["events"]!.AsArray().Select(e => e!["message"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task ATestRunWithoutAWorkerOrWhileAnotherRunsIsRefused()
+    {
+        var api = Api(Instance(), (_, _, _) => new Store(new()));
+        Assert.Equal(503, (await Call(api, "POST", "/setup/test-run", new { documentType = "SalesInvoice", company = "1000" })).Status);
+
+        var runs = new TestRuns();
+        Assert.True(runs.TryRequest("SalesInvoice", "1000", out _));
+        api.TestRuns = runs;
+        Assert.Equal(409, (await Call(api, "POST", "/setup/test-run", new { documentType = "SalesInvoice", company = "1000" })).Status);
+    }
+
+    [Fact]
+    public async Task ATestRunThatTakesLongerAnswersFollowTheHistory()
+    {
+        var api = Api(Instance(), (_, _, _) => new Store(new()));
+        api.TestRuns = new TestRuns();
+        api.TestRunWait = TimeSpan.FromMilliseconds(50);
+        var (status, body, _) = await Call(api, "POST", "/setup/test-run", new { documentType = "SalesInvoice", company = "1000" });
+        Assert.Equal(202, status);
+        Assert.Contains("document history", body["message"]!.GetValue<string>());
+    }
+
     [Theory]
     [InlineData("http://stcustomerfo.blob.core.windows.net", "bdc-export")]
     [InlineData("not an address", "bdc-export")]

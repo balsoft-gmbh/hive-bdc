@@ -42,10 +42,12 @@ public sealed class Worker : BackgroundService
     private static readonly TimeSpan HoldLogEvery = TimeSpan.FromMinutes(5);
     private readonly ILicenseTenant _licenseTenant;
     private readonly ILicenseStore _licenseStore;
+    private readonly TestRuns? _testRuns;
 
     public Worker(IOptionsMonitor<BDCOptions> opts, ILogger<Worker> log, IStateStore ledger, DocumentTypeRegistry registry,
-        IProcessingGate? gate = null, ILicenseTenant? licenseTenant = null, ILicenseStore? licenseStore = null)
+        IProcessingGate? gate = null, ILicenseTenant? licenseTenant = null, ILicenseStore? licenseStore = null, TestRuns? testRuns = null)
     {
+        _testRuns = testRuns;
         _optsMonitor = opts;
         _log = log;
         _ledger = ledger;
@@ -175,6 +177,11 @@ public sealed class Worker : BackgroundService
                 // The Azure run mode waits while its settings, Table Storage or Key Vault are not usable: nothing is
                 // taken from a source, so nothing is lost and the documents are taken once the reason is gone.
                 string? hold = _gate.Hold(opts);
+                // A test run from the set-up assistant runs even while paused, but never past another reason to wait
+                // (failure cases 56, 57); then the pause holds everything else.
+                if (_testRuns?.Take() is { } request)
+                    request.Complete(RunTest(opts, request, hold, uploader, mailer));
+                hold = TestRuns.Hold(opts, hold);
                 if (hold is not null)
                 {
                     if (hold != _lastHold || DateTime.UtcNow - _lastHoldLogUtc >= HoldLogEvery)
@@ -183,7 +190,7 @@ public sealed class Worker : BackgroundService
                         _lastHoldLogUtc = DateTime.UtcNow;
                     }
                     _lastHold = hold;
-                    try { await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, opts.PollSeconds)), stoppingToken); }
+                    try { await Pause(opts, stoppingToken); }
                     catch (TaskCanceledException) { break; }
                     continue;
                 }
@@ -246,7 +253,7 @@ public sealed class Worker : BackgroundService
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, opts.PollSeconds)), stoppingToken);
+                await Pause(opts, stoppingToken);
             }
             catch (TaskCanceledException)
             {
@@ -255,6 +262,32 @@ public sealed class Worker : BackgroundService
         }
 
         _log.LogInformation("Hive BDC service stopping.");
+    }
+
+    /// <summary>The wait between cycles; a test run request from the console ends it early.</summary>
+    private Task Pause(BDCOptions opts, CancellationToken stoppingToken)
+    {
+        var delay = TimeSpan.FromSeconds(Math.Max(1, opts.PollSeconds));
+        return _testRuns is null ? Task.Delay(delay, stoppingToken) : _testRuns.WaitAsync(delay, stoppingToken);
+    }
+
+    private TestRunResult RunTest(BDCOptions opts, TestRunRequest request, string? hold, SharePointUploader? uploader, MailSender? mailer)
+    {
+        try
+        {
+            if (hold is not null) return new TestRunResult(false, null, "Hive BDC cannot take documents now: " + hold);
+            var license = _licenseStore.Check(opts, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+            if (license.Blocked) return new TestRunResult(false, null, "The licence does not allow processing: " + license.Message);
+            // The uploader is built from the running settings; a SharePoint destination set up a moment ago needs one.
+            var sharePoint = uploader ?? (AnySharePointEnabled(opts) ? SharePointUploader.Create(opts.SharePointAuth, _log) : null);
+            return TestRun.Execute(opts, request.DocumentType, request.Company, _blobs,
+                one => _processor.ScanOnce(one, license, sharePoint, mailer), _log);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "test run of {Type} {Company} failed", request.DocumentType, request.Company);
+            return new TestRunResult(false, null, "The test run failed: " + ex.Message);
+        }
     }
 
     /// <summary>

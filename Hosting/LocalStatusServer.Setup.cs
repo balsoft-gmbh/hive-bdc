@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Azure;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 
 namespace Balsoft.Hive.BDC.Hosting;
@@ -21,6 +22,69 @@ public sealed partial class LocalStatusServer
                 ? new BlobServiceClient(new Uri(accountUrl), new DefaultAzureCredential())
                 : new BlobServiceClient(connectionString))
             .GetBlobContainerClient(container));
+
+    /// <summary>The worker's test runs; null where no worker runs beside the API.</summary>
+    internal TestRuns? TestRuns { get; set; }
+
+    /// <summary>How long a test run may take before the answer says to follow the history instead.</summary>
+    internal TimeSpan TestRunWait { get; set; } = TimeSpan.FromSeconds(120);
+
+    private sealed class TestRunDto
+    {
+        public string? DocumentType { get; set; }
+        public string? Company { get; set; }
+    }
+
+    private async Task PostTestRun(ApiCall call)
+    {
+        TestRunDto? dto;
+        try { dto = JsonSerializer.Deserialize<TestRunDto>(call.Body, JsonOpts); }
+        catch (JsonException ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        if (string.IsNullOrWhiteSpace(dto?.DocumentType) || string.IsNullOrWhiteSpace(dto.Company))
+        { Respond(call, 400, new { ok = false, message = "Name the document type and the company." }); return; }
+        if (TestRuns is null)
+        { Respond(call, 503, new { ok = false, message = "No worker runs beside this API, so nothing can be tested here." }); return; }
+        if (!TestRuns.TryRequest(dto.DocumentType.Trim(), dto.Company.Trim(), out var running))
+        { Respond(call, 409, new { ok = false, message = "A test run is already going." }); return; }
+
+        var finished = await Task.WhenAny(running, Task.Delay(TestRunWait));
+        if (finished != running)
+        {
+            Respond(call, 202, new { ok = false, message = "The test run is still going; follow it in the document history." });
+            return;
+        }
+        var result = await running;
+        _log.LogInformation("Test run by {User}: {Ok} {Id}.", ForLog(call.User ?? "dashboard"), result.Ok, ForLog(result.DocumentId ?? "-"));
+        // The history search matches parts of names (RE-1 also finds RE-10), so only this document's own steps.
+        var events = result.DocumentId is null ? [] : _ledger.Events(result.DocumentId, 200)
+            .Where(e => string.Equals(e.DocumentId, result.DocumentId, StringComparison.Ordinal))
+            .OrderBy(e => e.Id)
+            .Select(e => (object)new { at = e.At, step = e.Step, target = e.Target, state = e.State, message = e.Message })
+            .ToArray();
+        Respond(call, 200, new { ok = result.Ok, documentId = result.DocumentId, message = result.Message, events });
+    }
+
+    /// <summary>Start or pause taking documents (failure case 57): the "Paused" setting, nothing else.</summary>
+    private void PostPaused(ApiCall call, bool paused)
+    {
+        try
+        {
+            _settings.Update(section =>
+            {
+                bool now = section["Paused"] is JsonValue v && v.TryGetValue<bool>(out var p) && p;
+                if (now == paused) return false;
+                section["Paused"] = paused;
+                return true;
+            });
+        }
+        catch (Exception ex)
+        {
+            Respond(call, 500, new { ok = false, message = $"The settings could not be written ({_settings.Where}): " + ex.Message });
+            return;
+        }
+        _log.LogInformation("{User} {Action} Hive BDC.", ForLog(call.User ?? "dashboard"), paused ? "paused" : "started");
+        Respond(call, 200, new { ok = true, paused });
+    }
 
     private sealed class CheckSourceDto
     {
