@@ -47,12 +47,12 @@
       },
       {
         "name": "size",
-        "label": "Size",
+        "label": "Size and time zone",
         "subLabel": {
           "preValidation": "Choose a size",
           "postValidation": "Done"
         },
-        "bladeTitle": "Size",
+        "bladeTitle": "Size and time zone",
         "elements": [
           {
             "name": "skuName",
@@ -84,6 +84,67 @@
             "visible": true
           },
           {
+            "name": "timeZone",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Time zone",
+            "toolTip": "The document history and the daily counts in the web console use this time zone.",
+            "defaultValue": "Europe/Berlin (Germany)",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Europe/Berlin (Germany)",
+                  "value": "Europe/Berlin"
+                },
+                {
+                  "label": "Europe/Vienna (Austria)",
+                  "value": "Europe/Vienna"
+                },
+                {
+                  "label": "Europe/Zurich (Switzerland)",
+                  "value": "Europe/Zurich"
+                },
+                {
+                  "label": "Europe/Amsterdam (Netherlands)",
+                  "value": "Europe/Amsterdam"
+                },
+                {
+                  "label": "Europe/Brussels (Belgium)",
+                  "value": "Europe/Brussels"
+                },
+                {
+                  "label": "Europe/Luxembourg (Luxembourg)",
+                  "value": "Europe/Luxembourg"
+                },
+                {
+                  "label": "Europe/Paris (France)",
+                  "value": "Europe/Paris"
+                },
+                {
+                  "label": "Europe/Warsaw (Poland)",
+                  "value": "Europe/Warsaw"
+                },
+                {
+                  "label": "Europe/Prague (Czechia)",
+                  "value": "Europe/Prague"
+                },
+                {
+                  "label": "Europe/Istanbul (Türkiye)",
+                  "value": "Europe/Istanbul"
+                },
+                {
+                  "label": "Europe/London (United Kingdom)",
+                  "value": "Europe/London"
+                },
+                {
+                  "label": "UTC",
+                  "value": "UTC"
+                }
+              ]
+            },
+            "visible": true
+          },
+          {
             "name": "costInfo",
             "type": "Microsoft.Common.TextBlock",
             "visible": true,
@@ -97,7 +158,8 @@
     "outputs": {
       "location": "[location()]",
       "skuName": "[steps('size').skuName]",
-      "signInClientId": "[steps('signIn').clientId]"
+      "signInClientId": "[steps('signIn').clientId]",
+      "timeZone": "[steps('size').timeZone]"
     }
   }
 }

@@ -191,6 +191,26 @@ public sealed class DeploymentTemplateTests
     }
 
     [Fact]
+    public void TheInstanceRunsInTheTimeZoneTheWizardAsksForAndOnlyKnownZonesCanBeChosen()
+    {
+        var parameter = Template.GetProperty("parameters").GetProperty("timeZone");
+        var allowed = parameter.GetProperty("allowedValues").EnumerateArray().Select(v => v.GetString()!).ToList();
+        Assert.Equal("Europe/Berlin", parameter.GetProperty("defaultValue").GetString());
+        Assert.Equal("Europe/Berlin", allowed[0]);
+        foreach (var zone in allowed)
+            Assert.Equal(zone, TimeZoneInfo.FindSystemTimeZoneById(zone).Id);
+
+        Assert.Equal("[parameters('timeZone')]", AppSettings()["TZ"]);
+
+        var element = Wizard.GetProperty("parameters").GetProperty("steps").EnumerateArray()
+            .SelectMany(s => s.GetProperty("elements").EnumerateArray()).Single(e => e.GetProperty("name").GetString() == "timeZone");
+        var offered = element.GetProperty("constraints").GetProperty("allowedValues").EnumerateArray().ToList();
+        Assert.Equal(allowed, offered.Select(v => v.GetProperty("value").GetString()));
+        Assert.Equal(offered[0].GetProperty("label").GetString(), element.GetProperty("defaultValue").GetString());
+        Assert.Equal("[steps('size').timeZone]", Wizard.GetProperty("parameters").GetProperty("outputs").GetProperty("timeZone").GetString());
+    }
+
+    [Fact]
     public void TheTemplateUsesLanguageVersionOneBecauseManagedApplicationsTakeNoOther()
     {
         bool hasVersion = Template.TryGetProperty("languageVersion", out var version);

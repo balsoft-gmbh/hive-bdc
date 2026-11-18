@@ -998,7 +998,10 @@ writes `deploy/azure/dist/hivebdc-azure-{version}.zip` for Partner Center. One
 installation is one instance in the customer's subscription: a Linux web app (Always On,
 health check `/healthz`), a storage account for state, settings and licence (no shared
 key, no public access) and a Key Vault for secrets. The web app's own identity holds the
-data roles; a second identity is used only for sign-in.
+data roles; a second identity is used only for sign-in. The wizard asks for the time zone
+(default Europe/Berlin); it becomes the app setting `TZ`, so history times and the daily
+counts follow it instead of the platform's UTC (`WEBSITE_TIME_ZONE` alone does not change the
+local time of .NET on Linux).
 
 Sign-in needs no client secret. The customer's IT runs
 `scripts/New-HiveBDCSignInApp.ps1` in Azure Cloud Shell twice:

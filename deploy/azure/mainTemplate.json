@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "16932302425670537647"
+      "templateHash": "16683130073428739879"
     }
   },
   "parameters": {
@@ -27,6 +27,27 @@
       ],
       "metadata": {
         "description": "App Service plan size. B1 handles a few thousand documents a day."
+      }
+    },
+    "timeZone": {
+      "type": "string",
+      "defaultValue": "Europe/Berlin",
+      "allowedValues": [
+        "Europe/Berlin",
+        "Europe/Vienna",
+        "Europe/Zurich",
+        "Europe/Amsterdam",
+        "Europe/Brussels",
+        "Europe/Luxembourg",
+        "Europe/Paris",
+        "Europe/Warsaw",
+        "Europe/Prague",
+        "Europe/Istanbul",
+        "Europe/London",
+        "UTC"
+      ],
+      "metadata": {
+        "description": "Time zone of the instance: document history times and \"delivered today\" follow it."
       }
     },
     "signInClientId": {
@@ -197,6 +218,10 @@
             {
               "name": "HiveBDC__LogDir",
               "value": "/home/LogFiles/hivebdc"
+            },
+            {
+              "name": "TZ",
+              "value": "[parameters('timeZone')]"
             },
             {
               "name": "[variables('signInSecretSetting')]",

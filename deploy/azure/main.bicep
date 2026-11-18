@@ -14,6 +14,23 @@ param location string = resourceGroup().location
 ])
 param skuName string = 'B1'
 
+@description('Time zone of the instance: document history times and "delivered today" follow it.')
+@allowed([
+  'Europe/Berlin'
+  'Europe/Vienna'
+  'Europe/Zurich'
+  'Europe/Amsterdam'
+  'Europe/Brussels'
+  'Europe/Luxembourg'
+  'Europe/Paris'
+  'Europe/Warsaw'
+  'Europe/Prague'
+  'Europe/Istanbul'
+  'Europe/London'
+  'UTC'
+])
+param timeZone string = 'Europe/Berlin'
+
 @description('Application (client) ID of the app registration "Hive BDC sign-in" that New-HiveBDCSignInApp.ps1 created in this tenant.')
 @minLength(36)
 @maxLength(36)
@@ -159,6 +176,11 @@ resource site 'Microsoft.Web/sites@2025-03-01' = {
         {
           name: 'HiveBDC__LogDir'
           value: '/home/LogFiles/hivebdc'
+        }
+        {
+          // .NET on Linux takes its local time from TZ; WEBSITE_TIME_ZONE alone left the instance on UTC (checked live).
+          name: 'TZ'
+          value: timeZone
         }
         {
           name: signInSecretSetting
