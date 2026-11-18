@@ -73,6 +73,20 @@ public sealed class DestinationCatalogTests
         Assert.Equal(new[] { "Path" }, https.Descriptor.Settings.Select(s => s.Key));
     }
 
+    [Theory]
+    [InlineData("archive-test", "secret", true)]
+    [InlineData("docuware", "secret", true)]
+    [InlineData("archive-test", "", false)]
+    public void ADocuWareConnectionOfAnyNameMakesTheDestinationConnected(string name, string password, bool connected)
+    {
+        var options = new BDCOptions
+        {
+            Connections = { new ConnectionOptions { Id = name, Kind = "docuware", Secret = password, Settings = { ["Url"] = "https://contoso.docuware.cloud", ["UserName"] = "ax" } } },
+        };
+        var list = DestinationCatalog.Describe(ConnectorRegistry.BuiltIn(), new SourceRuntime(options, NullLogger.Instance));
+        Assert.Equal(connected, list.Single(d => d.Kind == "docuware").Connected);
+    }
+
     [Fact]
     public async Task DocuWareListsItsCabinetsAndOneRowPerFieldWithItsKind()
     {

@@ -493,6 +493,45 @@ export function removeConnection(draft, id) {
   return next;
 }
 
+/** Whether a company has this destination in the draft, by the rule of destinationRows (design part 20). */
+export function hasDestination(entry, kind) {
+  if (!entry) return false;
+  if (kind === 'sharepoint') {
+    const sp = entry.sharePoint || {};
+    return Boolean(sp.enabled || sp.siteUrl || sp.library);
+  }
+  return (entry.targets || []).some((t) => t.kind === kind);
+}
+
+/** A mailbox counts as set up once it has a sender, also while it is switched off (its app and secret are kept). */
+export function mailboxConfigured(mail) {
+  return Boolean(mail && String(mail.from || '').trim());
+}
+
+/** The line under Document mail, in the words of the SharePoint app line: a typed secret is never named as stored. */
+export function mailboxLine(mail, stored) {
+  const m = mail || {};
+  if (!m.from) return 'Sends each document from a company mailbox. Your IT makes the mail app with the Balsoft script.';
+  const where = `${m.enabled ? '' : 'Switched off. '}From ${m.from}. Documents of a test ERP go to ${(m.redirectTo || []).join(', ')}.`;
+  if (m.clientSecret) return `${where} The new secret goes to Key Vault when you save.`;
+  return `${where} ${stored ? 'Secret in Key Vault.' : 'No secret yet.'}`;
+}
+
+/** The test results that still hold after a save: those of connections, the mailbox and the SharePoint app it did not change. */
+export function keptTests(tests, original, draft) {
+  const kept = { ...(tests || {}) };
+  const o = original || {}, d = draft || {};
+  const differs = (a, b) => JSON.stringify(a || null) !== JSON.stringify(b || null);
+  for (const id of Object.keys(kept)) {
+    if (id === '#mail') { if (differs(o.mail, d.mail)) delete kept[id]; continue; }
+    if (id === '#sharepoint') { if (differs(o.sharePointAuth, d.sharePointAuth)) delete kept[id]; continue; }
+    const before = (o.connections || []).find((c) => c.id === id);
+    const after = (d.connections || []).find((c) => c.id === id);
+    if (!before || !after || after.secret || differs(before, after)) delete kept[id];
+  }
+  return kept;
+}
+
 /** The line under the SharePoint app: Key Vault is named only for a saved secret, never for one typed but not saved. */
 export function sharePointAppLine(app, stored) {
   if (!app || !app.clientId) return 'The app your IT creates with the Balsoft script. Needed for SharePoint destinations and sources.';
@@ -554,7 +593,8 @@ export function settingsChanges(original, draft) {
   if (a.tenantId !== b.tenantId || a.clientId !== b.clientId || b.clientSecret) lines.push('SharePoint app changed');
   const m = o.mail || {}, n = d.mail || {};
   if (Boolean(m.enabled) !== Boolean(n.enabled)) lines.push(`Mail ${n.enabled ? 'on' : 'off'}`);
-  else if (JSON.stringify({ ...m, clientSecret: undefined }) !== JSON.stringify({ ...n, clientSecret: undefined }) || n.clientSecret) lines.push('Mailbox changed');
+  else if (JSON.stringify({ ...m, clientSecret: undefined }) !== JSON.stringify({ ...n, clientSecret: undefined })) lines.push('Mailbox changed');
+  if (n.clientSecret) lines.push('New secret for document mail');
   return lines;
 }
 

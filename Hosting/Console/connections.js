@@ -11,21 +11,21 @@ export async function connectionsPage(view, route, ctx) {
   const [kinds, identity, targets] = await Promise.all([api('/connections/kinds'), api('/setup/identity'), api('/targets')]);
   state.targets = targets.targets || [];
   const ui = state.ui;
-  ui.tests = ui.tests || {};
+  const tests = state.tests;
   const bar = saveBar(env);
   const rerender = () => env.again();
   const now = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
   const testChip = (id) => {
-    const t = ui.tests[id];
+    const t = tests[id];
     if (!t) return el('span', { class: 'chip', text: 'Not tested yet' });
     return chip(t.ok, t.ok ? `Works · tested ${t.at}` : 'Sign-in refused');
   };
   const testLine = (id) => {
-    const t = ui.tests[id];
+    const t = tests[id];
     return t ? el('span', { class: t.ok ? 'muted small' : 'warn-text small', text: `${t.at}: ${t.message}` }) : null;
   };
-  const record = (id, answer) => { ui.tests[id] = { ok: Boolean(answer.ok), message: answer.message || '', at: now() }; rerender(); };
+  const record = (id, answer) => { tests[id] = { ok: Boolean(answer.ok), message: answer.message || '', at: now() }; rerender(); };
   const used = (uses) => el('span', { class: 'muted small', title: uses.join(', '), text: X.usesWords(uses) });
 
   // A card being edited takes the whole row, so its form fields get their full width.
@@ -82,13 +82,13 @@ export async function connectionsPage(view, route, ctx) {
             const settings = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, v.value.trim()]));
             change((d) => X.updateConnection(d, c.id, settings, secret.value));
             ui.editing = null;
-            delete ui.tests[c.id];
+            delete tests[c.id];
             rerender();
           } } })));
     }
 
     const removing = ui.removing === c.id;
-    return el('article', { class: cardClass(ui.tests[c.id] && !ui.tests[c.id].ok ? 'conn-card-bad' : '', editing) },
+    return el('article', { class: cardClass(tests[c.id] && !tests[c.id].ok ? 'conn-card-bad' : '', editing) },
       el('div', { class: 'section-head' }, el('strong', { class: 'conn-title', text: c.kind === 'https' ? `Key ${c.id}` : c.id }),
         c.kind === 'https' ? chip(stored || Boolean(c.secret), stored || c.secret ? 'Key stored' : 'No key yet') : testChip(c.id)),
       el('span', { class: 'muted small', text: c.kind === 'https' ? `Web address · ${X.connectionWords(c)}` : X.connectionWords(c) }),
@@ -130,7 +130,7 @@ export async function connectionsPage(view, route, ctx) {
           el('button', { type: 'button', class: 'button button-primary', text: 'Done', on: { click: () => {
             change((d) => X.setSharePointApp(d, { tenantId: tenant.value, clientId: client.value, secret: secret.value }));
             ui.editing = null;
-            delete ui.tests['#sharepoint'];
+            delete tests['#sharepoint'];
             rerender();
           } } })));
     }
@@ -180,20 +180,21 @@ export async function connectionsPage(view, route, ctx) {
             if (found.length) { put(problems, el('ul', { class: 'problems' }, found.map((p) => el('li', { text: p })))); return; }
             change((d) => X.setMailbox(d, next));
             ui.editing = null;
-            delete ui.tests['#mail'];
+            delete tests['#mail'];
             rerender();
           } } })));
     }
     const set = Boolean(mail.enabled && mail.from);
-    return el('article', { class: cardClass(set ? '' : 'conn-card-warn', editing) },
-      el('div', { class: 'section-head' }, el('strong', { class: 'conn-title', text: 'Document mail' }), set ? testChip('#mail') : chip(false, 'Not set up')),
-      el('span', { class: 'muted small', text: set ? `From ${mail.from}. Documents of a test ERP go to ${(mail.redirectTo || []).join(', ')}.` : 'Sends each document from a company mailbox. Your IT makes the mail app with the Balsoft script.' }),
+    const configured = X.mailboxConfigured(mail);
+    return el('article', { class: cardClass(configured ? '' : 'conn-card-warn', editing) },
+      el('div', { class: 'section-head' }, el('strong', { class: 'conn-title', text: 'Document mail' }), set ? testChip('#mail') : chip(false, configured ? 'Off' : 'Not set up')),
+      el('span', { class: 'muted small', text: X.mailboxLine(mail, stored) }),
       el('span', { class: wanting.length && !set ? 'warn-text small' : 'muted small', text: wanting.length ? `${wanting.length} ${wanting.length === 1 ? 'company wants' : 'companies want'} to mail` : 'No company mails yet' }),
       testLine('#mail'),
       form,
       el('div', { class: 'row-actions conn-actions' },
         set ? el('button', { type: 'button', class: 'button edit-only', text: 'Test', on: { click: test } }) : null,
-        editing ? null : el('button', { type: 'button', class: set ? 'button edit-only' : 'button button-primary edit-only', text: set ? 'Edit' : 'Set up mail', on: { click: () => { ui.editing = '#mail'; rerender(); } } })));
+        editing ? null : el('button', { type: 'button', class: configured ? 'button edit-only' : 'button button-primary edit-only', text: configured ? 'Edit' : 'Set up mail', on: { click: () => { ui.editing = '#mail'; rerender(); } } })));
   }
 
   function newConnectionForm(kind) {

@@ -20,7 +20,8 @@ public sealed class DocuWareRecordSource(SourceRuntime runtime, Func<ConnectionO
                 Hint: "For example Imported, so the document is not picked up again."),
         });
 
-    public bool IsConnected => Connection(new SourceOptions()) is { } c && c.Problems().Count == 0;
+    // Any usable DocuWare connection counts, whatever its name; which one a flow uses is its own setting.
+    public bool IsConnected => runtime.Options.Connections.Any(c => c.Kind == ConnectionKinds.DocuWare && c.Problems().Count == 0);
 
     private ConnectionOptions? Connection(SourceOptions source)
         => runtime.Connection(string.IsNullOrWhiteSpace(source.Connection) ? ConnectionKinds.DocuWare : source.Connection);

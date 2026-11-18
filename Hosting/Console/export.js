@@ -339,6 +339,8 @@ async function destinationScreen(env, typeId, company, kind) {
   const back = path(type.id, entry.dataAreaId);
   const trail = crumbs(home, { href: path(type.id), text: name }, { href: back, text: `Company ${entry.dataAreaId}` }, { text: d ? d.name : kind });
   if (!d) { put(env.view, trail, notice('warn', 'This destination was set up with a newer version of Hive BDC and is kept as it is.')); return; }
+  // After Discard, or from an old link, the destination is not in the draft: opening its form would add it again.
+  if (!X.hasDestination(entry, kind)) { go(back); return; }
 
   const ui = state.ui;
   const bar = saveBar(env);

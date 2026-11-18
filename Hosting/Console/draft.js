@@ -4,7 +4,7 @@
 import { postBody } from './logic.js';
 import * as X from './exportlogic.js';
 import { el, put, save, trail } from './ui.js';
-export const state = { draft: null, original: null, version: null, savedAt: '', keys: new Map(), ui: {}, targets: [] };
+export const state = { draft: null, original: null, version: null, savedAt: '', keys: new Map(), ui: {}, targets: [], tests: {} };
 
 export function sync(config) {
   const fresh = postBody(config);
@@ -87,6 +87,7 @@ export function saveBar(env) {
       saveButton.disabled = true;
       const done = () => {
         state.savedAt = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        state.tests = X.keptTests(state.tests, state.original, state.draft);
         state.draft = null;
         state.keys.clear();
         state.ui = {};

@@ -178,6 +178,19 @@ public sealed class SourceTests : IDisposable
 
     // ── the source catalog the dashboard builds its screens from ───────────────
 
+    [Theory]
+    [InlineData("archive-test", "secret", true)]
+    [InlineData("archive-test", "", false)]
+    public void ADocuWareConnectionOfAnyNameMakesTheSourceConnected(string name, string password, bool connected)
+    {
+        var options = new BDCOptions
+        {
+            Connections = { new ConnectionOptions { Id = name, Kind = "docuware", Secret = password, Settings = { ["Url"] = "https://contoso.docuware.cloud", ["UserName"] = "ax" } } },
+        };
+        var catalog = SourceCatalog.Describe(ConnectorRegistry.BuiltIn(), new SourceRuntime(options, NullLogger.Instance));
+        Assert.Equal(connected, catalog.Single(s => s.Kind == "docuware").Connected);
+    }
+
     [Fact]
     public void TheCatalogListsEverySourceWithItsSettingsAndWhetherItIsConnected()
     {

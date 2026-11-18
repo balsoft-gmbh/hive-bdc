@@ -45,7 +45,8 @@ public sealed class DocuWareDestinationKind(SourceRuntime runtime, Func<Connecti
     private ConnectionOptions? Connection(TargetOptions target)
         => runtime.Connection(string.IsNullOrWhiteSpace(target.Connection) ? ConnectionKinds.DocuWare : target.Connection);
 
-    public bool IsConnected => Connection(new TargetOptions()) is { } c && c.Problems().Count == 0;
+    // Any usable DocuWare connection counts, whatever its name; which one a flow uses is its own setting.
+    public bool IsConnected => runtime.Options.Connections.Any(c => c.Kind == ConnectionKinds.DocuWare && c.Problems().Count == 0);
 
     public async Task<IReadOnlyList<SourceChoice>> ChoicesAsync(string lookup, TargetOptions target)
     {

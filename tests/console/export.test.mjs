@@ -329,3 +329,48 @@ test('the SharePoint app card says Key Vault only for a saved secret and why Tes
   assert.equal(sharePointTestBlock({ siteUrl: 's', library: 'l' }, true), 'Save first.');
   assert.equal(sharePointTestBlock({ siteUrl: 's', library: 'l' }, false), null);
 });
+// Design part 20: the findings of the live checks after part 19.
+
+test('a destination page opens only for a destination the draft has', async () => {
+  const { hasDestination } = await import('../../Hosting/Console/exportlogic.js');
+  const entry = config().documentTypes[0].companies[0];
+  assert.equal(hasDestination(entry, 'sharepoint'), true);
+  assert.equal(hasDestination(entry, 'docuware'), true);
+  assert.equal(hasDestination(entry, 'blob'), false);
+  const added = addDestination(postBody(config()), 'SalesInvoice', '1000', 'blob', 'fo').documentTypes[0].companies[0];
+  assert.equal(hasDestination(added, 'blob'), true);
+  const bare = { ...entry, sharePoint: { enabled: false, siteUrl: '', library: '', folder: '', fields: {} }, targets: [] };
+  assert.equal(hasDestination(bare, 'sharepoint'), false);
+});
+
+test('the mail card says where a typed secret goes and names a stored one only after Save', async () => {
+  const { mailboxLine } = await import('../../Hosting/Console/exportlogic.js');
+  const mail = { enabled: true, from: 'info@contoso.example', redirectTo: ['test@contoso.example'], clientId: 'm' };
+  assert.equal(mailboxLine(mail, false), 'From info@contoso.example. Documents of a test ERP go to test@contoso.example. No secret yet.');
+  assert.equal(mailboxLine({ ...mail, clientSecret: 'typed' }, false), 'From info@contoso.example. Documents of a test ERP go to test@contoso.example. The new secret goes to Key Vault when you save.');
+  assert.equal(mailboxLine({ ...mail, clientSecret: 'typed' }, true), 'From info@contoso.example. Documents of a test ERP go to test@contoso.example. The new secret goes to Key Vault when you save.');
+  assert.equal(mailboxLine(mail, true), 'From info@contoso.example. Documents of a test ERP go to test@contoso.example. Secret in Key Vault.');
+  assert.match(mailboxLine({ enabled: false }, false), /Sends each document from a company mailbox/);
+  assert.equal(mailboxLine({ ...mail, enabled: false }, true), 'Switched off. From info@contoso.example. Documents of a test ERP go to test@contoso.example. Secret in Key Vault.');
+  const start = postBody(config());
+  const typed = { ...start, mail: { ...start.mail, enabled: false, clientSecret: 'typed' } };
+  assert.deepEqual(draftChanges(start, typed), ['Mail off', 'New secret for document mail']);
+});
+
+test('test results stay through Save and Discard and go only with a saved change of their own connection', async () => {
+  const { keptTests } = await import('../../Hosting/Console/exportlogic.js');
+  const tests = { fo: { ok: true }, docuware: { ok: true }, '#mail': { ok: true }, '#sharepoint': { ok: false } };
+  const start = postBody(config());
+  assert.deepEqual(keptTests(tests, start, start), tests);
+  let changed = structuredClone(start);
+  changed.connections.find((c) => c.id === 'docuware').settings.UserName = 'other';
+  changed.mail.from = 'other@contoso.example';
+  assert.deepEqual(Object.keys(keptTests(tests, start, changed)).sort(), ['#sharepoint', 'fo']);
+  changed = structuredClone(start);
+  changed.connections.find((c) => c.id === 'fo').secret = 'new';
+  changed.sharePointAuth = { ...changed.sharePointAuth, clientSecret: 'new' };
+  assert.deepEqual(Object.keys(keptTests(tests, start, changed)).sort(), ['#mail', 'docuware']);
+  changed = structuredClone(start);
+  changed.connections = changed.connections.filter((c) => c.id !== 'fo');
+  assert.equal(keptTests(tests, start, changed).fo, undefined);
+});
