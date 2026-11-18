@@ -622,6 +622,8 @@ app/HiveBDC.App/          the WPF dashboard (own project, loopback client only)
 tests/Balsoft.Hive.BDC.Tests/   xUnit: mapper, options migration, routing, templates, mail, library key
 build/                        publish-and-sign.ps1, EULA.txt, wizard art
 setup/HiveBDC.Setup/      Setup.exe: Hive BDC's product data on Balsoft.Hive.Installer.Windows
+deploy/azure/                 Azure Application offer: main.bicep, mainTemplate.json, createUiDefinition.json,
+                              package.sh, test-template.sh
 ```
 
 Hot paths are deliberately cheap: one JSON parse per document (DTO and column
@@ -950,6 +952,34 @@ changes, then every 5 minutes):
 
 Without a table endpoint or connection string, or with an unknown run mode, the
 program does not start (exit code 3); `--once` exits with 2 while it would wait.
+
+#### Installing in Azure (managed application)
+
+`deploy/azure/` holds the Azure Application offer: `main.bicep` (built into
+`mainTemplate.json`), the installation wizard `createUiDefinition.json`, and
+`package.sh`, which publishes the service for App Service's .NET 10 stack on Linux and
+writes `deploy/azure/dist/hivebdc-azure-{version}.zip` for Partner Center. One
+installation is one instance in the customer's subscription: a Linux web app (Always On,
+health check `/healthz`), a storage account for state, settings and licence (no shared
+key, no public access) and a Key Vault for secrets. The web app's own identity holds the
+data roles; a second identity is used only for sign-in.
+
+Sign-in needs no client secret. The customer's IT runs
+`scripts/New-HiveBDCSignInApp.ps1` in Azure Cloud Shell twice:
+
+1. before the installation, without parameters: it creates the app registration
+   "Hive BDC sign-in" with the roles Viewer, Operator and Administrator, lets only users
+   with a role sign in, makes the person running it Administrator and prints the client
+   ID that the wizard asks for;
+2. after the installation, with the command the managed application shows under
+   Parameters and Outputs (`signInStep2`): it adds the instance's redirect URI and a
+   federated credential that trusts the instance's sign-in identity.
+
+The package is copied into the app during the installation and runs from
+`/home/data/SitePackages` (`WEBSITE_RUN_FROM_PACKAGE=1`), so nothing depends on the
+offer's download link afterwards. `bash deploy/azure/test-template.sh` checks the
+package: Bicep build and linter, Microsoft's ARM template test toolkit (arm-ttk) and
+`DeploymentTemplateTests`.
 
 ### Inbound flows (DocuWare, SharePoint)
 

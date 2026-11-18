@@ -1,0 +1,392 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.44.1.10279",
+      "templateHash": "16932302425670537647"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region of the instance."
+      }
+    },
+    "skuName": {
+      "type": "string",
+      "defaultValue": "B1",
+      "allowedValues": [
+        "B1",
+        "B2",
+        "P0v3",
+        "P1v3"
+      ],
+      "metadata": {
+        "description": "App Service plan size. B1 handles a few thousand documents a day."
+      }
+    },
+    "signInClientId": {
+      "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
+      "metadata": {
+        "description": "Application (client) ID of the app registration \"Hive BDC sign-in\" that New-HiveBDCSignInApp.ps1 created in this tenant."
+      }
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "defaultValue": "[deployment().properties.templateLink.uri]",
+      "metadata": {
+        "description": "Base URI of the deployment package; set by Azure during the deployment."
+      }
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SAS token for _artifactsLocation; set by Azure during the deployment and valid only while it runs."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id)]",
+    "planName": "[format('plan-hivebdc-{0}', variables('suffix'))]",
+    "siteName": "[format('hivebdc-{0}', variables('suffix'))]",
+    "storageName": "[format('sthivebdc{0}', variables('suffix'))]",
+    "vaultName": "[format('kv-hivebdc-{0}', variables('suffix'))]",
+    "signInIdentityName": "[format('id-hivebdc-signin-{0}', variables('suffix'))]",
+    "containerName": "hivebdc",
+    "signInSecretSetting": "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID",
+    "packageUri": "[uri(parameters('_artifactsLocation'), format('app/hivebdc.zip{0}', parameters('_artifactsLocationSasToken')))]",
+    "roles": {
+      "storageTableDataContributor": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
+      "storageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+      "keyVaultSecretsOfficer": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2025-01-01",
+      "name": "[variables('storageName')]",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": false,
+        "defaultToOAuthAuthentication": true,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}', variables('storageName'), 'default')]",
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 14
+        },
+        "isVersioningEnabled": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageName'), 'default', variables('containerName'))]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2025-05-01",
+      "name": "[variables('vaultName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true
+      }
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2024-11-30",
+      "name": "[variables('signInIdentityName')]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2025-03-01",
+      "name": "[variables('planName')]",
+      "location": "[parameters('location')]",
+      "kind": "linux",
+      "sku": {
+        "name": "[parameters('skuName')]"
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2025-03-01",
+      "name": "[variables('siteName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux",
+      "identity": {
+        "type": "SystemAssigned, UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('signInIdentityName')))]": {}
+        }
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+        "httpsOnly": true,
+        "clientAffinityEnabled": false,
+        "siteConfig": {
+          "linuxFxVersion": "DOTNETCORE|10.0",
+          "appCommandLine": "dotnet HiveBDC.dll",
+          "alwaysOn": true,
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "http20Enabled": true,
+          "healthCheckPath": "/healthz",
+          "appSettings": [
+            {
+              "name": "WEBSITE_RUN_FROM_PACKAGE",
+              "value": "1"
+            },
+            {
+              "name": "HiveBDC__RunMode",
+              "value": "azure"
+            },
+            {
+              "name": "HiveBDC__Azure__TableEndpoint",
+              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2025-01-01').primaryEndpoints.table]"
+            },
+            {
+              "name": "HiveBDC__Azure__SettingsBlobUrl",
+              "value": "[format('{0}{1}/settings.json', reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2025-01-01').primaryEndpoints.blob, variables('containerName'))]"
+            },
+            {
+              "name": "HiveBDC__Azure__KeyVaultUrl",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', variables('vaultName')), '2025-05-01').vaultUri]"
+            },
+            {
+              "name": "HiveBDC__LogDir",
+              "value": "/home/LogFiles/hivebdc"
+            },
+            {
+              "name": "[variables('signInSecretSetting')]",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('signInIdentityName')), '2024-11-30').clientId]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('signInIdentityName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2025-03-01",
+      "name": "[format('{0}/{1}', variables('siteName'), 'slotConfigNames')]",
+      "properties": {
+        "appSettingNames": [
+          "[variables('signInSecretSetting')]"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+      "apiVersion": "2025-03-01",
+      "name": "[format('{0}/{1}', variables('siteName'), 'ftp')]",
+      "properties": {
+        "allow": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+      "apiVersion": "2025-03-01",
+      "name": "[format('{0}/{1}', variables('siteName'), 'scm')]",
+      "properties": {
+        "allow": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2025-03-01",
+      "name": "[format('{0}/{1}', variables('siteName'), 'authsettingsV2')]",
+      "properties": {
+        "platform": {
+          "enabled": true
+        },
+        "globalValidation": {
+          "requireAuthentication": true,
+          "unauthenticatedClientAction": "RedirectToLoginPage",
+          "redirectToProvider": "azureactivedirectory",
+          "excludedPaths": [
+            "/healthz",
+            "/inbound",
+            "/inbound/*"
+          ]
+        },
+        "httpSettings": {
+          "requireHttps": true
+        },
+        "identityProviders": {
+          "azureActiveDirectory": {
+            "enabled": true,
+            "registration": {
+              "clientId": "[parameters('signInClientId')]",
+              "clientSecretSettingName": "[variables('signInSecretSetting')]",
+              "openIdIssuer": "[format('{0}{1}/v2.0', environment().authentication.loginEndpoint, subscription().tenantId)]"
+            }
+          }
+        },
+        "login": {
+          "tokenStore": {
+            "enabled": true
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), resourceId('Microsoft.Web/sites', variables('siteName')), variables('roles').storageTableDataContributor)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').storageTableDataContributor)]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), resourceId('Microsoft.Web/sites', variables('siteName')), variables('roles').storageBlobDataContributor)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').storageBlobDataContributor)]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('vaultName')), resourceId('Microsoft.Web/sites', variables('siteName')), variables('roles').keyVaultSecretsOfficer)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').keyVaultSecretsOfficer)]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/extensions",
+      "apiVersion": "2025-03-01",
+      "name": "[format('{0}/{1}', variables('siteName'), 'onedeploy')]",
+      "properties": {
+        "packageUri": "[variables('packageUri')]",
+        "type": "zip"
+      },
+      "dependsOn": [
+        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), resourceId('Microsoft.Web/sites', variables('siteName')), variables('roles').storageBlobDataContributor))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageName'), 'default', variables('containerName'))]",
+        "[resourceId('Microsoft.Web/sites/config', variables('siteName'), 'authsettingsV2')]",
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]",
+        "[resourceId('Microsoft.Web/sites/config', variables('siteName'), 'slotConfigNames')]",
+        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), resourceId('Microsoft.Web/sites', variables('siteName')), variables('roles').storageTableDataContributor))]",
+        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('vaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('vaultName')), resourceId('Microsoft.Web/sites', variables('siteName')), variables('roles').keyVaultSecretsOfficer))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "consoleUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Address of the Hive BDC web console."
+      },
+      "value": "[uri(format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01').defaultHostName), '/')]"
+    },
+    "signInRedirectUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Redirect URI that step 2 of New-HiveBDCSignInApp.ps1 adds to the app registration."
+      },
+      "value": "[uri(format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01').defaultHostName), '/.auth/login/aad/callback')]"
+    },
+    "signInIdentityObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the sign-in identity that step 2 trusts on the app registration."
+      },
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('signInIdentityName')), '2024-11-30').principalId]"
+    },
+    "signInStep2": {
+      "type": "string",
+      "metadata": {
+        "description": "Step 2 of the sign-in setup, to run once after the installation."
+      },
+      "value": "[format('./New-HiveBDCSignInApp.ps1 -ClientId {0} -RedirectUri https://{1}/.auth/login/aad/callback -IdentityObjectId {2}', parameters('signInClientId'), reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01').defaultHostName, reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('signInIdentityName')), '2024-11-30').principalId)]"
+    },
+    "inboundUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Address an ERP posts documents to (HTTPS source): /inbound/{documentType}/{company}."
+      },
+      "value": "[uri(format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('siteName')), '2025-03-01').defaultHostName), '/inbound/')]"
+    }
+  }
+}

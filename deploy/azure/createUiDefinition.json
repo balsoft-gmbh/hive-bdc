@@ -1,0 +1,103 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "Hive BDC turns the documents your ERP exports into e-invoices and delivers them to SharePoint, DocuWare, mail or Azure; it also brings documents from your document system back into the ERP. This installs one instance in your subscription: a web app, a storage account and a Key Vault."
+      }
+    },
+    "basics": [],
+    "steps": [
+      {
+        "name": "signIn",
+        "label": "Sign-in",
+        "subLabel": {
+          "preValidation": "Enter the client ID",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Sign-in",
+        "elements": [
+          {
+            "name": "scriptInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "style": "Info",
+              "text": "Before the installation, your IT department runs the Balsoft script New-HiveBDCSignInApp.ps1 once in Azure Cloud Shell. It creates the app registration \"Hive BDC sign-in\" in your tenant, gives the person running it the Administrator role and prints the Application (client) ID to enter below. No client secret is created. After the installation the script runs once more with the command shown under Parameters and Outputs of the managed application.",
+              "uri": "https://github.com/balsoft-gmbh/hive-bdc/blob/main/scripts/New-HiveBDCSignInApp.ps1"
+            }
+          },
+          {
+            "name": "clientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Application (client) ID",
+            "toolTip": "The Application (client) ID that New-HiveBDCSignInApp.ps1 printed, for example 00000000-0000-0000-0000-000000000000.",
+            "placeholder": "00000000-0000-0000-0000-000000000000",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter the client ID as printed by the script: 32 hexadecimal characters in five groups, separated by hyphens."
+            },
+            "visible": true
+          }
+        ]
+      },
+      {
+        "name": "size",
+        "label": "Size",
+        "subLabel": {
+          "preValidation": "Choose a size",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Size",
+        "elements": [
+          {
+            "name": "skuName",
+            "type": "Microsoft.Common.DropDown",
+            "label": "App Service plan",
+            "toolTip": "B1 is enough for a few thousand documents a day. The size can be changed later in the App Service plan.",
+            "defaultValue": "B1: Basic, 1 core, 1.75 GB",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "B1: Basic, 1 core, 1.75 GB",
+                  "value": "B1"
+                },
+                {
+                  "label": "B2: Basic, 2 cores, 3.5 GB",
+                  "value": "B2"
+                },
+                {
+                  "label": "P0v3: Premium, 1 core, 4 GB",
+                  "value": "P0v3"
+                },
+                {
+                  "label": "P1v3: Premium, 2 cores, 8 GB",
+                  "value": "P1v3"
+                }
+              ]
+            },
+            "visible": true
+          },
+          {
+            "name": "costInfo",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": true,
+            "options": {
+              "text": "Azure bills the App Service plan, the storage account and the Key Vault in your subscription. The Hive BDC licence is a yearly file from Balsoft; you upload it in the web console after the installation."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "skuName": "[steps('size').skuName]",
+      "signInClientId": "[steps('signIn').clientId]"
+    }
+  }
+}
