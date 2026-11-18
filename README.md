@@ -969,8 +969,10 @@ Sign-in needs no client secret. The customer's IT runs
 
 1. before the installation, without parameters: it creates the app registration
    "Hive BDC sign-in" with the roles Viewer, Operator and Administrator, lets only users
-   with a role sign in, makes the person running it Administrator and prints the client
-   ID that the wizard asks for;
+   with a role sign in, consents for the organization to the sign-in scopes (openid,
+   profile, email, offline_access; needs Application Administrator or Cloud Application
+   Administrator, else it prints the admin consent link), makes the person running it
+   Administrator and prints the client ID that the wizard asks for;
 2. after the installation, with the command the managed application shows under
    Parameters and Outputs (`signInStep2`): it adds the instance's redirect URI and a
    federated credential that trusts the instance's sign-in identity.

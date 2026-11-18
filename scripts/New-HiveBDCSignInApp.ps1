@@ -7,15 +7,17 @@
     Run in Azure Cloud Shell (PowerShell). It shows the tenant and asks first; every step skips what already exists.
 
     Before the installation (no parameters): creates the app registration with the app roles Viewer, Operator and
-    Administrator, lets only users with a role sign in, gives you the Administrator role and prints the Application
-    (client) ID that the Hive BDC installation asks for.
+    Administrator, lets only users with a role sign in, consents for the whole organization to the sign-in scopes
+    (openid, profile, email, offline_access), so nobody sees a consent prompt, gives you the Administrator role and
+    prints the Application (client) ID that the Hive BDC installation asks for.
 
     After the installation (-ClientId, -RedirectUri, -IdentityObjectId; the managed application shows the complete
     command under Parameters and Outputs as signInStep2): adds the redirect URI of the instance and a federated
     credential that lets the instance's sign-in identity act for the app registration instead of a client secret.
 
-    Role: Application Developer or Application Administrator; giving yourself the Administrator role on the app also
-    works as its owner. -WhatIf shows the plan only.
+    Role: Application Administrator or Cloud Application Administrator (the consent needs one of them; with only
+    Application Developer the script prints the admin consent link for an administrator and goes on). -WhatIf shows
+    the plan only.
 
 .EXAMPLE
     ./New-HiveBDCSignInApp.ps1
@@ -63,6 +65,16 @@ $roles = @(
     @{ value = 'Administrator'; displayName = 'Administrator'; description = 'Operator, and changes settings, connections and the licence.' }
 )
 
+# The Microsoft Graph scopes App Service sign-in asks for; consented for everyone, so no user sees a prompt and
+# tenants that block user consent still let their users in.
+$graphAppId = '00000003-0000-0000-c000-000000000000'
+$signInScopes = [ordered]@{
+    openid         = '37f7f235-527c-4136-accd-4a02d197296e'
+    profile        = '14dad69e-099b-42c9-810b-d002981feec1'
+    email          = '64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0'
+    offline_access = '7427e0e9-2fba-42fe-b0c0-848c9e6a8182'
+}
+
 # Only Cloud Shell has no browser to sign in with; there a device code is the way in.
 # Elsewhere the browser is used, because many tenants block sign-in by code.
 $isCloudShell = [bool]$env:ACC_CLOUD -or ("$env:AZUREPS_HOST_ENVIRONMENT" -like '*cloud-shell*')
@@ -94,7 +106,7 @@ function Write-JsonFile {
 
 if ($WhatIfPreference) { Write-Host 'DRY RUN - nothing will be changed.' -ForegroundColor Yellow }
 $connect = $PSCmdlet.ParameterSetName -eq 'Connect'
-$steps = if ($connect) { 3 } else { 4 }
+$steps = if ($connect) { 3 } else { 5 }
 
 # -- sign-in ----------------------------------------------------------------------------
 Write-Step "1/$steps Sign-in"
@@ -218,7 +230,48 @@ elseif ($PSCmdlet.ShouldProcess($sp.id, 'Let only users with a role sign in')) {
     Write-Ok 'only users with a role can sign in'
 }
 
-Write-Step "4/$steps Your role"
+Write-Step "4/$steps Consent for the sign-in scopes"
+$graph = @($reg.requiredResourceAccess) | Where-Object { $_.resourceAppId -eq $graphAppId } | Select-Object -First 1
+$declared = @($graph.resourceAccess | Where-Object { $_.type -eq 'Scope' } | ForEach-Object { $_.id })
+$toDeclare = @($signInScopes.GetEnumerator() | Where-Object { $declared -notcontains $_.Value })
+if (-not $toDeclare) { Write-Skip "the app asks for $(@($signInScopes.Keys) -join ', ')" }
+elseif ($PSCmdlet.ShouldProcess($appId, 'Ask for the sign-in scopes')) {
+    $perms = @($toDeclare | ForEach-Object { "$($_.Value)=Scope" })
+    & az ad app permission add --id $appId --api $graphAppId --api-permissions @perms --only-show-errors 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Adding the sign-in scopes failed, see above.' }
+    Write-Ok "the app asks for $(@($toDeclare | ForEach-Object { $_.Key }) -join ', ')"
+}
+
+$graphSp = Invoke-Az ad sp show --id $graphAppId
+$grants = @((Invoke-Az rest --method GET --url "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId%20eq%20%27$($sp.id)%27").value)
+$grant = $grants | Where-Object { $_.consentType -eq 'AllPrincipals' -and $_.resourceId -eq $graphSp.id } | Select-Object -First 1
+$granted = if ($grant) { @("$($grant.scope)".Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries)) } else { @() }
+$lacking = @($signInScopes.Keys | Where-Object { $granted -notcontains $_ })
+if (-not $lacking) { Write-Skip "consented for the organization: $($granted -join ' ')" }
+elseif ($PSCmdlet.ShouldProcess($AppName, "Consent for the organization to $($lacking -join ', ')")) {
+    $scope = (@($granted) + $lacking) -join ' '
+    $body = if ($grant) { @{ scope = $scope } }
+            else { @{ clientId = $sp.id; consentType = 'AllPrincipals'; resourceId = $graphSp.id; scope = $scope } }
+    $file = Write-JsonFile $body
+    try {
+        if ($grant) {
+            $null = Invoke-Az rest --method PATCH --url "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($grant.id)" `
+                --headers 'Content-Type=application/json' --body "@$file"
+        }
+        else {
+            $null = Invoke-Az rest --method POST --url 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants' `
+                --headers 'Content-Type=application/json' --body "@$file"
+        }
+        Write-Ok "consented for the organization: $scope"
+    }
+    catch {
+        Write-Host '   [todo] Consent needs Application Administrator or Cloud Application Administrator. An administrator opens:' -ForegroundColor Yellow
+        Write-Note "https://login.microsoftonline.com/$tenantId/adminconsent?client_id=$appId"
+    }
+    finally { Remove-Item -Path $file -ErrorAction SilentlyContinue }
+}
+
+Write-Step "5/$steps Your role"
 $me = Invoke-Az ad signed-in-user show
 $admin = @($reg.appRoles) | Where-Object { $_.value -eq 'Administrator' } | Select-Object -First 1
 $assigned = @((Invoke-Az rest --method GET --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($sp.id)/appRoleAssignedTo").value) |
