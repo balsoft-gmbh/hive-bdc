@@ -1,43 +1,53 @@
 // The web console of a Hive BDC instance in Azure. Every element is built with createElement and every value set with
 // textContent or setAttribute (ui.js), so nothing read from the settings or the history can become markup (failure case 52).
-import { attentionRows, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
+import { attentionRows, dayLine, greeting, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
 import { connectionsPage } from './connections.js';
 import { exportPage } from './export.js';
 import { servicePage } from './service.js';
 import { setupPage } from './setup.js';
-import { api, el, notice, put } from './ui.js';
+import { api, el, icon, notice, put, trail } from './ui.js';
 
 const state = { me: null, status: null, config: null };
 
 // ── shell ──────────────────────────────────────────────────────────────────────────
 
-const pages = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'export', label: 'Export (from your ERP)' },
-  { id: 'connections', label: 'Connections' },
-  { id: 'history', label: 'Document history' },
-  { id: 'service', label: 'Service' },
+const groups = [
+  { label: 'WORK', pages: [{ id: 'overview', label: 'Overview' }, { id: 'history', label: 'Document history' }] },
+  { label: 'SET UP', pages: [{ id: 'export', label: 'Export' }, { id: 'connections', label: 'Connections' }, { id: 'service', label: 'Service' }] },
 ];
+const pages = groups.flatMap((g) => g.pages);
+const instanceName = () => window.location.hostname.split('.')[0];
 
 /** While the set-up is not finished only the assistant opens; the other pages are shown greyed (board W1). */
 function renderNav(setup) {
   const nav = document.getElementById('nav-links');
+  const link = (p) => el('a', { class: 'nav-link', href: `#/${p.id}`, 'data-page': p.id }, icon(p.id, 'nav-icon'), el('span', { text: p.label }));
   if (setup) {
     put(nav,
-      el('a', { href: '#/setup', 'data-page': 'setup', text: 'Set up' }),
-      pages.map((p) => el('span', { class: 'nav-off', text: p.label })),
+      el('div', { class: 'nav-label', text: 'SET UP' }),
+      el('a', { class: 'nav-link', href: '#/setup', 'data-page': 'setup' }, icon('instance', 'nav-icon'), el('span', { text: 'Set up' })),
+      pages.map((p) => el('span', { class: 'nav-off' }, icon(p.id, 'nav-icon'), el('span', { text: p.label }))),
       el('p', { class: 'nav-note', text: 'The other pages open when Hive BDC is started at the end of the set-up.' }));
   } else {
-    put(nav, ...pages.map((p) => el('a', { href: `#/${p.id}`, 'data-page': p.id, text: p.label })));
+    put(nav, groups.flatMap((g) => [el('div', { class: 'nav-label', text: g.label }), ...g.pages.map(link)]));
   }
 }
 
 function renderShell() {
   const me = state.me;
-  document.getElementById('instance').textContent = `${window.location.hostname.split('.')[0]} · version ${me.version}`;
+  document.getElementById('instance').textContent = `${instanceName()} · ${me.version}`;
   document.getElementById('user-initials').textContent = initials(me.name);
   document.getElementById('user-name').textContent = me.name;
   document.getElementById('user-role').textContent = topRole(me.roles) || 'No role';
+  put(document.getElementById('sign-out'), icon('signout'));
+}
+
+/** The licence holder and the instance name above the menu, as the workspace card of the CRM and ERP. */
+function renderInstanceCard() {
+  const holder = state.status && state.status.license && state.status.license.customer;
+  put(document.getElementById('instance-card'),
+    el('span', { class: 'instance-mark' }, icon('instance')),
+    el('span', { class: 'instance-text' }, el('strong', { text: holder || 'Hive BDC' }), el('span', { text: instanceName() })));
 }
 
 function markCurrent(page) {
@@ -65,21 +75,28 @@ async function overviewPage(view) {
   const [metrics, attention] = await Promise.all([api('/metrics?recent=0'), api('/history/attention?limit=200')]);
   const rows = attentionRows(attention.events);
   const licence = licenceLine(state.status.license);
+  const now = new Date();
+  const stat = (tag, attrs, label, mark, value, note, small) => el(tag, attrs,
+    el('span', { class: 'stat-top' }, el('span', { class: 'stat-label', text: label }), el('span', { class: `stat-icon stat-icon-${mark[1]}` }, icon(mark[0]))),
+    el('span', { class: small ? 'stat-value stat-value-small' : 'stat-value', text: value }),
+    note ? el('span', { class: 'stat-note', text: note }) : null);
 
   const cards = el('div', { class: 'cards' },
-    el('div', { class: 'card stat' }, el('span', { class: 'stat-label', text: 'Delivered today' }), el('span', { class: 'stat-value', text: metrics.today }), el('span', { class: 'stat-note', text: `${metrics.month} this month` })),
-    el('a', { class: rows.length ? 'card stat stat-warn' : 'card stat', href: '#attention' }, el('span', { class: 'stat-label', text: 'Needs attention' }), el('span', { class: 'stat-value', text: rows.length }), el('span', { class: 'stat-note', text: rows.length ? 'see below' : 'nothing to do' })),
-    el('div', { class: licence.ok ? 'card stat' : 'card stat stat-warn' }, el('span', { class: 'stat-label', text: 'Licence' }), el('span', { class: 'stat-value stat-value-small', text: licence.text })),
+    stat('div', { class: 'card stat' }, 'Delivered today', ['check', 'ok'], metrics.today, `${metrics.month} this month`),
+    stat('a', { class: rows.length ? 'card stat stat-warn' : 'card stat', href: '#attention' }, 'Needs attention', ['alert', rows.length ? 'warn' : 'ok'], rows.length, rows.length ? 'see below' : 'nothing to do'),
+    stat('div', { class: licence.ok ? 'card stat' : 'card stat stat-warn' }, 'Licence', ['instance', licence.ok ? 'gold' : 'warn'], licence.text, null, true),
   );
 
   const list = el('section', { id: 'attention', class: 'card', 'aria-labelledby': 'attention-h' },
-    el('h2', { id: 'attention-h', text: 'Needs attention' }),
+    el('div', { class: 'section-head' }, el('h2', { id: 'attention-h', text: 'Needs attention' }), el('a', { class: 'small', href: '#/history', text: 'Document history' })),
     rows.length === 0
       ? el('p', { class: 'muted', text: 'Every document went through.' })
       : el('div', { class: 'rows' }, rows.map((row) => attentionRow(row))));
 
   put(view,
-    el('div', { class: 'page-head' }, el('h1', { text: 'Today' }), el('p', { class: 'muted', text: `As of ${new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}` })),
+    el('div', { class: 'page-head-row' },
+      el('div', { class: 'page-head' }, el('div', { class: 'eyebrow', text: dayLine(now) }), el('h1', { text: greeting(now.getHours(), state.me.name) })),
+      el('span', { class: 'muted small', text: `As of ${now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` })),
     licence.ok ? null : notice('warn', state.status.license && state.status.license.message ? state.status.license.message : licence.text),
     cards,
     list,
@@ -87,7 +104,9 @@ async function overviewPage(view) {
 }
 
 function attentionRow(row) {
-  const message = el('span', { class: row.waiting ? 'row-message' : 'row-message row-message-warn', text: row.target ? `${row.target}: ${row.message}` : row.message });
+  const message = el('span', { class: row.waiting ? 'row-message' : 'row-message row-message-warn' },
+    row.target ? el('span', { class: row.waiting ? 'badge badge-amber' : 'badge badge-rose', text: row.target }) : null,
+    el('span', { text: row.message }));
   const actions = el('span', { class: 'row-actions' }, el('a', { href: `#/history?search=${encodeURIComponent(row.documentId)}`, text: 'History' }));
   if (!row.waiting && state.me.canRetry) {
     const button = el('button', { type: 'button', class: 'button', text: 'Retry' });
@@ -130,7 +149,7 @@ async function historyPage(view, route) {
     ))));
 
   put(view,
-    el('div', { class: 'page-head' }, el('h1', { text: 'Document history' }), el('p', { class: 'muted', text: 'Every step of every document, newest first.' })),
+    el('div', { class: 'page-head' }, el('div', { class: 'eyebrow', text: 'WORK' }), el('h1', { text: 'Document history' }), el('p', { class: 'muted', text: 'Every step of every document, newest first.' })),
     form,
     answer.events.length === 0 ? el('p', { class: 'muted', text: search ? `Nothing found for "${search}".` : 'No documents yet.' }) : el('div', { class: 'table-box' }, table),
   );
@@ -151,15 +170,18 @@ async function show() {
   try {
     [state.status, state.config] = await Promise.all([api('/status'), api('/config')]);
     renderServiceBox();
+    renderInstanceCard();
     const setup = setupNeeded(state.config);
     renderNav(setup);
     if (setup) {
       markCurrent('setup');
+      trail({ text: 'Hive BDC' }, { text: 'Set up' });
       await setupPage(view, route, { me: state.me, status: state.status, config: state.config, started });
       return;
     }
     const page = renderers[route.page] ? route.page : 'overview';
     markCurrent(page);
+    trail({ text: 'Hive BDC' }, { text: pages.find((p) => p.id === page).label });
     await renderers[page](view, route);
   } catch (error) {
     put(view, notice('error', error.message));

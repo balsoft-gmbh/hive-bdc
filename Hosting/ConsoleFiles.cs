@@ -38,6 +38,8 @@ public static class ConsoleFiles
         ".js" => "text/javascript; charset=utf-8",
         ".css" => "text/css; charset=utf-8",
         ".svg" => "image/svg+xml",
+        ".ttf" => "font/ttf",
+        ".txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     };
 

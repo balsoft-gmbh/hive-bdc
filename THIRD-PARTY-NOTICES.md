@@ -23,9 +23,17 @@ grant for these components.
 | Azure.Storage.Blobs, Azure.Data.Tables, Azure.Messaging.ServiceBus, Azure.Identity, Azure.Security.KeyVault.Secrets (with Azure.Core and their dependencies) | 12.30.1, 12.13.0, 7.21.0, 1.21.0, 4.12.0 | Azure Blob Storage source and target, Azure run mode | Copyright (c) Microsoft Corporation | MIT |
 | .NET runtime (bundled, self-contained build) | 10.0 | runs the service and the dashboard | Copyright (c) .NET Foundation and Contributors | MIT, plus the runtime's own third-party notices: https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT |
 | ASP.NET Core runtime (bundled, self-contained build) | 10.0 | the service's local API (Kestrel) | Copyright (c) .NET Foundation and Contributors | MIT, plus its own third-party notices: https://github.com/dotnet/aspnetcore/blob/main/THIRD-PARTY-NOTICES.txt |
+| DM Sans | variable, from the Balsoft web apps | text font of the Azure web console | Copyright 2014 The DM Sans Project Authors | SIL Open Font License 1.1 |
+| Manrope | variable, from the Balsoft web apps | heading font of the Azure web console | Copyright 2018 The Manrope Project Authors | SIL Open Font License 1.1 |
 
 Build and test tools that are not shipped (validators, test frameworks, signing
 tools) are not listed.
+
+## SIL Open Font License 1.1
+
+The fonts DM Sans and Manrope ship inside the service with their full licence texts,
+`Hosting/Console/dm-sans-OFL.txt` and `Hosting/Console/manrope-OFL.txt`, which an Azure
+instance also serves at `/console/dm-sans-OFL.txt` and `/console/manrope-OFL.txt`.
 
 ## MIT License
 

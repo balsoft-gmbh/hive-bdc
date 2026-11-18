@@ -965,7 +965,9 @@ and roles as the API: the overview (documents delivered today, documents that ne
 attention with Retry for Operators, licence) and the document history with search. The
 console is plain HTML, CSS and JavaScript embedded in the service (`Hosting/Console/`);
 only those files are served, every value is set as text, and the Content Security
-Policy allows no inline script and no framing. `GET /me` names the signed-in user and
+Policy allows no inline script and no framing. It looks like the other Balsoft web apps
+(the CRM and ERP): white menu with the Balsoft logo, DM Sans and Manrope. Logo and fonts
+are embedded too, with the fonts' licence texts, so the page loads nothing from outside. `GET /me` names the signed-in user and
 roles. Pure console logic is tested with `node --test tests/console/*.test.mjs`.
 
 Settings saved from the console carry the version `GET /config` gave: when someone else

@@ -1,7 +1,7 @@
 // node --test tests/console/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attentionRows, changeLine, conflictView, germanDate, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole } from '../../Hosting/Console/logic.js';
+import { attentionRows, changeLine, conflictView, dayLine, germanDate, greeting, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole } from '../../Hosting/Console/logic.js';
 
 test('the highest role wins and unknown roles are ignored', () => {
   assert.equal(topRole(['viewer', 'Administrator']), 'Administrator');
@@ -89,4 +89,19 @@ test('the refusal offers Save both only when nothing overlaps and the start is k
   assert.equal(unknown.canSaveBoth, false);
   assert.equal(unknown.title, 'Not saved: Someone else saved these settings after you opened them');
   assert.match(unknown.note, /Load the settings again/);
+});
+
+test('the overview greets by first name only when the sign-in name gives one', () => {
+  assert.equal(greeting(9, 'Ertugrul Balveren'), 'Good morning, Ertugrul');
+  assert.equal(greeting(15, 'anna.berger@contoso.example'), 'Good afternoon, Anna');
+  assert.equal(greeting(15, 'x@contoso.example'), 'Good afternoon');
+  assert.equal(greeting(20, ''), 'Good evening');
+  assert.equal(greeting(11, 'Anna'), 'Good morning, Anna');
+  assert.equal(greeting(12, 'Anna'), 'Good afternoon, Anna');
+  assert.equal(greeting(18, 'Anna'), 'Good evening, Anna');
+});
+
+test('the overview names the weekday and the German date', () => {
+  assert.equal(dayLine(new Date(2026, 10, 18, 16, 24)), 'WEDNESDAY 18.11.2026');
+  assert.equal(dayLine(new Date(2027, 0, 3)), 'SUNDAY 03.01.2027');
 });

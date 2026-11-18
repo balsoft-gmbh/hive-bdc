@@ -3,7 +3,7 @@
 // between shows board W6 instead of being overwritten.
 import { postBody } from './logic.js';
 import * as X from './exportlogic.js';
-import { el, put, save } from './ui.js';
+import { el, put, save, trail } from './ui.js';
 export const state = { draft: null, original: null, version: null, savedAt: '', keys: new Map(), ui: {}, targets: [] };
 
 export function sync(config) {
@@ -23,10 +23,7 @@ export const go = (hash) => { if (window.location.hash === hash) window.dispatch
 
 // ── shared parts ─────────────────────────────────────────────────────────────────────
 
-export function crumbs(...items) {
-  return el('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' },
-    items.flatMap((item, i) => [i > 0 ? ' › ' : null, item.href ? el('a', { href: item.href, text: item.text }) : el('span', { text: item.text })]));
-}
+export const crumbs = (...items) => trail(...items);
 
 export function badge() {
   return el('span', { class: 'badge-export', text: 'EXPORT' });

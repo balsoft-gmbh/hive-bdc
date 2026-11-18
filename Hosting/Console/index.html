@@ -12,21 +12,24 @@
 <div class="layout">
   <nav class="nav" aria-label="Hive BDC">
     <div class="brand">
-      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2l10.4 6v12L14 26 3.6 20V8z" fill="#FCB608"/><path d="M14 9l5.2 3v6L14 21l-5.2-3v-6z" fill="#0F172A"/></svg>
-      <span class="brand-text"><span class="brand-name">Hive BDC</span><span class="brand-sub">in Azure</span></span>
+      <img class="brand-logo" src="/console/logo.svg" alt="Balsoft" width="112" height="32">
+      <span class="brand-product">HIVE BDC</span>
     </div>
+    <div id="instance-card" class="instance-card"></div>
     <div id="nav-links" class="nav-links"></div>
-    <div id="service-box" class="service-box"></div>
+    <div class="nav-foot">
+      <div id="service-box" class="service-box"></div>
+      <div class="profile">
+        <span id="user-initials" class="avatar" aria-hidden="true"></span>
+        <span class="profile-text"><strong id="user-name"></strong><span id="user-role"></span></span>
+        <a id="sign-out" class="sign-out" href="/.auth/logout" aria-label="Sign out" title="Sign out"></a>
+      </div>
+    </div>
   </nav>
   <div class="content">
     <header class="topbar">
-      <span id="instance" class="muted"></span>
-      <span class="user">
-        <span id="user-initials" class="avatar" aria-hidden="true"></span>
-        <span id="user-name"></span>
-        <span id="user-role" class="role"></span>
-        <a href="/.auth/logout">Sign out</a>
-      </span>
+      <div id="crumbs" class="topbar-crumbs"></div>
+      <span id="instance" class="topbar-right"></span>
     </header>
     <main id="view" class="view" tabindex="-1" aria-live="polite">
       <p class="muted">Loading</p>

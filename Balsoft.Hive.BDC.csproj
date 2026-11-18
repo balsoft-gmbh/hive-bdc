@@ -30,7 +30,7 @@
 
   <ItemGroup>
     <!-- The web console of an Azure instance; Hosting/ConsoleFiles.cs serves exactly these names. -->
-    <EmbeddedResource Include="Hosting\Console\*.html;Hosting\Console\*.css;Hosting\Console\*.js">
+    <EmbeddedResource Include="Hosting\Console\*.html;Hosting\Console\*.css;Hosting\Console\*.js;Hosting\Console\*.svg;Hosting\Console\*.ttf;Hosting\Console\*.txt">
       <LogicalName>Balsoft.Hive.BDC.Console.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <None Remove="Hosting\Console\**" />

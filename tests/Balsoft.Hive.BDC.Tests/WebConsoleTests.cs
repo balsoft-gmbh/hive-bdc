@@ -120,6 +120,37 @@ public sealed class WebConsoleTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, answer.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/console/logo.svg", "image/svg+xml")]
+    [InlineData("/console/dm-sans.ttf", "font/ttf")]
+    [InlineData("/console/manrope.ttf", "font/ttf")]
+    [InlineData("/console/dm-sans-OFL.txt", "text/plain")]
+    [InlineData("/console/manrope-OFL.txt", "text/plain")]
+    public async Task TheLogoTheFontsAndTheirLicencesComeFromTheInstance(string path, string type)
+    {
+        using var answer = await Get(path, Principal(ApiRoles.Viewer));
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.Equal(type, answer.Content.Headers.ContentType?.MediaType);
+        Assert.True((await answer.Content.ReadAsByteArrayAsync()).Length > 1000);
+    }
+
+    [Fact]
+    public void NothingOfThePageLoadsFromOutsideTheInstance()
+    {
+        string css = ConsoleFiles.Text("app.css");
+        Assert.DoesNotMatch(new Regex(@"url\(\s*(?!['""]?/console/)", RegexOptions.IgnoreCase), css);
+        Assert.DoesNotMatch(new Regex(@"@import", RegexOptions.IgnoreCase), css);
+        Assert.Contains("url(\"/console/dm-sans.ttf\")", css);
+        Assert.Contains("url(\"/console/manrope.ttf\")", css);
+        string page = ConsoleFiles.Text("index.html");
+        foreach (Match m in Regex.Matches(page, @"\b(?:src|href)\s*=\s*""([^""]*)""", RegexOptions.IgnoreCase))
+        {
+            string target = m.Groups[1].Value;
+            Assert.True(target.StartsWith("/console/", StringComparison.Ordinal) || target.StartsWith('#') || target == "/.auth/logout", $"index.html loads {target}");
+        }
+        Assert.DoesNotContain("<script", ConsoleFiles.Text("logo.svg"), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task MeNamesTheUserAndTheRoles()
     {

@@ -23,6 +23,20 @@ export function initials(name) {
   return (first + last).toUpperCase();
 }
 
+/** "Good afternoon, Anna": the first name from a display name or from "anna.berger@...", nothing for "x@...". */
+export function greeting(hour, name) {
+  const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const first = String(name || '').split('@')[0].split(/[\s._-]+/).find((p) => /^[\p{L}]{2,}$/u.test(p)) || '';
+  return first ? `${part}, ${first.charAt(0).toUpperCase()}${first.slice(1)}` : part;
+}
+
+/** "WEDNESDAY 18.11.2026" above the overview's greeting. */
+export function dayLine(date) {
+  const two = (n) => String(n).padStart(2, '0');
+  const weekday = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][date.getDay()];
+  return `${weekday} ${two(date.getDate())}.${two(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+
 const stepWords = {
   received: 'Received',
   read: 'Read',
