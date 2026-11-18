@@ -346,4 +346,15 @@ public sealed class ServiceBusTests : IDisposable
         bare.Settings["Namespace"] = "sb-test.servicebus.windows.net";
         Assert.Empty(bare.Problems());
     }
+
+    [Fact]
+    public void ACheckWithoutManageRightsNamesTheKeyOrTheIdentityThatSignedIn()
+    {
+        var key = new ConnectionOptions { Id = "fo-bus", Kind = "servicebus", Secret = "a stored connection string" };
+        var identity = new ConnectionOptions { Id = "fo-bus", Kind = "servicebus", Settings = { ["Namespace"] = "sb-test.servicebus.windows.net" } };
+
+        Assert.Contains("This key may only send or receive", ServiceBusConnectionKind.LimitedAccess(key));
+        Assert.Contains("This identity may only send or receive", ServiceBusConnectionKind.LimitedAccess(identity));
+        Assert.DoesNotContain("key", ServiceBusConnectionKind.LimitedAccess(identity));
+    }
 }

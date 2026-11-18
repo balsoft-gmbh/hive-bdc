@@ -258,11 +258,18 @@ public sealed class ServiceBusConnectionKind : IConnectionKind
         }
         catch (UnauthorizedAccessException)
         {
-            return "Reached the namespace. This key may only send or receive, which is all Hive BDC needs.";
+            return LimitedAccess(connection);
         }
         catch (Exception ex) when (ex is ServiceBusException or AuthenticationFailedException or FormatException or ArgumentException)
         {
             throw new ConnectorException("Service Bus refused the sign-in: " + ex.Message.Split('\n')[0], retryLater: false);
         }
     }
+
+    /// <summary>The check's answer when the namespace is reached without manage rights: a connection string signs in
+    /// with its key, a namespace alone with the managed identity, as <see cref="AzureServiceBus.Administration"/> picks.</summary>
+    public static string LimitedAccess(ConnectionOptions connection)
+        => connection.Secret.Length > 0
+            ? "Reached the namespace. This key may only send or receive, which is all Hive BDC needs."
+            : "Reached the namespace. This identity may only send or receive, which is all Hive BDC needs.";
 }
