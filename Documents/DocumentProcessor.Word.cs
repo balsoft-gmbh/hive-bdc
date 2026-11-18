@@ -54,6 +54,7 @@ public sealed partial class DocumentProcessor
 
                 Directory.CreateDirectory(folder.WorkDir);
                 File.WriteAllText(workJson, invoice.Json.ToJsonString(WorkJson), new UTF8Encoding(false));
+                string fontNote = "";
                 if (siblingPdf is not null)
                 {
                     EnsureReadable(siblingPdf);
@@ -70,6 +71,8 @@ public sealed partial class DocumentProcessor
                     foreach (var font in rendered.MissingFonts)
                         _log.LogWarning("[{Tag}] {File}: font '{Font}' is not installed on this server; {Fallback} is used in the PDF.",
                             tag, name, font, SystemFontResolver.FallbackFamily);
+                    if (rendered.MissingFonts.Count > 0)
+                        fontNote = $" Fonts not on this server, drawn with {SystemFontResolver.FallbackFamily} metrics: {string.Join(", ", rendered.MissingFonts)}.";
                     File.WriteAllBytes(workPdf, rendered.Pdf);
                 }
                 _log.LogInformation("[{Tag}] {File}: read {Fields} field(s), {Lines} line(s); {Format}; totals net {Net} VAT {Tax} gross {Gross}.",
@@ -78,7 +81,7 @@ public sealed partial class DocumentProcessor
 
                 Note(docx, documentId, EventSteps.Read, EventStates.Ok,
                     $"Read the Word document: {invoice.Fields.Count} field(s), {invoice.Lines.Count} line(s); " +
-                    (siblingPdf is not null ? $"the PDF saved with it ({Path.GetFileName(siblingPdf)}) is used." : "the PDF was made by Hive BDC."));
+                    (siblingPdf is not null ? $"the PDF saved with it ({Path.GetFileName(siblingPdf)}) is used." : "the PDF was made by Hive BDC.") + fontNote);
                 var pair = ProcessPair(opts, folder, license, workJson, workPdf, documentId, uploader, mailer, "word", docx);
                 if (pair.Held > 0)
                 {

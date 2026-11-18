@@ -200,6 +200,37 @@ public sealed class WordIntakeTests : IDisposable
         Assert.Equal(InputFormats.Json, unknown.InputFormat);
     }
 
+    [Fact]
+    public void FontNotOnTheServerIsNamedInTheHistory()
+    {
+        byte[] docx = WordTestDocuments.Build(WordTestDocuments.Filled());
+        using (var ms = new MemoryStream())
+        {
+            ms.Write(docx);
+            using (var doc = WordprocessingDocument.Open(ms, true))
+            {
+                doc.MainDocumentPart!.Document!.Body!.InsertAt(new Paragraph(new Run(
+                    new RunProperties(new RunFonts { Ascii = "Hive Missing Sans", HighAnsi = "Hive Missing Sans" }),
+                    new Text("Vielen Dank"))), 0);
+                doc.MainDocumentPart.Document.Save();
+            }
+            docx = ms.ToArray();
+        }
+        Drop("schrift.docx", bytes: docx);
+        Assert.Equal(1, Scan().Processed);
+        var read = _ledger.Events("schrift", 50).Single(e => e.Step == EventSteps.Read && e.Message.StartsWith("Read the Word"));
+        Assert.Contains("Fonts not on this server, drawn with Arial metrics: Hive Missing Sans.", read.Message);
+    }
+
+    [Fact]
+    public void InstalledFontsLeaveTheHistoryNoteAsItWas()
+    {
+        Drop("normal.docx");
+        Assert.Equal(1, Scan().Processed);
+        var read = _ledger.Events("normal", 50).Single(e => e.Step == EventSteps.Read && e.Message.StartsWith("Read the Word"));
+        Assert.DoesNotContain("Fonts not on this server", read.Message);
+    }
+
     private static byte[] AddTextBox(byte[] docx)
     {
         using var ms = new MemoryStream();

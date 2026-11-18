@@ -213,9 +213,12 @@ cent, or the document is not converted.
 its own renderer (PDFsharp): page size and margins, header and footer, paragraphs with tab stops and line spacing,
 tables including nested tables, merged cells, borders and shading, inline images, content controls, `PAGE` and
 `NUMPAGES`. Text boxes, shapes, floating images, text columns, lists and embedded objects are not drawn: such a
-document goes to `error\` unless a PDF is saved with it. Fonts come from the server's font folder; a font that is not
-installed is replaced by Arial and logged. Word's AutoFit column widths are not recalculated; the table grid stored in
-the document is used.
+document goes to `error\` unless a PDF is saved with it. Fonts come from the server's font folder. Where Arial,
+Helvetica, Times New Roman, Times, Courier New, Courier, Calibri or Cambria is not installed (an Azure instance runs on
+Linux), Hive BDC uses the free font with the same character widths that it carries inside the service (Liberation
+Sans, Serif and Mono, Carlito, Caladea), so lines and pages break as in Word. Any other font that is not installed is
+replaced by Arial (or its twin), logged and named in the document history. Word's AutoFit column widths are not
+recalculated; the table grid stored in the document is used.
 
 **Folders.** A Word file is read once it is closed and has not changed for 10 seconds; Word's `~$` lock files are
 skipped. The `.docx`, the JSON read from it and the PDF move together to `processed\` or `error\`. A failed file gets

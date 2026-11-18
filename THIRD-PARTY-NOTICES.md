@@ -25,6 +25,9 @@ grant for these components.
 | ASP.NET Core runtime (bundled, self-contained build) | 10.0 | the service's local API (Kestrel) | Copyright (c) .NET Foundation and Contributors | MIT, plus its own third-party notices: https://github.com/dotnet/aspnetcore/blob/main/THIRD-PARTY-NOTICES.txt |
 | DM Sans | variable, from the Balsoft web apps | text font of the Azure web console | Copyright 2014 The DM Sans Project Authors | SIL Open Font License 1.1 |
 | Manrope | variable, from the Balsoft web apps | heading font of the Azure web console | Copyright 2018 The Manrope Project Authors | SIL Open Font License 1.1 |
+| Liberation Sans, Liberation Serif, Liberation Mono | 2.1.5 (liberation-fonts-ttf-2.1.5.tar.gz, github.com/liberationfonts/liberation-fonts) | Word to PDF where Arial, Times New Roman or Courier New is not installed | Digitized data copyright (c) 2010 Google Corporation with Reserved Font Arimo, Tinos and Cousine; Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name Liberation | SIL Open Font License 1.1 |
+| Carlito | google/fonts ofl/carlito | Word to PDF where Calibri is not installed | Copyright 2013 The Carlito Project Authors, with Reserved Font Name "Carlito" | SIL Open Font License 1.1 |
+| Caladea | 1.002 (crosextrafonts-20130214.tar.gz, Chrome OS mirror; the later OFL release on Google Fonts no longer has Cambria's widths) | Word to PDF where Cambria is not installed | Copyright (c) 2012 Huerta Tipografia | Apache-2.0 |
 
 Build and test tools that are not shipped (validators, test frameworks, signing
 tools) are not listed.
@@ -34,6 +37,32 @@ tools) are not listed.
 The fonts DM Sans and Manrope ship inside the service with their full licence texts,
 `Hosting/Console/dm-sans-OFL.txt` and `Hosting/Console/manrope-OFL.txt`, which an Azure
 instance also serves at `/console/dm-sans-OFL.txt` and `/console/manrope-OFL.txt`.
+
+The fonts Liberation Sans, Serif and Mono and Carlito ship unmodified inside the service
+with their full licence texts, `Documents/Word/Fonts/liberation-OFL.txt` and
+`carlito-OFL.txt`; Caladea (Apache-2.0, below) ships with `caladea-Apache-2.0.txt`.
+SHA-256 of the shipped font files:
+
+- `Caladea-Bold.ttf` 74eda4fc5ffba0d8dc4aa76d41499f5ab76168d9ed6141c6417064c6244db9b6
+- `Caladea-BoldItalic.ttf` f47a35ad6cd0efa9914d93f9d03c93e30c55da43674bccfabac73b3c0d522c01
+- `Caladea-Italic.ttf` 9c968bf60ba1e851cdfea77c71e3540c57792f77482dd241acc29d1425569c4e
+- `Caladea-Regular.ttf` d2f6cad33f191e65b68bd74e6d4f7708080a41b32db635866109df3090265d91
+- `Carlito-Bold.ttf` bb5d20f79b82599ec72983597437373a80f2d2085fa91fc144fd74e876a594db
+- `Carlito-BoldItalic.ttf` b32928186c119599e03ca6a1ffc680fdcb7fac95772f4b95d989cf6cd3861517
+- `Carlito-Italic.ttf` 0b019225e58d702bfedcbd35c21696769f8ee115cb6343f84c2f240312450d1c
+- `Carlito-Regular.ttf` f6418f708baede9789daef5d458c0f53d2a888af9820e8062934e504fedc6595
+- `LiberationMono-Bold.ttf` bd62a0672d0b9b6710b01df434c80ad54fa5f0835207eb7b17b7a761463067bb
+- `LiberationMono-BoldItalic.ttf` 79451f3c09fe25116098853b7a2ca6e2436220ccc11af022979adbcf195be130
+- `LiberationMono-Italic.ttf` 605c01c711b44480a7508d349dfbf3264e81fa43d69e61cfa7d10b86e764c4d1
+- `LiberationMono-Regular.ttf` f2b83c763e8afd21709333370bed4774337fae82267937e2b5aea7e2fbd922c1
+- `LiberationSans-Bold.ttf` 788abee4c806d660e8aee46689dd8540cd4bb98da03dcc9d171ce3efd99a9173
+- `LiberationSans-BoldItalic.ttf` 698da70fc191cc5f33ad4d6d3fe830fe4624b898ea2e3169955928b7c491f1ee
+- `LiberationSans-Italic.ttf` e5bae5c4cde31f22142753855f4f8fb86da6ff39955ed3c0a11248b0d16948b0
+- `LiberationSans-Regular.ttf` 76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8
+- `LiberationSerif-Bold.ttf` d754ba427cfe0bca54ae052384baa8f842da5bd6550ad4da024ac441e7a7d5ce
+- `LiberationSerif-BoldItalic.ttf` f17db8af71e24d2066b587546021d4f0b296be389512b658dec3c09affeb11a7
+- `LiberationSerif-Italic.ttf` 0e3dea9f8d613e006ccfa62201f33e265d19167bd0907725c3e145368b04fc2e
+- `LiberationSerif-Regular.ttf` 058ea80864aef09a23f45cbec2bb5400bc3dfbdea01c3f10538a21fcb497fb74
 
 ## MIT License
 

@@ -6,10 +6,12 @@ using PdfSharp.Fonts;
 namespace Balsoft.Hive.BDC.Documents.Word;
 
 /// <summary>
-/// PDFsharp font resolver over the machine's installed TrueType fonts (Windows, macOS, Linux folders). Each file is
-/// indexed by the family and style its own 'name' and 'head' tables declare, so "Arial" bold finds arialbd.ttf on
-/// Windows and "Arial Bold.ttf" on macOS. A family that is not installed falls back to Arial (then to any font) and
-/// is recorded in <see cref="MissingFamilies"/>.
+/// PDFsharp font resolver over the machine's installed TrueType fonts (Windows, macOS, Linux folders), then the fonts
+/// the service brings (Liberation, Carlito, Caladea). Each file is indexed by the family and style its own 'name' and
+/// 'head' tables declare, so "Arial" bold finds arialbd.ttf on Windows and "Arial Bold.ttf" on macOS. An installed
+/// font always wins. An Office font that is not installed is drawn with its metric twin (same widths, so the same line
+/// and page breaks) and is not reported; any other missing family falls back to Arial or its twin and is recorded in
+/// <see cref="MissingFamilies"/>.
 /// </summary>
 public sealed class SystemFontResolver : IFontResolver
 {
@@ -23,6 +25,19 @@ public sealed class SystemFontResolver : IFontResolver
 
     public const string FallbackFamily = "Arial";
 
+    private const string EmbeddedPrefix = "Balsoft.Hive.BDC.Fonts.";
+    private const string EmbeddedFace = "embedded:";
+
+    // Office family -> free family with the same advance widths (Liberation 2.1.5 and Carlito, OFL 1.1; Caladea 1.002 of
+    // 2013, Apache 2.0, as the later OFL Caladea no longer has Cambria's widths).
+    private static readonly Dictionary<string, string> Twins = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Arial"] = "Liberation Sans", ["Helvetica"] = "Liberation Sans",
+        ["Times New Roman"] = "Liberation Serif", ["Times"] = "Liberation Serif",
+        ["Courier New"] = "Liberation Mono", ["Courier"] = "Liberation Mono",
+        ["Calibri"] = "Carlito", ["Cambria"] = "Caladea",
+    };
+
     /// <summary>The folders searched, in order.</summary>
     public IReadOnlyList<string> Folders { get; }
 
@@ -31,7 +46,7 @@ public sealed class SystemFontResolver : IFontResolver
     /// <summary>Families a document asked for that are not installed (rendered with the fallback).</summary>
     public IReadOnlyCollection<string> MissingFamilies { get { lock (_missing) return _missing.ToArray(); } }
 
-    private SystemFontResolver(IReadOnlyList<string> folders)
+    private SystemFontResolver(IReadOnlyList<string> folders, bool embedded)
     {
         Folders = folders;
         foreach (var dir in folders.Where(Directory.Exists))
@@ -40,13 +55,26 @@ public sealed class SystemFontResolver : IFontResolver
             try { files = Directory.EnumerateFiles(dir, "*.ttf", SearchOption.AllDirectories).ToList(); }
             catch (Exception) { continue; }
             foreach (var file in files)
-            {
-                if (!TryReadNames(file, out var family, out int style)) continue;
-                if (!_index.TryGetValue(family, out var styles)) _index[family] = styles = new Dictionary<int, string>();
-                styles.TryAdd(style, file);
-            }
+                if (TryReadNames(file, out var family, out int style)) Add(family, style, file);
+        }
+        if (!embedded) return;
+        var assembly = typeof(SystemFontResolver).Assembly;
+        foreach (var resource in assembly.GetManifestResourceNames().Where(n => n.StartsWith(EmbeddedPrefix, StringComparison.Ordinal)
+                     && n.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal))
+        {
+            using var stream = assembly.GetManifestResourceStream(resource);
+            if (stream is not null && TryReadNames(stream, out var family, out int style)) Add(family, style, EmbeddedFace + resource);
         }
     }
+
+    private void Add(string family, int style, string face)
+    {
+        if (!_index.TryGetValue(family, out var styles)) _index[family] = styles = new Dictionary<int, string>();
+        styles.TryAdd(style, face);
+    }
+
+    /// <summary>A resolver over these folders and, when asked, the fonts the service brings; not registered with PDFsharp.</summary>
+    internal static SystemFontResolver Create(IReadOnlyList<string> folders, bool embedded) => new(folders, embedded);
 
     /// <summary>Registers the resolver with PDFsharp once per process and returns it.</summary>
     public static SystemFontResolver Install()
@@ -54,7 +82,7 @@ public sealed class SystemFontResolver : IFontResolver
         lock (Gate)
         {
             if (_installed is not null) return _installed;
-            var resolver = new SystemFontResolver(DefaultFolders());
+            var resolver = new SystemFontResolver(DefaultFolders(), embedded: true);
             if (GlobalFontSettings.FontResolver is null) GlobalFontSettings.FontResolver = resolver;
             return _installed = resolver;
         }
@@ -83,16 +111,24 @@ public sealed class SystemFontResolver : IFontResolver
         return dirs.Where(d => !string.IsNullOrWhiteSpace(d)).Distinct().ToList();
     }
 
-    public bool Has(string family) => _index.ContainsKey(family);
+    /// <summary>True when the family is drawn as asked: installed, or by its metric twin.</summary>
+    public bool Has(string family) => Draws(family) is not null;
+
+    /// <summary>The family whose files draw this one: itself, its metric twin, or null when neither is there.</summary>
+    public string? Draws(string family)
+    {
+        if (_index.ContainsKey(family)) return family;
+        return Twins.TryGetValue(family, out var twin) && _index.ContainsKey(twin) ? twin : null;
+    }
 
     public FontResolverInfo? ResolveTypeface(string familyName, bool bold, bool italic)
     {
-        string family = familyName;
-        if (!_index.ContainsKey(family))
+        string? family = Draws(familyName);
+        if (family is null)
         {
             lock (_missing) _missing.Add(familyName);
-            family = _index.ContainsKey(FallbackFamily) ? FallbackFamily : _index.Keys.FirstOrDefault() ?? "";
-            if (family.Length == 0) return null;
+            family = Draws(FallbackFamily) ?? _index.Keys.FirstOrDefault();
+            if (family is null) return null;
         }
         var styles = _index[family];
         int want = (bold ? 1 : 0) | (italic ? 2 : 0);
@@ -110,9 +146,20 @@ public sealed class SystemFontResolver : IFontResolver
         lock (_bytes)
         {
             if (!_bytes.TryGetValue(faceName, out var data))
-                _bytes[faceName] = data = File.ReadAllBytes(faceName);
+                _bytes[faceName] = data = faceName.StartsWith(EmbeddedFace, StringComparison.Ordinal)
+                    ? ReadEmbedded(faceName[EmbeddedFace.Length..])
+                    : File.ReadAllBytes(faceName);
             return data;
         }
+    }
+
+    private static byte[] ReadEmbedded(string resource)
+    {
+        using var stream = typeof(SystemFontResolver).Assembly.GetManifestResourceStream(resource)
+            ?? throw new FileNotFoundException("Font resource not found: " + resource);
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
     }
 
     /// <summary>Family (name id 1) and style (head.macStyle bold/italic) of a TrueType file; false for anything else.</summary>
@@ -123,6 +170,21 @@ public sealed class SystemFontResolver : IFontResolver
         try
         {
             using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return TryReadNames(fs, out family, out style);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The same for a seekable stream.</summary>
+    internal static bool TryReadNames(Stream fs, out string family, out int style)
+    {
+        family = "";
+        style = 0;
+        try
+        {
             byte[] head = ReadAt(fs, 0, 12);
             uint version = BinaryPrimitives.ReadUInt32BigEndian(head);
             if (version != 0x00010000 && version != 0x74727565) return false;   // TrueType outlines only
@@ -170,7 +232,7 @@ public sealed class SystemFontResolver : IFontResolver
         }
     }
 
-    private static byte[] ReadAt(FileStream fs, long offset, int length)
+    private static byte[] ReadAt(Stream fs, long offset, int length)
     {
         if (length < 0 || offset + length > fs.Length) throw new EndOfStreamException();
         var buffer = new byte[length];

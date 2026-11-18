@@ -37,6 +37,11 @@
       <LogicalName>Balsoft.Hive.BDC.Console.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <None Remove="Hosting\Console\**" />
+    <!-- Metric twins of the Office fonts for Word to PDF where they are not installed (Linux App Service). -->
+    <EmbeddedResource Include="Documents\Word\Fonts\*.ttf;Documents\Word\Fonts\*.txt">
+      <LogicalName>Balsoft.Hive.BDC.Fonts.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <None Remove="Documents\Word\Fonts\**" />
     <!-- The public half of Balsoft's update key; a build without it never updates itself (design part 15b). -->
     <EmbeddedResource Include="$(UpdateKeyFile)" Condition="'$(UpdateKeyFile)' != '' And Exists('$(UpdateKeyFile)')">
       <LogicalName>Balsoft.Hive.BDC.update-key.pem</LogicalName>
