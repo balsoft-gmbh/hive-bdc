@@ -159,11 +159,14 @@ public sealed class WebConsoleTests : IAsyncLifetime
                 Assert.DoesNotMatch(new Regex(@"\sstyle\s*=", RegexOptions.IgnoreCase), text);
             }
         }
-        // replaceChildren prints "null" for a skipped element; only put() calls it, after dropping empty children.
-        Assert.Single(Regex.Matches(ConsoleFiles.Text("app.js"), @"\.replaceChildren\("));
-        Assert.Contains("index.html", ConsoleFiles.Names);
-        Assert.Contains("app.js", ConsoleFiles.Names);
-        Assert.Contains("logic.js", ConsoleFiles.Names);
-        Assert.Contains("app.css", ConsoleFiles.Names);
+        // replaceChildren prints "null" for a skipped element; only put() in ui.js calls it, after dropping empty children.
+        var calls = ConsoleFiles.Names.Where(n => n.EndsWith(".js", StringComparison.Ordinal))
+            .SelectMany(n => Regex.Matches(ConsoleFiles.Text(n), @"\.replaceChildren\(").Select(_ => n)).ToList();
+        Assert.Equal(new[] { "ui.js" }, calls);
+        foreach (var name in new[] { "index.html", "app.js", "logic.js", "ui.js", "setup.js", "app.css" })
+            Assert.Contains(name, ConsoleFiles.Names);
+        // The page sets styles only through classes: an inline style is refused by the Content Security Policy.
+        foreach (var name in ConsoleFiles.Names.Where(n => n.EndsWith(".js", StringComparison.Ordinal)))
+            Assert.DoesNotMatch(new Regex(@"['""]style['""]\s*:|\.style\b|setAttribute\(\s*['""]style"), ConsoleFiles.Text(name));
     }
 }

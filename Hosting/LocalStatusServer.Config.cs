@@ -117,6 +117,7 @@ public sealed partial class LocalStatusServer
                         settings = x.Settings,
                         fields = x.Fields,
                     }).ToArray(),
+                    source = r.Source is null ? null : new { kind = r.Source.Kind, connection = r.Source.Connection, settings = r.Source.Settings },
                 }).ToArray(),
             }).ToArray(),
             version,

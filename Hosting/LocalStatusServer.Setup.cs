@@ -107,6 +107,7 @@ public sealed partial class LocalStatusServer
         {
             objectId,
             tenantId,
+            inputRoot = objectId is null ? null : RunModes.AzureInputRoot,
             message = objectId is null ? "Only an Azure instance has an identity of its own." : "",
         });
     }
@@ -139,11 +140,17 @@ public sealed partial class LocalStatusServer
                 .Where(n => !n.StartsWith(processed, StringComparison.Ordinal) && !n.StartsWith(error, StringComparison.Ordinal))
                 .Where(n => !n.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            var byCompany = exports.Take(CompaniesRead)
-                .Select(n => CompanyOf(store.Download(n)))
-                .GroupBy(c => c, StringComparer.OrdinalIgnoreCase)
+            var read = exports.Take(CompaniesRead).Select(n => ExportOf(store.Download(n))).ToList();
+            var byCompany = read
+                .GroupBy(e => e.Company, StringComparer.OrdinalIgnoreCase)
                 .Select(g => new { company = g.Key, count = g.Count() })
                 .OrderByDescending(g => g.count).ThenBy(g => g.company, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var byType = read
+                .GroupBy(e => e.Type + "\u0001" + e.Company, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { documentType = g.First().Type, company = g.First().Company, count = g.Count() })
+                .OrderByDescending(g => g.count).ThenBy(g => g.company, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(g => g.documentType, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             string waiting = exports.Count switch
             {
@@ -153,13 +160,14 @@ public sealed partial class LocalStatusServer
             };
             string detail = byCompany.Length == 0 ? "" : ": " + string.Join(", ", byCompany.Select((c, i) =>
                 i == 0 ? $"{c.count} for company {c.company}" : $"{c.count} for {c.company}"));
-            string read = exports.Count > CompaniesRead ? $" (companies of the first {CompaniesRead})" : "";
+            string sample = exports.Count > CompaniesRead ? $" (companies of the first {CompaniesRead})" : "";
             Respond(call, 200, new
             {
                 ok = true,
-                message = exports.Count == 0 ? "Access works. " + waiting : $"Access works. {waiting}{detail}{read}.",
+                message = exports.Count == 0 ? "Access works. " + waiting : $"Access works. {waiting}{detail}{sample}.",
                 waiting = exports.Count,
                 byCompany,
+                byType,
                 command,
             });
         }
@@ -174,7 +182,7 @@ public sealed partial class LocalStatusServer
                 _ => $"The storage account answered {ex.Status} ({ex.ErrorCode}).",
             };
             _log.LogInformation("Setup check of {Account}/{Container}: {Status} {Code}.", ForLog(account.Host), ForLog(container), ex.Status, ex.ErrorCode);
-            Respond(call, 200, new { ok = false, message, waiting = 0, byCompany = Array.Empty<object>(), command });
+            Respond(call, 200, new { ok = false, message, waiting = 0, byCompany = Array.Empty<object>(), byType = Array.Empty<object>(), command });
         }
         catch (Exception ex) when (ex is AggregateException or HttpRequestException or AuthenticationFailedException or FormatException or ArgumentException)
         {
@@ -182,23 +190,26 @@ public sealed partial class LocalStatusServer
                 ? "The connection string cannot be read. Copy it again from the account's Access keys."
                 : $"{account.Host} cannot be reached from this instance. Check the address.";
             _log.LogInformation("Setup check of {Account}/{Container} failed: {Kind}.", ForLog(account.Host), ForLog(container), ex.GetType().Name);
-            Respond(call, 200, new { ok = false, message, waiting = 0, byCompany = Array.Empty<object>(), command });
+            Respond(call, 200, new { ok = false, message, waiting = 0, byCompany = Array.Empty<object>(), byType = Array.Empty<object>(), command });
         }
     }
 
-    /// <summary>The company an export names ("dataAreaId" in any case), or "unknown" when it cannot be read.</summary>
-    private static string CompanyOf(byte[] json)
+    /// <summary>The document type and company an export names ("documentType", "dataAreaId" in any case), "unknown" for what cannot be read.</summary>
+    private static (string Type, string Company) ExportOf(byte[] json)
     {
+        string type = "unknown", company = "unknown";
         try
         {
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind == JsonValueKind.Object)
                 foreach (var property in doc.RootElement.EnumerateObject())
-                    if (string.Equals(property.Name, "dataAreaId", StringComparison.OrdinalIgnoreCase)
-                        && property.Value.ValueKind == JsonValueKind.String && property.Value.GetString() is { Length: > 0 } company)
-                        return company;
+                {
+                    if (property.Value.ValueKind != JsonValueKind.String || property.Value.GetString() is not { Length: > 0 } value) continue;
+                    if (string.Equals(property.Name, "dataAreaId", StringComparison.OrdinalIgnoreCase)) company = value;
+                    else if (string.Equals(property.Name, "documentType", StringComparison.OrdinalIgnoreCase)) type = value;
+                }
         }
         catch (JsonException) { /* not an export */ }
-        return "unknown";
+        return (type, company);
     }
 }

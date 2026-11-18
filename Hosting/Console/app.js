@@ -1,60 +1,10 @@
 // The web console of a Hive BDC instance in Azure. Every element is built with createElement and every value set with
-// textContent or setAttribute, so nothing read from the settings or the history can become markup (failure case 52).
-import { attentionRows, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole } from './logic.js';
+// textContent or setAttribute (ui.js), so nothing read from the settings or the history can become markup (failure case 52).
+import { attentionRows, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
+import { setupPage } from './setup.js';
+import { api, el, notice, put } from './ui.js';
 
-const state = { me: null, status: null };
-
-function el(tag, attrs, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs || {})) {
-    if (value === null || value === undefined || value === false) continue;
-    if (key === 'on') {
-      for (const [event, handler] of Object.entries(value)) node.addEventListener(event, handler);
-    } else if (key === 'text') {
-      node.textContent = String(value);
-    } else if (value === true) {
-      node.setAttribute(key, '');
-    } else {
-      node.setAttribute(key, String(value));
-    }
-  }
-  for (const child of children.flat()) {
-    if (child === null || child === undefined || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
-  return node;
-}
-
-function put(node, ...children) {
-  node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
-}
-
-async function api(path, options) {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (response.status === 401) {
-    // The App Service session ended: a reload goes through the sign-in again.
-    window.location.reload();
-    throw new Error('Signed out');
-  }
-  const text = await response.text();
-  let body = null;
-  try { body = text ? JSON.parse(text) : null; } catch { body = { error: text }; }
-  if (!response.ok) {
-    const error = new Error((body && (body.error || body.message)) || `The service answered ${response.status}.`);
-    error.status = response.status;
-    error.body = body;
-    throw error;
-  }
-  return body;
-}
-
-function notice(kind, text, ...extra) {
-  return el('div', { class: `notice notice-${kind}`, role: kind === 'error' ? 'alert' : 'status' }, el('span', { text }), ...extra);
-}
+const state = { me: null, status: null, config: null };
 
 // ── shell ──────────────────────────────────────────────────────────────────────────
 
@@ -63,10 +13,20 @@ const pages = [
   { id: 'history', label: 'Document history' },
 ];
 
-function renderShell() {
+/** While the set-up is not finished only the assistant opens; the other pages are shown greyed (board W1). */
+function renderNav(setup) {
   const nav = document.getElementById('nav-links');
-  put(nav, ...pages.map((p) => el('a', { href: `#/${p.id}`, 'data-page': p.id, text: p.label })));
+  if (setup) {
+    put(nav,
+      el('a', { href: '#/setup', 'data-page': 'setup', text: 'Set up' }),
+      pages.map((p) => el('span', { class: 'nav-off', text: p.label })),
+      el('p', { class: 'nav-note', text: 'The other pages open when Hive BDC is started at the end of the set-up.' }));
+  } else {
+    put(nav, ...pages.map((p) => el('a', { href: `#/${p.id}`, 'data-page': p.id, text: p.label })));
+  }
+}
 
+function renderShell() {
   const me = state.me;
   document.getElementById('instance').textContent = `${window.location.hostname.split('.')[0]} · version ${me.version}`;
   document.getElementById('user-initials').textContent = initials(me.name);
@@ -84,8 +44,11 @@ function markCurrent(page) {
 function renderServiceBox() {
   const box = document.getElementById('service-box');
   const line = licenceLine(state.status && state.status.license);
+  const running = Boolean(state.status && state.status.running);
+  const paused = running && Boolean(state.config && state.config.paused);
   put(box,
-    el('span', { class: 'service-state' }, el('span', { class: state.status && state.status.running ? 'dot dot-ok' : 'dot dot-off', 'aria-hidden': 'true' }), state.status && state.status.running ? 'Running' : 'Stopped'),
+    el('span', { class: 'service-state' }, el('span', { class: running && !paused ? 'dot dot-ok' : 'dot dot-off', 'aria-hidden': 'true' }),
+      paused ? 'Paused until the set-up is finished' : running ? 'Running' : 'Stopped'),
     el('span', { class: line.ok ? 'service-licence' : 'service-licence service-licence-warn', text: line.text }),
   );
 }
@@ -171,21 +134,33 @@ const renderers = { overview: overviewPage, history: historyPage };
 
 async function show() {
   const route = parseRoute(window.location.hash);
-  const render = renderers[route.page] || overviewPage;
-  const page = renderers[route.page] ? route.page : 'overview';
-  markCurrent(page);
   const view = document.getElementById('view');
   view.setAttribute('aria-busy', 'true');
   try {
-    state.status = await api('/status');
+    [state.status, state.config] = await Promise.all([api('/status'), api('/config')]);
     renderServiceBox();
-    await render(view, route);
+    const setup = setupNeeded(state.config);
+    renderNav(setup);
+    if (setup) {
+      markCurrent('setup');
+      await setupPage(view, route, { me: state.me, status: state.status, config: state.config, started });
+      return;
+    }
+    const page = renderers[route.page] ? route.page : 'overview';
+    markCurrent(page);
+    await renderers[page](view, route);
   } catch (error) {
     put(view, notice('error', error.message));
   } finally {
     view.removeAttribute('aria-busy');
     view.focus();
   }
+}
+
+/** Start was pressed: the normal pages open on the overview. */
+function started() {
+  if (window.location.hash === '#/overview') show();
+  else window.location.hash = '#/overview';
 }
 
 async function start() {

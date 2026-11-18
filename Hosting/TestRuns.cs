@@ -80,6 +80,9 @@ public sealed class TestRuns
 /// </summary>
 public static class TestRun
 {
+    /// <summary>The subfolder of the entry's staging folder a test run works in.</summary>
+    public const string Folder = ".test-run";
+
     public static TestRunResult Execute(BDCOptions opts, string documentType, string company, BlobStager blobs,
         Func<BDCOptions, DocumentProcessor.ScanResult> scan, ILogger log)
     {
@@ -90,21 +93,25 @@ public static class TestRun
         if (route.Source is not { Kind: "blob" })
             return new TestRunResult(false, null, "A test run takes its export from Blob Storage, and this company gets its documents another way. Press Start and follow the document history.");
 
-        var one = Only(opts, type, route);
-        string? id = blobs.StageOne(one, route, out var problem);
+        // Its own staging folder: the entry's folder may hold pairs of other companies, which the narrowed scan must
+        // not see (failure case 60).
+        var test = JsonSerializer.Deserialize<DocumentRoute>(JsonSerializer.Serialize(route))!;
+        test.Input = Path.Combine(route.Input, Folder);
+        var one = Only(opts, type, test);
+        string? id = blobs.StageOne(one, test, type.Id, route.DataAreaId, out var problem);
         if (id is null)
             return new TestRunResult(false, null, problem ?? $"No export is waiting for {Name(type)} of company {route.DataAreaId}.");
 
         log.LogInformation("Test run of {Type} {Company}: {Id}.", type.Id, route.DataAreaId, id);
         scan(one);
         string staged = BlobStager.StagedJson(id);
-        if (File.Exists(Path.Combine(route.Input, "processed", staged)))
+        if (File.Exists(Path.Combine(test.Input, "processed", staged)))
         {
-            blobs.SettleRoute(one, route);
+            blobs.SettleRoute(one, test);
             return new TestRunResult(true, id, "Done. The export went through every step.");
         }
-        bool failed = File.Exists(Path.Combine(route.Input, "error", staged));
-        blobs.Abandon(route, id);
+        bool failed = File.Exists(Path.Combine(test.Input, "error", staged));
+        blobs.Abandon(test, id);
         return new TestRunResult(false, id, failed
             ? "A step failed, so the export stays where it was. The steps below name the reason."
             : "The document is waiting, so the export stays where it was. The steps below name the reason.");

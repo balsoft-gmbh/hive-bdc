@@ -6,6 +6,9 @@ public static class RunModes
     public const string Local = "local";
     public const string Azure = "azure";
 
+    /// <summary>Where an Azure instance stages what its sources bring in: App Service storage that survives a restart.</summary>
+    public const string AzureInputRoot = "/home/data/hivebdc/in";
+
     public static string Clean(string? mode) => string.IsNullOrWhiteSpace(mode) ? Local : mode.Trim().ToLowerInvariant();
 }
 

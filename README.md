@@ -975,6 +975,20 @@ service takes no document (`POST /setup/pause`, `POST /setup/start`); `POST
 through every step and answers with its steps. A success is settled as usual; a failed or
 waiting run leaves the export where it was in the container.
 
+The console opens on the set-up assistant while the settings say `Paused` or no outbound
+company takes documents from a source; the other pages stay grey until Start. Its four
+steps: the licence; the container F&O writes to (account, container, an optional folder in
+it, access through the instance's identity or a connection string), saved after the check
+as one company entry per waiting company of the document type with the most waiting
+exports, all staging into one folder per container under `/home/data/hivebdc/in` (other
+waiting types wait until they are added); where those documents go (every destination
+kind the service reports, plus mail once a mailbox is set up, with the connection made on
+the spot when it is missing); and the test run with Start. The check also counts per
+document type (`byType`), `GET /setup/identity` names the staging root (`inputRoot`), and
+`GET /config` names each company's `source`. A test run takes only an export whose JSON
+names that type and company, and works in the `.test-run` subfolder of the staging folder,
+so other waiting pairs there are not touched.
+
 #### Installing in Azure (managed application)
 
 `deploy/azure/` holds the Azure Application offer: `main.bicep` (built into

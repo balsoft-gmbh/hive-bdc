@@ -38,10 +38,11 @@ public sealed partial class BlobStager
     public static string StagedJson(string id) => id + StagedSuffix + ".json";
 
     /// <summary>
-    /// Stages only the first waiting export of one company (a test run, failure case 56) and returns its id, or null with
-    /// the reason when none can be staged.
+    /// Stages only the first waiting export of one document type and company (a test run, failure cases 56 and 59) and
+    /// returns its id, or null with the reason when none can be staged. Exports of other types or companies in the same
+    /// container stay untouched.
     /// </summary>
-    public string? StageOne(BDCOptions opts, DocumentRoute route, out string? problem)
+    public string? StageOne(BDCOptions opts, DocumentRoute route, string documentType, string company, out string? problem)
     {
         problem = null;
         var source = route.Source;
@@ -51,7 +52,35 @@ public sealed partial class BlobStager
             return null;
         }
         Settle(opts, route);
-        return Stage(opts, route, limit: 1).FirstOrDefault();
+        return Stage(opts, route, limit: 1, accept: json => ExportIsFor(json, documentType, company)).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Whether an export names this document type and company. A field the export does not carry does not exclude it;
+    /// anything that is not a JSON object is not an export.
+    /// </summary>
+    public static bool ExportIsFor(byte[] json, string documentType, string company)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (property.Value.ValueKind != JsonValueKind.String) continue;
+                string value = property.Value.GetString() ?? "";
+                if (string.Equals(property.Name, "documentType", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (value.Length > 0 && !string.Equals(value, documentType, StringComparison.OrdinalIgnoreCase)) return false;
+                }
+                else if (string.Equals(property.Name, "dataAreaId", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (value.Length > 0 && !string.Equals(value, company, StringComparison.OrdinalIgnoreCase)) return false;
+                }
+            }
+            return true;
+        }
+        catch (JsonException) { return false; }
     }
 
     /// <summary>Moves the blobs of the pairs the pipeline finished with, for one company, without staging new ones.</summary>
@@ -87,7 +116,7 @@ public sealed partial class BlobStager
             }
     }
 
-    private List<string> Stage(BDCOptions opts, DocumentRoute route, int limit = int.MaxValue)
+    private List<string> Stage(BDCOptions opts, DocumentRoute route, int limit = int.MaxValue, Func<byte[], bool>? accept = null)
     {
         var stagedIds = new List<string>();
         var source = route.Source!;
@@ -116,6 +145,7 @@ public sealed partial class BlobStager
                 continue;
 
             byte[] json = store.Download(name);
+            if (accept is not null && !accept(json)) continue;
             string? pdf = PdfFor(store, name, json, all, out var refused);
             if (refused is not null)
             {

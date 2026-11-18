@@ -119,6 +119,52 @@ public sealed class TestRunTests : IDisposable
         Assert.True(_store.Exists("processed/RE-1"));
     }
 
+    private void Export(string id, string type, string company)
+    {
+        _store.Blobs[id] = Encoding.UTF8.GetBytes($$"""{ "documentType": "{{type}}", "dataAreaId": "{{company}}", "documentNumber": "{{id}}" }""");
+        _store.Blobs[id + ".pdf"] = Encoding.UTF8.GetBytes("%PDF");
+    }
+
+    [Fact]
+    public void ASharedContainerGivesOnlyAnExportOfTheRequestedTypeAndCompany()
+    {
+        Export("A-1", "SalesInvoice", "DEMF");
+        Export("B-1", "SalesConfirmation", "1000");
+        Export("C-1", "SalesInvoice", "1000");
+        var result = TestRun.Execute(Options(), "SalesInvoice", "1000", Stager(), Scan("processed"), NullLogger.Instance);
+        Assert.True(result.Ok);
+        Assert.Equal("C-1", result.DocumentId);
+        Assert.True(_store.Exists("processed/C-1"));
+        Assert.True(_store.Exists("A-1"));
+        Assert.True(_store.Exists("B-1"));
+        Assert.True(_store.Exists("A-1.pdf"));
+    }
+
+    [Fact]
+    public void OnlyOtherTypesAndCompaniesWaitingIsSaid()
+    {
+        Export("A-1", "SalesInvoice", "DEMF");
+        var result = TestRun.Execute(Options(), "SalesInvoice", "1000", Stager(), Scan("processed"), NullLogger.Instance);
+        Assert.False(result.Ok);
+        Assert.Null(result.DocumentId);
+        Assert.Contains("No export is waiting", result.Message);
+        Assert.True(_store.Exists("A-1"));
+    }
+
+    [Fact]
+    public void OtherPairsInTheSharedStagingFolderAreNotTouched()
+    {
+        Directory.CreateDirectory(Input);
+        File.WriteAllText(Path.Combine(Input, "X-1_blob.json"), """{ "documentType": "SalesInvoice", "dataAreaId": "DEMF" }""");
+        Export("C-1", "SalesInvoice", "1000");
+        var seen = new List<int>();
+        var result = TestRun.Execute(Options(), "SalesInvoice", "1000", Stager(), Scan("processed", seen), NullLogger.Instance);
+        Assert.True(result.Ok);
+        Assert.Equal(new[] { 1 }, seen);
+        Assert.True(File.Exists(Path.Combine(Input, "X-1_blob.json")));
+        Assert.False(File.Exists(Path.Combine(Input, "processed", "X-1_blob.json")));
+    }
+
     [Fact]
     public void NothingWaitingIsSaid()
     {

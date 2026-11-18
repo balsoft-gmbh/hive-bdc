@@ -122,6 +122,49 @@ public sealed class SetupApiTests : IDisposable
     }
 
     [Fact]
+    public async Task TheCheckAlsoCountsPerDocumentTypeAndCompany()
+    {
+        var exports = new Dictionary<string, string>
+        {
+            ["A"] = """{ "documentType": "SalesInvoice", "dataAreaId": "1000" }""",
+            ["B"] = """{ "DocumentType": "salesinvoice", "dataAreaId": "1000" }""",
+            ["C"] = """{ "documentType": "SalesConfirmation", "dataAreaId": "1000" }""",
+            ["D"] = """{ "documentType": "SalesInvoice", "dataAreaId": "DEMF" }""",
+            ["E"] = """{ "dataAreaId": "DEMF" }""",
+        };
+        var (_, body, _) = await Call(Api(Instance(), (_, _, _) => new Store(exports)), "POST", "/setup/check-source",
+            new { accountUrl = "https://stcustomerfo.blob.core.windows.net", container = "bdc-export" });
+        var types = body["byType"]!.AsArray().Select(t => $"{t!["documentType"]}/{t["company"]}:{t["count"]}").ToArray();
+        Assert.Equal(new[] { "SalesInvoice/1000:2", "SalesConfirmation/1000:1", "SalesInvoice/DEMF:1", "unknown/DEMF:1" }, types);
+    }
+
+    [Fact]
+    public async Task AnAzureInstanceNamesWhereSourcesAreStaged()
+    {
+        var (_, azure, _) = await Call(Api(Instance(), (_, _, _) => new Store(new())), "GET", "/setup/identity");
+        Assert.Equal("/home/data/hivebdc/in", azure["inputRoot"]!.GetValue<string>());
+        var (_, local, _) = await Call(Api(new SettingsLicenseTenant(), (_, _, _) => new Store(new())), "GET", "/setup/identity");
+        Assert.Null(local["inputRoot"]);
+    }
+
+    [Fact]
+    public async Task TheSettingsNameEachCompanysSource()
+    {
+        _settings.Put("""
+            { "HiveBDC": { "PollSeconds": 30, "DocumentTypes": [ { "Id": "SalesInvoice", "Party": "Customer", "Handler": "Pdf",
+              "Companies": [ { "DataAreaId": "1000", "Input": "/home/data/hivebdc/in/fo",
+                "Source": { "Kind": "blob", "Connection": "fo-storage", "Settings": { "Container": "bdc-export" } } },
+                { "DataAreaId": "DEMF", "Input": "/home/data/hivebdc/https" } ] } ] } }
+            """);
+        var (_, body, _) = await Call(Api(Instance(), (_, _, _) => new Store(new())), "GET", "/config");
+        var companies = body["documentTypes"]![0]!["companies"]!.AsArray();
+        Assert.Equal("blob", companies[0]!["source"]!["kind"]!.GetValue<string>());
+        Assert.Equal("fo-storage", companies[0]!["source"]!["connection"]!.GetValue<string>());
+        Assert.Equal("bdc-export", companies[0]!["source"]!["settings"]!["Container"]!.GetValue<string>());
+        Assert.Null(companies[1]!["source"]);
+    }
+
+    [Fact]
     public async Task NoAccessYetNamesTheCommandToRun()
     {
         var api = Api(Instance(), (_, _, _) => new Store(new())
