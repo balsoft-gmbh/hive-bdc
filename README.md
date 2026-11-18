@@ -963,6 +963,14 @@ only those files are served, every value is set as text, and the Content Securit
 Policy allows no inline script and no framing. `GET /me` names the signed-in user and
 roles. Pure console logic is tested with `node --test tests/console/*.test.mjs`.
 
+Settings saved from the console carry the version `GET /config` gave: when someone else
+saved in between, the save is refused (409) with who saved and what each side changed,
+and `saveBoth` keeps both when they changed different settings. A refused save stores
+no secret. For the setup assistant, `GET /setup/identity` names the instance's own
+identity and `POST /setup/check-source` checks that it can read the container F&O
+writes to (waiting exports per company, or the role command for your IT); a check
+stores nothing.
+
 #### Installing in Azure (managed application)
 
 `deploy/azure/` holds the Azure Application offer: `main.bicep` (built into

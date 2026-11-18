@@ -64,8 +64,10 @@ public sealed class InstanceTenant : ILicenseTenant
             }
             try
             {
-                _tenant = TenantOfToken(_accessToken())
+                string token = _accessToken();
+                _tenant = TenantOfToken(token)
                           ?? throw new InvalidOperationException("the access token of this instance names no tenant");
+                ObjectId = ClaimOfToken(token, "oid");
                 _lastFailure = null;
                 (tenant, problem) = (_tenant, null);
                 return true;
@@ -79,8 +81,17 @@ public sealed class InstanceTenant : ILicenseTenant
         }
     }
 
+    /// <summary>
+    /// The object id of the instance's own identity ("oid" of the same token), known once the tenant is: what a customer's
+    /// IT grants a role on a storage account they own (setup assistant, failure case 55).
+    /// </summary>
+    public string? ObjectId { get; private set; }
+
     /// <summary>The "tid" claim of a JWT access token (payload only, no signature check: the token is our own).</summary>
-    public static string? TenantOfToken(string jwt)
+    public static string? TenantOfToken(string jwt) => ClaimOfToken(jwt, "tid");
+
+    /// <summary>A GUID claim of a JWT access token, or null.</summary>
+    public static string? ClaimOfToken(string jwt, string claim)
     {
         var parts = jwt.Split('.');
         if (parts.Length != 3) return null;
@@ -90,10 +101,10 @@ public sealed class InstanceTenant : ILicenseTenant
             payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
             using var doc = JsonDocument.Parse(Convert.FromBase64String(payload));
             return doc.RootElement.ValueKind == JsonValueKind.Object
-                   && doc.RootElement.TryGetProperty("tid", out var tid)
-                   && tid.ValueKind == JsonValueKind.String
-                   && Guid.TryParse(tid.GetString(), out _)
-                ? tid.GetString()
+                   && doc.RootElement.TryGetProperty(claim, out var value)
+                   && value.ValueKind == JsonValueKind.String
+                   && Guid.TryParse(value.GetString(), out _)
+                ? value.GetString()
                 : null;
         }
         catch (Exception ex) when (ex is FormatException or JsonException)
