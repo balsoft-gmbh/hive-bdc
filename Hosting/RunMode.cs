@@ -37,6 +37,9 @@ public sealed class AzureRunOptions
 
     /// <summary>How often the settings blob is checked for a change.</summary>
     public int SettingsPollSeconds { get; set; } = 15;
+
+    /// <summary>The update feed; empty means Balsoft's public feed. A test instance names a test feed here.</summary>
+    public string UpdateFeed { get; set; } = "";
 }
 
 /// <summary>

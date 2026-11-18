@@ -908,6 +908,7 @@ The same program runs as an Azure web app. The deployment sets, as app settings:
 | `HiveBDC__Azure__KeyVaultUrl` | `https://{vault}.vault.azure.net`; every secret in the settings is then `kv:{secret name}` |
 | `HiveBDC__Azure__SettingsBlobUrl` | `https://{account}.blob.core.windows.net/{container}/{name}.json`; the settings of the instance, in place of the package's `appsettings.json` |
 | `HiveBDC__Azure__SettingsPollSeconds` | how often the settings blob is checked for a change, default 15 (at least 5) |
+| `HiveBDC__Azure__UpdateFeed` | the update feed, default Balsoft's public feed; a test instance names a test feed here |
 
 The settings blob has the same shape as `appsettings.json` (section `HiveBDC`). The
 service checks its ETag every poll interval and reloads it when it changed. A
@@ -1028,6 +1029,41 @@ also names `timeZone` and `region`), and the last 200 lines of the technical log
 filter for warnings and a download. A pause from here keeps the console's pages: only the
 set-up assistant marks its own pause (`SetupOpen` in the settings, `setupOpen` in
 `GET /config`), and Start ends both.
+
+#### Updates in Azure
+
+An Azure instance updates itself from the feed; Balsoft needs no access to it. Once a day
+after 06:00 instance time, and on "Look now", it reads `azure/latest.json` below the feed
+(Balsoft's public feed, or the address in `HiveBDC__Azure__UpdateFeed`; a query on that
+address, such as a read-only SAS of a private mirror, stays on it and is added to package
+addresses on the same host). The entry (at most 64 KB) counts only when its `entrySignature`
+verifies with the update key built into the instance; nothing of an unsigned entry is shown.
+A newer version shows on the overview and under Service > Updates (without package address
+or signatures); an Administrator starts it at once or plans it for 22:00. The instance then
+downloads the ZIP into `/home/data/SitePackages` (stopped after 3 minutes or beyond the size
+the entry names), checks size, SHA-256 and the RSA signature, checks that the package names
+the same version, runtime and update key fingerprint, backs up the settings to
+`/home/data/hivebdc/updates/backups`, names the new ZIP in `packagename.txt` and ends its
+process; App Service starts the named package, which takes 2 to 4 minutes with about 2
+minutes without an answer. Documents wait in their source meanwhile.
+
+Update, return, plan, cancel and check run one at a time. The web start (no command-line
+arguments) of a new version counts its starts before anything else runs. When it does not start
+properly three times, or is not healthy within 10 minutes (settings readable, licence
+valid, Table Storage answering), it names the previous ZIP again and ends, so the instance
+returns by itself. A healthy start keeps only the current and the previous ZIP; "Return to
+{version}" goes back with one click and keeps the settings. A stop before the switch changes
+nothing and says which step stopped. The state lives in
+`/home/data/hivebdc/updates/state.json`; `GET /service/updates` shows it, and
+`POST /service/updates/{check|run|schedule|cancel|return}` need the role Administrator.
+A build without `Hosting/update-key.pem` never updates itself and says so.
+
+Releases: `deploy/azure/package.sh` writes `azure/hivebdc-app-{version}.zip` (with the key
+fingerprint in its `hivebdc-package.json`) and `azure/latest.json` without signatures;
+`build/sign-azure-package.ps1` signs the ZIP and the entry on the signing host with the update
+key in Google Cloud KMS (`balsoft-update-rsa3072`, HSM), after checking the fingerprint
+against KMS; the ZIP goes to the feed before `latest.json`. `Hosting/update-key.pem` is the
+public half of that key; `SelfUpdateTests` checks it against a signature KMS made.
 
 #### Installing in Azure (managed application)
 

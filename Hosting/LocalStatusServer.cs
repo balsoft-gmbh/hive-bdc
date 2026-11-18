@@ -147,6 +147,11 @@ public sealed partial class LocalStatusServer : BackgroundService
     {
         try
         {
+            if (call.Path == "/service/updates" || call.Path.StartsWith("/service/updates/", StringComparison.Ordinal))
+            {
+                await RouteUpdates(call);
+                return;
+            }
             switch ((call.Method, call.Path))
             {
                 case ("GET", "/status"): Respond(call, 200, Status()); return;

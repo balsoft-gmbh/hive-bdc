@@ -6,8 +6,10 @@ import { exportPage } from './export.js';
 import { servicePage } from './service.js';
 import { setupPage } from './setup.js';
 import { api, el, icon, notice, put, trail } from './ui.js';
+import { updateBadge } from './updatelogic.js';
+import { updateNotice } from './updates.js';
 
-const state = { me: null, status: null, config: null };
+const state = { me: null, status: null, config: null, updates: null };
 
 // ── shell ──────────────────────────────────────────────────────────────────────────
 
@@ -21,7 +23,9 @@ const instanceName = () => window.location.hostname.split('.')[0];
 /** While the set-up is not finished only the assistant opens; the other pages are shown greyed (board W1). */
 function renderNav(setup) {
   const nav = document.getElementById('nav-links');
-  const link = (p) => el('a', { class: 'nav-link', href: `#/${p.id}`, 'data-page': p.id }, icon(p.id, 'nav-icon'), el('span', { text: p.label }));
+  const count = updateBadge(state.updates);
+  const link = (p) => el('a', { class: 'nav-link', href: `#/${p.id}`, 'data-page': p.id }, icon(p.id, 'nav-icon'), el('span', { text: p.label }),
+    p.id === 'service' && count ? el('span', { class: 'nav-count', 'aria-label': 'Update available', text: count }) : null);
   if (setup) {
     put(nav,
       el('div', { class: 'nav-label', text: 'SET UP' }),
@@ -97,6 +101,7 @@ async function overviewPage(view) {
     el('div', { class: 'page-head-row' },
       el('div', { class: 'page-head' }, el('div', { class: 'eyebrow', text: dayLine(now) }), el('h1', { text: greeting(now.getHours(), state.me.name) })),
       el('span', { class: 'muted small', text: `As of ${now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` })),
+    updateNotice(state.updates, { me: state.me }),
     licence.ok ? null : notice('warn', state.status.license && state.status.license.message ? state.status.license.message : licence.text),
     cards,
     list,
@@ -160,7 +165,7 @@ const renderers = {
   history: historyPage,
   export: (view, route) => exportPage(view, route, { me: state.me, status: state.status, config: state.config }),
   connections: (view, route) => connectionsPage(view, route, { me: state.me, status: state.status, config: state.config }),
-  service: (view, route) => servicePage(view, route, { me: state.me, status: state.status, config: state.config }),
+  service: (view, route) => servicePage(view, route, { me: state.me, status: state.status, config: state.config, updates: state.updates }),
 };
 
 async function show() {
@@ -168,7 +173,7 @@ async function show() {
   const view = document.getElementById('view');
   view.setAttribute('aria-busy', 'true');
   try {
-    [state.status, state.config] = await Promise.all([api('/status'), api('/config')]);
+    [state.status, state.config, state.updates] = await Promise.all([api('/status'), api('/config'), api('/service/updates').catch(() => null)]);
     renderServiceBox();
     renderInstanceCard();
     const setup = setupNeeded(state.config);

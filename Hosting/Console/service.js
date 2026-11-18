@@ -3,11 +3,14 @@
 import { featureWords, germanDate, licenceNote, licenceWorks, sourceEntries, typeWords } from './logic.js';
 import { runCard } from './setup.js';
 import { api, chip, el, lock, notice, put } from './ui.js';
+import { updateBadge } from './updatelogic.js';
+import { serviceTabs, updatesPage } from './updates.js';
 
 const ui = { onlyWarnings: false };
 const warning = /\b(WRN|ERR|FTL|WARN|ERROR|FATAL|Warning|Error)\b/;
 
 export async function servicePage(view, route, ctx) {
+  if (route.parts[0] === 'updates') return updatesPage(view, route, ctx);
   const [identity, logs] = await Promise.all([api('/setup/identity'), api('/logs?tail=200')]);
   const config = ctx.config;
   const licence = (ctx.status && ctx.status.license) || {};
@@ -69,8 +72,9 @@ export async function servicePage(view, route, ctx) {
   const fact = (label, value, extra) => el('div', { class: 'cell' }, el('span', { class: 'cell-label', text: label }), el('strong', { class: 'fact', text: value || 'unknown' }), extra || null);
 
   put(view,
-    el('div', { class: 'page-head' }, el('h1', { text: 'Service' }),
-      el('p', { class: 'muted', text: 'The instance itself: whether it takes documents, its licence, and what it writes into its log.' })),
+    el('div', { class: 'page-head' }, el('div', { class: 'eyebrow', text: 'SERVICE' }), el('h1', { text: 'This instance' }),
+      el('p', { class: 'muted', text: 'Whether it takes documents, its licence, its version and what it writes into its log.' })),
+    serviceTabs('status', updateBadge(ctx.updates)),
     message,
     el('div', { class: 'grid-2 grid-top' },
       el('section', { class: 'card stack', 'aria-labelledby': 'run-h' },
@@ -89,7 +93,7 @@ export async function servicePage(view, route, ctx) {
         el('div', { class: 'inline edit-only' }, el('label', { for: 'service-lic', text: 'Renewal or another file:' }), file),
         licenceResult)),
     el('section', { class: 'card stack', 'aria-labelledby': 'inst-h' },
-      el('h2', { id: 'inst-h', text: 'This instance' }),
+      el('h2', { id: 'inst-h', text: 'Version and identity' }),
       el('div', { class: 'grid-4 grid-top' },
         fact('Version', ctx.me.version),
         fact('Region', identity.region),

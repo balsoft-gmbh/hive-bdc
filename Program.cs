@@ -30,6 +30,13 @@ using Serilog;
 // A "HiveDocFlow" section (appsettings.json copied over from Hive DocFlow) is honored with a
 // warning and migrated on the first dashboard save.
 
+// An Azure instance whose new package does not start properly goes back to the previous one by itself (design part 15b,
+// failure case 86); this runs before anything else can fail. App Service starts the web process without arguments; a
+// command run over SSH has arguments and must not count as a start.
+if (args.Length == 0 && UpdatePlaces.ForAzure() is { } startPlaces
+    && SelfUpdate.Guard(startPlaces, System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0", TimeProvider.System) == StartGuard.Exit)
+    return 1;
+
 bool Has(string flag) => args.Any(a => a.Equals(flag, StringComparison.OrdinalIgnoreCase));
 
 bool makeSample = Has("--make-sample");
@@ -213,7 +220,19 @@ else
         sp.GetRequiredService<IStateStore>(),
         sp.GetRequiredService<ILogger<LocalStatusServer>>(),
         resolvedLogDir, appVersion, settingsPath, settings: settingsDocument, licenseStore: licenseStore, licenseTenant: licenseTenant)
-        { TestRuns = testRuns });
+        { TestRuns = testRuns, Updates = sp.GetService<SelfUpdate>() });
+    if (UpdatePlaces.ForAzure() is { } updatePlaces)
+    {
+        string feedUrl = string.IsNullOrWhiteSpace(azureRun.UpdateFeed) ? HttpUpdateFeed.DefaultBaseUrl : azureRun.UpdateFeed.Trim();
+        builder.Services.AddSingleton(sp => new SelfUpdate(updatePlaces,
+            new HttpUpdateFeed(new HttpClient { Timeout = TimeSpan.FromMinutes(10) }, feedUrl), appVersion, UpdateKey.Load(),
+            () => settingsDocument.ReadSection()?.ToJsonString(), UpdateHealth.EndProcess, TimeProvider.System,
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger("Update")));
+        builder.Services.AddSingleton<IHostedService>(sp => new UpdateRunner(sp.GetRequiredService<SelfUpdate>(),
+            _ => Task.FromResult(UpdateHealth.Lines(sp.GetRequiredService<IOptionsMonitor<BDCOptions>>().CurrentValue,
+                settingsDocument, licenseStore, licenseTenant, sp.GetRequiredService<IStateStore>())),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger("Update")));
+    }
     builder.Services.AddSingleton<IHostedService>(sp => new AzureWebHost(
         sp.GetRequiredService<LocalStatusServer>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("AzureWebHost"), appVersion, azureTenant,
         options: () =>

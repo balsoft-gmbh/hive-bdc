@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <UpdateKeyFile Condition="'$(UpdateKeyFile)' == ''">$(MSBuildThisFileDirectory)Hosting/update-key.pem</UpdateKeyFile>
+  </PropertyGroup>
+  <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -34,6 +37,10 @@
       <LogicalName>Balsoft.Hive.BDC.Console.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <None Remove="Hosting\Console\**" />
+    <!-- The public half of Balsoft's update key; a build without it never updates itself (design part 15b). -->
+    <EmbeddedResource Include="$(UpdateKeyFile)" Condition="'$(UpdateKeyFile)' != '' And Exists('$(UpdateKeyFile)')">
+      <LogicalName>Balsoft.Hive.BDC.update-key.pem</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

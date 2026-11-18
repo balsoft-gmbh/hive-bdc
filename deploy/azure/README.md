@@ -7,7 +7,8 @@
 | `createUiDefinition.json` | The installation wizard: sign-in client ID and plan size. |
 | `bicepconfig.json` | Linter rules (recent API versions, no secrets in outputs, artifacts parameters). |
 | `test-template.sh` | Bicep build and linter, arm-ttk, the sign-in script parse and `DeploymentTemplateTests`. |
-| `package.sh` | Runs the tests, publishes the service and writes `dist/hivebdc-azure-{version}.zip`. |
+| `package.sh` | Runs the tests, publishes the service with the update key and writes `dist/hivebdc-azure-{version}.zip`, plus the self-update package `dist/azure/hivebdc-app-{version}.zip` and its unsigned `dist/azure/latest.json`. It stops without `Hosting/update-key.pem` and without changelog notes for the version. `UPDATE_KEY_FILE` builds with a test key instead (files end in `-test`, never released); `UPDATE_FEED_URL` sets the address in `latest.json`. |
+| `../../build/sign-azure-package.ps1` | On the signing host: checks that the package carries the fingerprint of the KMS update key, signs the package and the feed entry (text from `build/azure-update-statement.ps1`) with that key and writes both signatures into `latest.json` once they verify. |
 
 Managed applications accept ARM language version 1.0 only, so `main.bicep` uses no Bicep
 feature that needs 2.0 (the tests fail if the build has a `languageVersion`).
