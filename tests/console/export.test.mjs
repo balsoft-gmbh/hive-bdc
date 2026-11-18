@@ -294,3 +294,33 @@ test('a storage connection names the containers it is used with, and users read 
   assert.equal(X.usesWords(['a', 'b']), 'Used by a and b');
   assert.equal(X.usesWords(['a', 'b', 'c', 'd']), 'Used by a, b and 2 more');
 });
+
+test('a Service Bus destination needs a queue or a topic before Save', async () => {
+  const { saveProblems } = await import('../../Hosting/Console/exportlogic.js');
+  const cfg = config();
+  let body = addCompany(postBody(cfg), 'SalesInvoice', 'DEMF');
+  body = setSource(body, 'SalesInvoice', 'DEMF', { kind: 'servicebus', connection: 'sb', settings: { Queue: 'fo-out' } }, root);
+  body = addDestination(body, 'SalesInvoice', 'DEMF', 'servicebus', 'sb');
+  const target = (b) => b.documentTypes.find((t) => t.id === 'SalesInvoice').companies.find((c) => c.dataAreaId === 'DEMF').targets[0];
+  const busNames = /give a queue or a topic/;
+  assert.ok(saveProblems(body, cfg).some((p) => busNames.test(p)));
+  target(body).settings = { Topic: 'back-to-fo' };
+  assert.ok(!saveProblems(body, cfg).some((p) => busNames.test(p)));
+  target(body).settings = { Queue: 'back-to-fo' };
+  assert.deepEqual(saveProblems(body, cfg), []);
+});
+
+test('the SharePoint app card says Key Vault only for a saved secret and why Test is off', async () => {
+  const { sharePointAppLine, sharePointTestBlock } = await import('../../Hosting/Console/exportlogic.js');
+  assert.match(sharePointAppLine({}, false), /The app your IT creates/);
+  const typed = { tenantId: 't', clientId: 'c', clientSecret: 'typed' };
+  for (const stored of [false, true]) {
+    assert.match(sharePointAppLine(typed, stored), /new secret goes to Key Vault when you save/);
+    assert.doesNotMatch(sharePointAppLine(typed, stored), /Secret in Key Vault\./);
+  }
+  assert.equal(sharePointAppLine({ tenantId: 't', clientId: 'c' }, true), 'Client c in tenant t. Secret in Key Vault.');
+  assert.match(sharePointAppLine({ tenantId: 't', clientId: 'c' }, false), /No secret yet/);
+  assert.equal(sharePointTestBlock(null, false), 'Add a SharePoint destination first.');
+  assert.equal(sharePointTestBlock({ siteUrl: 's', library: 'l' }, true), 'Save first.');
+  assert.equal(sharePointTestBlock({ siteUrl: 's', library: 'l' }, false), null);
+});

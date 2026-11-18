@@ -192,6 +192,36 @@ public sealed class SetupApiTests : IDisposable
         var (_, none, _) = await Call(api, "GET", "/export/sample?type=SalesInvoice&company=2000");
         Assert.Empty(none["fields"]!.AsObject());
         Assert.Contains("No document", none["message"]!.GetValue<string>());
+        Assert.Equal("RE-2.pdf", body["output"]!.GetValue<string>());
+        Assert.Equal("", none["output"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task TheSampleNamesTheFileTheLastDocumentBecame()
+    {
+        string input = Path.Combine(_root, "einvoice");
+        Directory.CreateDirectory(Path.Combine(input, "processed"));
+        File.WriteAllText(Path.Combine(input, "processed", "DEMF-7_sb.json"), """{ "documentType": "EInv", "dataAreaId": "demf", "invoiceNumber": "CIV-171", "eInvoiceType": "XRechnung" }""");
+        File.WriteAllText(Path.Combine(input, "processed", "Z-1_sb.json"), """{ "documentType": "EInv", "dataAreaId": "Z1", "invoiceNumber": "CIV-2", "eInvoiceType": "ZUGFeRD" }""");
+        File.WriteAllText(Path.Combine(input, "processed", "N-7_sb.json"), """{ "documentType": "EInv", "dataAreaId": "N1", "eInvoiceType": "XRechnung" }""");
+        var options = new BDCOptions();
+        options.DocumentTypes.Add(new DocumentTypeOptions
+        {
+            Id = "EInv", Handler = DocumentHandlerKind.EInvoice,
+            Companies =
+            {
+                new DocumentRoute { DataAreaId = "DEMF", Input = input }, new DocumentRoute { DataAreaId = "Z1", Input = input },
+                new DocumentRoute { DataAreaId = "N1", Input = input },
+            },
+        });
+        options.Normalize();
+        var api = Api(Instance(), (_, _, _) => new Store(new()), options);
+
+        foreach (var (company, expected) in new[] { ("DEMF", "CIV-171.xml"), ("Z1", "CIV-2.pdf"), ("N1", "N-7.xml") })
+        {
+            var (_, sample, _) = await Call(api, "GET", $"/export/sample?type=EInv&company={company}");
+            Assert.Equal(expected, sample["output"]!.GetValue<string>());
+        }
     }
 
     private static async Task<(int Status, JsonObject Body, string Text)> Call(LocalStatusServer api, string method, string path, object? body = null)

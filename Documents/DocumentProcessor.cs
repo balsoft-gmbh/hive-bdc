@@ -216,16 +216,19 @@ public sealed partial class DocumentProcessor
                         $"(Settings > Outbound > {type.EffectiveDisplayName} > Companies). Add that company; the pair remains pending.");
         var documentNumber = data.ResolveNumber(documentId);
         string area = company ?? route.DataAreaId;
+        // The history names the company as it is set up (F&O sends dataAreaId in lower case); the delivery key and the
+        // ledger keep the ERP's spelling, so a repeat still finds what it delivered before.
+        string shownArea = string.IsNullOrWhiteSpace(route.DataAreaId) ? area : route.DataAreaId;
 
         _log.LogInformation("[{Tag}] {Id}: parsed — documentType={Type} ({Handler}) company={Area} number={No}{EInv}",
-            tag, documentId, type.Id, type.Handler, area, documentNumber,
+            tag, documentId, type.Id, type.Handler, shownArea, documentNumber,
             type.Handler == DocumentHandlerKind.EInvoice
                 ? " eInvoiceType=" + (string.IsNullOrWhiteSpace(data.EInvoiceType) ? "(default->xrechnung)" : data.EInvoiceType)
                 : "");
         known.DocumentNumber = documentNumber;
-        known.DataAreaId = area;
+        known.DataAreaId = shownArea;
         Note(input, documentId, EventSteps.Read, EventStates.Ok,
-            $"Read as {type.EffectiveDisplayName} {documentNumber} for company {area}" +
+            $"Read as {type.EffectiveDisplayName} {documentNumber} for company {shownArea}" +
             (type.Handler == DocumentHandlerKind.EInvoice ? $", e-invoice format {(data.IsZugferd ? "ZUGFeRD" : "XRechnung")}." : "."));
 
         // ── 2. may it be processed? ───────────────────────────────────────

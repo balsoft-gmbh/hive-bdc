@@ -43,6 +43,11 @@ public static class OutputFileNames
         string stem = new string(chars).Trim().TrimEnd('.', ' ');
         return stem.Length == 0 ? documentId : stem;
     }
+
+    /// <summary>The file a document becomes: an e-invoice gives its XRechnung XML unless it is ZUGFeRD, everything else
+    /// a PDF, as <see cref="EInvoiceHandler"/> and <see cref="PdfHandler"/> write it.</summary>
+    public static string For(DocumentHandlerKind kind, AxDocument data, string documentId)
+        => Stem(data.ResolveNumber(documentId), documentId) + (kind == DocumentHandlerKind.EInvoice && !data.IsZugferd ? ".xml" : ".pdf");
 }
 
 /// <summary>What a handler produced: the file to deliver and a short format tag for the ledger ("xrechnung", "zugferd", "pdf").</summary>

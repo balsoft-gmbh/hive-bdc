@@ -361,9 +361,9 @@ async function destinationScreen(env, typeId, company, kind) {
   const folderLine = el('span', { class: 'muted small' });
   const paintFolder = () => {
     if (kind !== 'sharepoint') return;
-    const number = fields.documentNumber || fields.DocumentNumber || 'document';
+    const name = sample.output || `${fields.documentNumber || fields.DocumentNumber || 'document'}.pdf`;
     const place = [form.settings.Library, X.folderPreview(form.settings.Folder, fields)].filter(Boolean).join('/');
-    put(folderLine, Object.keys(fields).length ? `With the last document: ${place}/${number}.pdf` : sample.message);
+    put(folderLine, Object.keys(fields).length ? `With the last document: ${place}/${name}` : sample.message);
   };
 
   const settingControls = d.settings.map((s) => {

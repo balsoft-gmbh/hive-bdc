@@ -28,6 +28,8 @@ export async function connectionsPage(view, route, ctx) {
   const record = (id, answer) => { ui.tests[id] = { ok: Boolean(answer.ok), message: answer.message || '', at: now() }; rerender(); };
   const used = (uses) => el('span', { class: 'muted small', title: uses.join(', '), text: X.usesWords(uses) });
 
+  // A card being edited takes the whole row, so its form fields get their full width.
+  const cardClass = (tone, editing) => ['card', 'conn-card', tone, editing ? 'conn-card-editing' : ''].filter(Boolean).join(' ');
   const secretInput = (stored) => el('input', { type: 'password', class: 'input', autocomplete: 'off', placeholder: stored ? '(stored, leave empty to keep)' : '' });
 
   function connectionCard(c) {
@@ -86,7 +88,7 @@ export async function connectionsPage(view, route, ctx) {
     }
 
     const removing = ui.removing === c.id;
-    return el('article', { class: ui.tests[c.id] && !ui.tests[c.id].ok ? 'card conn-card conn-card-bad' : 'card conn-card' },
+    return el('article', { class: cardClass(ui.tests[c.id] && !ui.tests[c.id].ok ? 'conn-card-bad' : '', editing) },
       el('div', { class: 'section-head' }, el('strong', { class: 'conn-title', text: c.kind === 'https' ? `Key ${c.id}` : c.id }),
         c.kind === 'https' ? chip(stored || Boolean(c.secret), stored || c.secret ? 'Key stored' : 'No key yet') : testChip(c.id)),
       el('span', { class: 'muted small', text: c.kind === 'https' ? `Web address · ${X.connectionWords(c)}` : X.connectionWords(c) }),
@@ -132,15 +134,17 @@ export async function connectionsPage(view, route, ctx) {
             rerender();
           } } })));
     }
-    return el('article', { class: set ? 'card conn-card' : 'card conn-card conn-card-warn' },
+    const blocked = X.sharePointTestBlock(firstLibrary, changed);
+    return el('article', { class: cardClass(set ? '' : 'conn-card-warn', editing) },
       el('div', { class: 'section-head' }, el('strong', { class: 'conn-title', text: 'SharePoint app' }), set ? testChip('#sharepoint') : chip(false, 'Not set up')),
-      el('span', { class: 'muted small', text: set ? `Client ${app.clientId} in tenant ${app.tenantId}. Secret in Key Vault.` : 'The app your IT creates with the Balsoft script. Needed for SharePoint destinations and sources.' }),
+      el('span', { class: 'muted small', text: X.sharePointAppLine(app, stored) }),
       used(uses),
       testLine('#sharepoint'),
       form,
       el('div', { class: 'row-actions conn-actions' },
-        set ? el('button', { type: 'button', class: 'button edit-only', text: 'Test', disabled: !firstLibrary || changed, title: !firstLibrary ? 'Add a SharePoint destination first' : changed ? 'Save first' : null, on: { click: test } }) : null,
-        editing ? null : el('button', { type: 'button', class: set ? 'button edit-only' : 'button button-primary edit-only', text: set ? 'Edit' : 'Set up the SharePoint app', on: { click: () => { ui.editing = '#sharepoint'; rerender(); } } })));
+        set ? el('button', { type: 'button', class: 'button edit-only', text: 'Test', disabled: Boolean(blocked), on: { click: test } }) : null,
+        editing ? null : el('button', { type: 'button', class: set ? 'button edit-only' : 'button button-primary edit-only', text: set ? 'Edit' : 'Set up the SharePoint app', on: { click: () => { ui.editing = '#sharepoint'; rerender(); } } }),
+        set && blocked ? el('span', { class: 'muted small', text: blocked }) : null));
   }
 
   function mailCard() {
@@ -181,7 +185,7 @@ export async function connectionsPage(view, route, ctx) {
           } } })));
     }
     const set = Boolean(mail.enabled && mail.from);
-    return el('article', { class: set ? 'card conn-card' : 'card conn-card conn-card-warn' },
+    return el('article', { class: cardClass(set ? '' : 'conn-card-warn', editing) },
       el('div', { class: 'section-head' }, el('strong', { class: 'conn-title', text: 'Document mail' }), set ? testChip('#mail') : chip(false, 'Not set up')),
       el('span', { class: 'muted small', text: set ? `From ${mail.from}. Documents of a test ERP go to ${(mail.redirectTo || []).join(', ')}.` : 'Sends each document from a company mailbox. Your IT makes the mail app with the Balsoft script.' }),
       el('span', { class: wanting.length && !set ? 'warn-text small' : 'muted small', text: wanting.length ? `${wanting.length} ${wanting.length === 1 ? 'company wants' : 'companies want'} to mail` : 'No company mails yet' }),

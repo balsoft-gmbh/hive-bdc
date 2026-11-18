@@ -200,4 +200,11 @@ public sealed class WebConsoleTests : IAsyncLifetime
         foreach (var name in ConsoleFiles.Names.Where(n => n.EndsWith(".js", StringComparison.Ordinal)))
             Assert.DoesNotMatch(new Regex(@"['""]style['""]\s*:|\.style\b|setAttribute\(\s*['""]style"), ConsoleFiles.Text(name));
     }
+
+    [Fact]
+    public void AConnectionCardBeingEditedTakesTheWholeRow()
+    {
+        Assert.Matches(new Regex(@"\.conn-card-editing\s*\{\s*grid-column:\s*1\s*/\s*-1;"), ConsoleFiles.Text("app.css"));
+        Assert.Equal(3, Regex.Matches(ConsoleFiles.Text("connections.js"), @"class: cardClass\([^)]*, editing\)").Count);
+    }
 }

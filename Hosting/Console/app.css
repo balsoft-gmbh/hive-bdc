@@ -332,6 +332,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; min-height: 34px;
 .savebar-text ul { margin: 0; padding-left: 18px; }
 .conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .conn-card { display: flex; flex-direction: column; gap: 8px; }
+.conn-card-editing { grid-column: 1 / -1; }
 .conn-card-warn { border-color: var(--gold-edge); }
 .conn-card-bad { border-color: var(--bad-edge); }
 .conn-title { font-family: "Manrope", sans-serif; font-size: 15px; overflow-wrap: anywhere; }

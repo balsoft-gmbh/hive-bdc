@@ -384,6 +384,8 @@ export function saveProblems(draft, config, descriptors) {
         for (const setting of (d && d.settings) || []) {
           if (setting.required !== false && !String((target.settings || {})[setting.key] || '').trim()) problems.push(`${where} › ${d.name}: ${setting.label} is missing.`);
         }
+        const ts = target.settings || {};
+        if (target.kind === 'servicebus' && !String(ts.Queue || '').trim() && !String(ts.Topic || '').trim()) problems.push(`${where} › ${(d && d.name) || 'Azure Service Bus'}: give a queue or a topic.`);
       }
     }
   }
@@ -471,6 +473,20 @@ export function removeConnection(draft, id) {
   const next = structuredClone(draft);
   next.connections = next.connections.filter((c) => c.id !== id);
   return next;
+}
+
+/** The line under the SharePoint app: Key Vault is named only for a saved secret, never for one typed but not saved. */
+export function sharePointAppLine(app, stored) {
+  if (!app || !app.clientId) return 'The app your IT creates with the Balsoft script. Needed for SharePoint destinations and sources.';
+  const who = `Client ${app.clientId} in tenant ${app.tenantId}.`;
+  if (app.clientSecret) return `${who} The new secret goes to Key Vault when you save.`;
+  return stored ? `${who} Secret in Key Vault.` : `${who} No secret yet.`;
+}
+
+/** Why the SharePoint app test cannot run yet, or null when it can: it needs a library to try and the saved settings. */
+export function sharePointTestBlock(firstLibrary, changed) {
+  if (!firstLibrary) return 'Add a SharePoint destination first.';
+  return changed ? 'Save first.' : null;
 }
 
 /** The SharePoint app: tenant, client and, when typed, a new secret (a blank one keeps the stored secret). */

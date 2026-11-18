@@ -116,6 +116,23 @@ public sealed class EventHistoryTests : IDisposable
     }
 
     [Fact]
+    public void TheHistoryNamesTheCompanyAsSetUpWhileTheDeliveryKeyKeepsTheErpSpelling()
+    {
+        var archive = Archive();
+        var route = Route(archive);
+        string path = Path.Combine(route.Input, "order_1.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new { documentType = "PurchaseOrder", dataAreaId = "a", documentNumber = "PO-7" }));
+        File.WriteAllText(Path.ChangeExtension(path, ".pdf"), "Synthetic pass-through fixture");
+
+        Assert.Equal(1, Processor(new FakeTarget("archive")).ScanOnce(Options(route), License, null, null).Processed);
+
+        var history = _ledger.Events("PO-7", 100);
+        Assert.Equal("Read as Purchase order PO-7 for company A.", history[1].Message);
+        Assert.All(history.Skip(1), e => Assert.Equal("A", e.DataAreaId));
+        Assert.Equal("doc-1", _ledger.DeliveryRemoteId("a|PurchaseOrder|order|PO-7.pdf", archive.Key));
+    }
+
+    [Fact]
     public void AWaitingDocumentIsWrittenOnceNotOnEveryScan()
     {
         var route = Route(Archive());

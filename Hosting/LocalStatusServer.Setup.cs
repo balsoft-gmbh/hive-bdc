@@ -297,9 +297,9 @@ public sealed partial class LocalStatusServer
     private void GetExportSample(ApiCall call)
     {
         string type = call.Query("type")?.Trim() ?? "", company = call.Query("company")?.Trim() ?? "";
-        var route = Snapshot().DocumentTypes.FirstOrDefault(t => string.Equals(t.Id, type, StringComparison.OrdinalIgnoreCase))?
-            .Companies.FirstOrDefault(r => string.Equals(r.DataAreaId, company, StringComparison.OrdinalIgnoreCase));
-        var none = new { file = "", fields = new Dictionary<string, string>(), message = "No document of this company went through yet. Values show after the first one." };
+        var typeOptions = Snapshot().DocumentTypes.FirstOrDefault(t => string.Equals(t.Id, type, StringComparison.OrdinalIgnoreCase));
+        var route = typeOptions?.Companies.FirstOrDefault(r => string.Equals(r.DataAreaId, company, StringComparison.OrdinalIgnoreCase));
+        var none = new { file = "", output = "", fields = new Dictionary<string, string>(), message = "No document of this company went through yet. Values show after the first one." };
         if (route is null || string.IsNullOrWhiteSpace(route.Input)) { Respond(call, 200, none); return; }
 
         var files = new[] { Path.Combine(route.Input, "processed"), Path.Combine(route.Input, TestRun.Folder, "processed") }
@@ -314,7 +314,9 @@ public sealed partial class LocalStatusServer
             try
             {
                 using var doc = JsonDocument.Parse(json, AxDocument.DocumentOptions);
-                Respond(call, 200, new { file = file.Name, fields = SharePointFieldTemplate.Fields(doc.RootElement), message = "" });
+                string documentId = Path.GetFileNameWithoutExtension(file.Name).Split('_', 2)[0];
+                string output = OutputFileNames.For(typeOptions!.Handler, AxDocument.FromElement(doc.RootElement), documentId);
+                Respond(call, 200, new { file = file.Name, output, fields = SharePointFieldTemplate.Fields(doc.RootElement), message = "" });
                 return;
             }
             catch (JsonException) { /* not an export */ }
