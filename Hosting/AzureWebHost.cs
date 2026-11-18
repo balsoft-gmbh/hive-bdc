@@ -139,6 +139,11 @@ public sealed class AzureWebHost : BackgroundService
 
     private async Task Serve(HttpContext http)
     {
+        var headers = http.Response.Headers;
+        headers["Content-Security-Policy"] = ConsoleFiles.ContentSecurityPolicy;
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["Referrer-Policy"] = "no-referrer";
+        headers["Cache-Control"] = "no-store";
         string path = (http.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant();
         if (path == "/healthz")
         {
@@ -205,6 +210,38 @@ public sealed class AzureWebHost : BackgroundService
             _log.LogWarning("Web host: {User} has no role for {Method} {Path} (needs {Role}).", LocalStatusServer.ForLog(user.Name), call.Method, LocalStatusServer.ForLog(call.Path), needed);
             await Write(http, 403, new { error = $"This needs the role {needed}." });
             return;
+        }
+
+        if (HttpMethods.IsGet(http.Request.Method))
+        {
+            // The web console: the page at /, its files at /console/{name}, and who is signed in at /me.
+            string raw = http.Request.Path.Value ?? "";
+            if (raw is "" or "/" || raw.StartsWith("/console/", StringComparison.Ordinal))
+            {
+                string name = raw is "" or "/" ? "index.html" : raw["/console/".Length..];
+                if (ConsoleFiles.TryGet(name, out var content))
+                {
+                    http.Response.StatusCode = 200;
+                    http.Response.ContentType = ConsoleFiles.ContentType(name);
+                    http.Response.ContentLength = content.Length;
+                    await http.Response.Body.WriteAsync(content, http.RequestAborted);
+                }
+                else
+                    await Write(http, 404, new { error = "Not found." });
+                return;
+            }
+            if (path == "/me")
+            {
+                await Write(http, 200, new
+                {
+                    name = user.Name,
+                    roles = user.Roles,
+                    canRetry = ApiRoles.Allows(user.Roles, ApiRoles.Operator),
+                    canChange = ApiRoles.Allows(user.Roles, ApiRoles.Administrator),
+                    version = _version,
+                });
+                return;
+            }
         }
 
         await _api.Route(call);

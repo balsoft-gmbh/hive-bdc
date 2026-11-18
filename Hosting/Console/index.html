@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive BDC</title>
+<link rel="stylesheet" href="/console/app.css">
+<script type="module" src="/console/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#view">Skip to the content</a>
+<div class="layout">
+  <nav class="nav" aria-label="Hive BDC">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2l10.4 6v12L14 26 3.6 20V8z" fill="#FCB608"/><path d="M14 9l5.2 3v6L14 21l-5.2-3v-6z" fill="#0F172A"/></svg>
+      <span class="brand-text"><span class="brand-name">Hive BDC</span><span class="brand-sub">in Azure</span></span>
+    </div>
+    <div id="nav-links" class="nav-links"></div>
+    <div id="service-box" class="service-box"></div>
+  </nav>
+  <div class="content">
+    <header class="topbar">
+      <span id="instance" class="muted"></span>
+      <span class="user">
+        <span id="user-initials" class="avatar" aria-hidden="true"></span>
+        <span id="user-name"></span>
+        <span id="user-role" class="role"></span>
+        <a href="/.auth/logout">Sign out</a>
+      </span>
+    </header>
+    <main id="view" class="view" tabindex="-1" aria-live="polite">
+      <p class="muted">Loading</p>
+    </main>
+  </div>
+</div>
+</body>
+</html>

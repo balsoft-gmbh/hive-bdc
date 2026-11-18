@@ -614,7 +614,7 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               references in Azure; KeyVaultSecretVault), SettingsBlob (settings of an
                               Azure instance: AzureETagBlob, BlobSettingsDocument, BlobSettingsProvider)
   Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate), AzureWebHost
-                              (Azure: App Service sign-in, roles, health),
+                              (Azure: App Service sign-in, roles, health, web console from Hosting/Console via ConsoleFiles),
                               LocalStatusServer (+ .Config, .Probes; Kestrel on 127.0.0.1), ApiCall, LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
@@ -952,6 +952,16 @@ changes, then every 5 minutes):
 
 Without a table endpoint or connection string, or with an unknown run mode, the
 program does not start (exit code 3); `--once` exits with 2 while it would wait.
+
+#### Web console
+
+An Azure instance serves its console at its own address (`/`), behind the same sign-in
+and roles as the API: the overview (documents delivered today, documents that need
+attention with Retry for Operators, licence) and the document history with search. The
+console is plain HTML, CSS and JavaScript embedded in the service (`Hosting/Console/`);
+only those files are served, every value is set as text, and the Content Security
+Policy allows no inline script and no framing. `GET /me` names the signed-in user and
+roles. Pure console logic is tested with `node --test tests/console/*.test.mjs`.
 
 #### Installing in Azure (managed application)
 

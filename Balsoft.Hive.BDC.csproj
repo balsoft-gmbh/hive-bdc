@@ -29,6 +29,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The web console of an Azure instance; Hosting/ConsoleFiles.cs serves exactly these names. -->
+    <EmbeddedResource Include="Hosting\Console\*.html;Hosting\Console\*.css;Hosting\Console\*.js">
+      <LogicalName>Balsoft.Hive.BDC.Console.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <None Remove="Hosting\Console\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Trusted public cert for license verification (compiled in so it can't be swapped). -->
     <EmbeddedResource Include="build\BalsoftGmbH.cer">
       <LogicalName>Balsoft.Hive.BDC.BalsoftGmbH.cer</LogicalName>
