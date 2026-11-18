@@ -242,3 +242,55 @@ test('template choices come from the sample, with "as date" for dates', () => {
   ]);
   assert.equal(words('recipientVatId'), 'Recipient vat id');
 });
+
+test('connections name their users, refuse removal while used, and show up in the change list', async () => {
+  const X = await import('../../Hosting/Console/exportlogic.js');
+  const cfg = config();
+  const start = postBody(cfg);
+  assert.deepEqual(X.connectionUses(start, 'fo'), ['Sales invoices › 1000 (source)']);
+  assert.deepEqual(X.connectionUses(start, 'docuware'), ['Sales invoices › 1000 (DocuWare)']);
+  assert.deepEqual(X.connectionUses(start, 'sb'), []);
+  assert.deepEqual(X.sharePointUses(start), ['Sales invoices › 1000']);
+  assert.throws(() => X.removeConnection(start, 'fo'), /Still used by Sales invoices › 1000 \(source\)/);
+
+  let body = X.removeConnection(start, 'sb');
+  body = X.addConnection(body, { id: 'sb2', kind: 'servicebus', settings: { Namespace: 'sb2.servicebus.windows.net' } });
+  assert.throws(() => X.addConnection(body, { id: 'SB2', kind: 'servicebus' }), /already/);
+  assert.throws(() => X.addConnection(body, { id: 'two words', kind: 'servicebus' }), /letters, digits/);
+  body = X.updateConnection(body, 'docuware', { UserName: 'api' }, '');
+  assert.equal(body.connections.find((c) => c.id === 'docuware').secret, undefined);
+  body = X.setSharePointApp(body, { tenantId: 't', clientId: 'c2', secret: '' });
+  assert.equal('clientSecret' in body.sharePointAuth, false);
+  body = X.setMailbox(body, { ...cfg.mail, enabled: false });
+  assert.deepEqual(X.draftChanges(start, body), [
+    'Connection docuware changed', 'Connection sb2 added', 'Connection sb removed', 'SharePoint app changed', 'Mail off',
+  ]);
+});
+
+test('connections and the mailbox read as plain words and the mailbox names what is missing', async () => {
+  const X = await import('../../Hosting/Console/exportlogic.js');
+  assert.equal(X.connectionWords({ kind: 'azure-storage', settings: { AccountUrl: 'https://stbdctest8021.blob.core.windows.net' } }), 'Azure Storage stbdctest8021. Signs in as this instance, no key stored.');
+  assert.equal(X.connectionWords({ kind: 'azure-storage', settings: {}, hasSecret: true }), 'Azure Storage. Connection string in Key Vault.');
+  assert.equal(X.connectionWords({ kind: 'servicebus', settings: { Namespace: 'sb.servicebus.windows.net' } }), 'Azure Service Bus sb.servicebus.windows.net. Signs in as this instance.');
+  assert.equal(X.connectionWords({ kind: 'docuware', settings: { Url: 'https://contoso.docuware.cloud', UserName: 'ax' } }), 'DocuWare contoso.docuware.cloud as ax. Password in Key Vault.');
+  assert.match(X.connectionWords({ kind: 'https', settings: {} }), /never shown again/);
+  assert.deepEqual(X.mailboxProblems({ enabled: false }, ''), []);
+  assert.deepEqual(X.mailboxProblems({ enabled: true, tenantId: '', clientId: '', from: 'x', redirectTo: ['a@b.example', 'nope'] }, ''), [
+    'Enter the tenant ID.', 'Enter the client ID of the mail app.', 'Enter the mailbox documents are sent from.', '"nope" is not an e-mail address.',
+  ]);
+  assert.deepEqual(X.mailboxProblems({ enabled: true, clientId: 'm', from: 'rechnung@contoso.example', redirectTo: ['test@contoso.example'] }, 'tenant'), []);
+});
+
+test('a storage connection names the containers it is used with, and users read short', async () => {
+  const X = await import('../../Hosting/Console/exportlogic.js');
+  let body = postBody(config());
+  body = X.addDestination(body, 'SalesInvoice', '1000', 'blob', 'fo');
+  body = X.applyDestination(body, 'SalesInvoice', '1000', { kind: 'blob', connection: 'fo', enabled: true, settings: { Container: 'out' }, fields: {} });
+  body = addCompany(body, 'SalesQuotation', '1000');
+  body = setSource(body, 'SalesQuotation', '1000', { kind: 'servicebus', connection: 'sb', settings: { Queue: 'q', PdfConnection: 'fo', PdfContainer: 'pdf' } }, root);
+  assert.deepEqual(X.connectionContainers(body, 'fo'), [{ container: 'bdc-export', prefix: '' }, { container: 'out', prefix: '' }, { container: 'pdf', prefix: '' }]);
+  assert.deepEqual(X.connectionContainers(body, 'sb'), []);
+  assert.equal(X.usesWords([]), 'Not used yet');
+  assert.equal(X.usesWords(['a', 'b']), 'Used by a and b');
+  assert.equal(X.usesWords(['a', 'b', 'c', 'd']), 'Used by a, b and 2 more');
+});

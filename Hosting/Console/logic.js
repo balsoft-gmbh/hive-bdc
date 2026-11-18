@@ -154,10 +154,13 @@ export function sourceEntries(config) {
   return entries;
 }
 
-/** Whether the console opens on the assistant: set-up not finished, or nothing takes documents from a source yet. */
+/**
+ * Whether the console opens on the assistant: its set-up is not finished, or nothing takes documents from a source yet.
+ * A pause from the Service page keeps the other pages (failure case 78).
+ */
 export function setupNeeded(config) {
   if (!config) return false;
-  return config.paused === true || sourceEntries(config).length === 0;
+  return config.setupOpen === true || sourceEntries(config).length === 0;
 }
 
 /** Whether a company entry delivers anywhere, as the Azure settings check counts it. */
@@ -190,6 +193,7 @@ export function postBody(config) {
   return {
     baseVersion: c.version || '',
     paused: Boolean(c.paused),
+    setupOpen: Boolean(c.setupOpen),
     pollSeconds: c.pollSeconds,
     logDir: c.logDir || '',
     license: { file: (c.license && c.license.file) || '' },
@@ -297,6 +301,7 @@ export function withBlobSource(body, source, byType, inputRoot) {
   if (source.connectionString) connection.secret = source.connectionString;
   const plan = setupType(byType, next.documentTypes);
   next.paused = true;
+  next.setupOpen = true;
   if (!plan.type) return { body: next, ...plan };
   const type = next.documentTypes.find((t) => same(t.id, plan.type));
   type.enabled = true;

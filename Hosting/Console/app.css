@@ -233,6 +233,17 @@ h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
 .savebar-text { display: flex; flex-direction: column; gap: 4px; color: #475569; }
 .savebar-text ul { margin: 0; padding-left: 18px; }
 
+.conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.conn-card { display: flex; flex-direction: column; gap: 8px; }
+.conn-card-warn { border-color: var(--warn-line); }
+.conn-card-bad { border-color: #FCA5A5; }
+.conn-title { font-size: 15px; overflow-wrap: anywhere; }
+.conn-actions { margin-top: auto; padding-top: 6px; }
+.grid-top { align-items: start; }
+.fact { font-size: 14px; overflow-wrap: anywhere; }
+.cell .button { align-self: flex-start; }
+.log { margin: 0; padding: 14px 16px; border-radius: 10px; background: var(--ink); color: #E2E8F0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow-y: auto; }
+
 @media (max-width: 760px) {
   .steps, .tiles-3, .grid-2, .grid-3, .grid-4, .type-row, .co-row, .co-row-new, .map-row { grid-template-columns: 1fr; }
   .indent { margin-left: 0; }

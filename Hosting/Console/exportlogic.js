@@ -352,6 +352,7 @@ export function draftChanges(original, draft) {
     for (const c of before.companies) if (!t.companies.some((x) => same(x.dataAreaId, c.dataAreaId))) lines.push(`${name}: company ${c.dataAreaId} removed`);
   }
   for (const t of o.documentTypes) if (!findType(d, t.id)) lines.push(`${capital(typeWords(t))} removed`);
+  lines.push(...settingsChanges(o, d));
   for (const c of d.connections) if (c.secret) lines.push(c.kind === 'https' ? `New key for ${c.id}` : `New secret for ${c.id}`);
   return lines;
 }
@@ -386,6 +387,7 @@ export function saveProblems(draft, config, descriptors) {
       }
     }
   }
+  problems.push(...mailboxProblems(draft && draft.mail, draft && draft.sharePointAuth && draft.sharePointAuth.tenantId).map((p) => `Mailbox: ${p}`));
   return problems;
 }
 
@@ -396,4 +398,153 @@ export function companiesWithoutSource(draft) {
     for (const c of t.companies || []) if ((!c.source || !c.source.kind) && !c.input) missing.push({ type: t.id, company: c.dataAreaId });
   }
   return missing;
+}
+
+// ── Connections (board W12) ──────────────────────────────────────────────────────────
+
+/** Who uses a connection, in words: sources, PDF containers and destinations (failure case 77). */
+export function connectionUses(draft, id) {
+  const uses = [];
+  for (const t of (draft && draft.documentTypes) || []) {
+    for (const c of t.companies || []) {
+      const where = `${capital(typeWords(t))} › ${c.dataAreaId}`;
+      if (c.source && c.source.connection === id) uses.push(`${where} (source)`);
+      if (c.source && c.source.settings && c.source.settings.PdfConnection === id) uses.push(`${where} (PDFs)`);
+      for (const x of c.targets || []) if (x.connection === id) uses.push(`${where} (${kindName(x.kind)})`);
+    }
+  }
+  return uses;
+}
+
+/** The companies whose documents go to SharePoint: the users of the SharePoint app. */
+export function sharePointUses(draft) {
+  const uses = [];
+  for (const t of (draft && draft.documentTypes) || []) {
+    for (const c of t.companies || []) if (c.sharePoint && c.sharePoint.enabled) uses.push(`${capital(typeWords(t))} › ${c.dataAreaId}`);
+  }
+  return uses;
+}
+
+/** A connection in a sentence: where it points and how it signs in. */
+export function connectionWords(c) {
+  const s = (c && c.settings) || {};
+  const stored = Boolean(c && (c.hasSecret || c.secret));
+  const host = (url) => { try { return new URL(url).host; } catch { return url; } };
+  switch (c && c.kind) {
+    case 'azure-storage':
+      return stored ? `Azure Storage${s.AccountUrl ? ` ${host(s.AccountUrl).split('.')[0]}` : ''}. Connection string in Key Vault.`
+        : `Azure Storage ${host(s.AccountUrl || '').split('.')[0]}. Signs in as this instance, no key stored.`;
+    case 'servicebus':
+      return stored ? 'Azure Service Bus. Connection string in Key Vault.' : `Azure Service Bus ${s.Namespace || ''}. Signs in as this instance.`;
+    case 'docuware':
+      return `DocuWare ${host(s.Url || '')} as ${s.UserName || 'a user'}. Password in Key Vault.`;
+    case 'https':
+      return s.Url ? `Web address ${host(s.Url)}. Key in Key Vault.` : 'Key a sender sends to /inbound. Kept in Key Vault, never shown again.';
+    default:
+      return c ? c.kind : '';
+  }
+}
+
+export function addConnection(draft, connection) {
+  const next = structuredClone(draft);
+  const id = String(connection.id || '').trim();
+  if (!/^[A-Za-z0-9_.-]+$/.test(id)) throw new Error('The name takes letters, digits, ".", "-" and "_" only.');
+  if (next.connections.some((c) => c.id.toLowerCase() === id.toLowerCase())) throw new Error(`There is a connection ${id} already.`);
+  const added = { id, kind: connection.kind, settings: { ...(connection.settings || {}) } };
+  if (connection.secret) added.secret = connection.secret;
+  next.connections.push(added);
+  return next;
+}
+
+/** New settings for a connection; a blank secret keeps the stored one. */
+export function updateConnection(draft, id, settings, secret) {
+  const next = structuredClone(draft);
+  const c = next.connections.find((x) => x.id === id);
+  c.settings = { ...c.settings, ...settings };
+  if (secret) c.secret = secret;
+  return next;
+}
+
+export function removeConnection(draft, id) {
+  const uses = connectionUses(draft, id);
+  if (uses.length) throw new Error(`Still used by ${uses.join(', ')}.`);
+  const next = structuredClone(draft);
+  next.connections = next.connections.filter((c) => c.id !== id);
+  return next;
+}
+
+/** The SharePoint app: tenant, client and, when typed, a new secret (a blank one keeps the stored secret). */
+export function setSharePointApp(draft, app) {
+  const next = structuredClone(draft);
+  next.sharePointAuth = { tenantId: String(app.tenantId || '').trim(), clientId: String(app.clientId || '').trim() };
+  if (app.secret) next.sharePointAuth.clientSecret = app.secret;
+  return next;
+}
+
+/** The document mailbox; the redirect list is where documents of a non-production ERP go instead of the customer. */
+export function setMailbox(draft, mail) {
+  const next = structuredClone(draft);
+  next.mail = {
+    enabled: Boolean(mail.enabled), tenantId: String(mail.tenantId || '').trim(), clientId: String(mail.clientId || '').trim(),
+    from: String(mail.from || '').trim(), redirectTo: (mail.redirectTo || []).map((a) => String(a).trim()).filter(Boolean),
+    saveToSentItems: mail.saveToSentItems !== false,
+  };
+  if (mail.secret) next.mail.clientSecret = mail.secret;
+  return next;
+}
+
+/** What keeps the mailbox from being switched on, in words (the service checks the same on save). */
+export function mailboxProblems(mail, sharePointTenant) {
+  const problems = [];
+  if (!mail || !mail.enabled) return problems;
+  const address = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if (!(mail.tenantId || sharePointTenant)) problems.push('Enter the tenant ID.');
+  if (!mail.clientId) problems.push('Enter the client ID of the mail app.');
+  if (!mail.from || !address.test(mail.from)) problems.push('Enter the mailbox documents are sent from.');
+  if (!(mail.redirectTo || []).length) problems.push('Enter at least one address for documents of a test ERP.');
+  for (const a of mail.redirectTo || []) if (!address.test(a)) problems.push(`"${a}" is not an e-mail address.`);
+  return problems;
+}
+
+/** The changes of the draft outside the document types: connections, the SharePoint app and the mailbox. */
+export function settingsChanges(original, draft) {
+  const lines = [];
+  const o = original || {}, d = draft || {};
+  for (const c of d.connections || []) {
+    const was = (o.connections || []).find((x) => x.id === c.id);
+    if (!was) lines.push(`Connection ${c.id} added`);
+    else if (JSON.stringify(was.settings || {}) !== JSON.stringify(c.settings || {})) lines.push(`Connection ${c.id} changed`);
+  }
+  for (const c of o.connections || []) if (!(d.connections || []).some((x) => x.id === c.id)) lines.push(`Connection ${c.id} removed`);
+  const a = o.sharePointAuth || {}, b = d.sharePointAuth || {};
+  if (a.tenantId !== b.tenantId || a.clientId !== b.clientId || b.clientSecret) lines.push('SharePoint app changed');
+  const m = o.mail || {}, n = d.mail || {};
+  if (Boolean(m.enabled) !== Boolean(n.enabled)) lines.push(`Mail ${n.enabled ? 'on' : 'off'}`);
+  else if (JSON.stringify({ ...m, clientSecret: undefined }) !== JSON.stringify({ ...n, clientSecret: undefined }) || n.clientSecret) lines.push('Mailbox changed');
+  return lines;
+}
+
+/** The containers a storage connection is used with: Blob sources, PDF containers and Blob destinations. */
+export function connectionContainers(draft, id) {
+  const found = [];
+  const add = (container, prefix) => {
+    if (container && !found.some((f) => f.container === container && f.prefix === (prefix || ''))) found.push({ container, prefix: prefix || '' });
+  };
+  for (const t of (draft && draft.documentTypes) || []) {
+    for (const c of t.companies || []) {
+      const s = c.source || {};
+      const v = s.settings || {};
+      if (s.kind === 'blob' && s.connection === id) add(v.Container, v.Prefix);
+      if (v.PdfConnection === id) add(v.PdfContainer, '');
+      for (const x of c.targets || []) if (x.kind === 'blob' && x.connection === id) add((x.settings || {}).Container, '');
+    }
+  }
+  return found;
+}
+
+/** Who uses something, short enough for a card: "Used by a, b and 2 more". */
+export function usesWords(uses) {
+  if (!uses.length) return 'Not used yet';
+  if (uses.length <= 2) return `Used by ${uses.join(' and ')}`;
+  return `Used by ${uses.slice(0, 2).join(', ')} and ${uses.length - 2} more`;
 }

@@ -48,6 +48,9 @@ public sealed class BDCOptions
     /// </summary>
     public bool Paused { get; set; }
 
+    /// <summary>The set-up assistant has not finished: the console shows it instead of the other pages (failure case 78).</summary>
+    public bool SetupOpen { get; set; }
+
     public ConnectionOptions? Connection(string? id)
         => Connections.FirstOrDefault(c => string.Equals(c.Id, id?.Trim(), StringComparison.OrdinalIgnoreCase));
 

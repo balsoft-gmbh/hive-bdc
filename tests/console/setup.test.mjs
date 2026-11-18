@@ -30,18 +30,22 @@ const waiting = [
 
 const source = { accountUrl: 'https://StBalsoftFo.blob.core.windows.net/', container: 'bdc-export' };
 
-test('a fresh instance and a paused one open the assistant, a running one does not', () => {
+test('a fresh instance and an unfinished set-up open the assistant; a running or merely paused one does not', () => {
   const config = fresh();
   assert.equal(setupNeeded(config), true);
   const { body } = withBlobSource(postBody(config), source, waiting, '/home/data/hivebdc/in');
-  assert.equal(setupNeeded({ ...body, paused: true }), true);
-  assert.equal(setupNeeded({ ...body, paused: false }), false);
+  assert.equal(body.setupOpen, true);
+  assert.equal(body.paused, true);
+  assert.equal(setupNeeded(body), true);
+  assert.equal(setupNeeded({ ...body, setupOpen: false, paused: true }), false);
+  assert.equal(setupNeeded({ ...body, setupOpen: false, paused: false }), false);
   assert.equal(setupNeeded(null), false);
 });
 
 test('a switched-off type with a source does not count as set up', () => {
   const { body } = withBlobSource(postBody(fresh()), source, waiting, '/home/data/hivebdc/in');
   body.paused = false;
+  body.setupOpen = false;
   body.documentTypes[0].enabled = false;
   assert.equal(setupNeeded(body), true);
 });

@@ -70,11 +70,14 @@ public sealed partial class LocalStatusServer
     {
         try
         {
+            // Start ends the set-up assistant too; a pause from the Service page leaves it closed (failure case 78).
             _settings.Update(section =>
             {
                 bool now = section["Paused"] is JsonValue v && v.TryGetValue<bool>(out var p) && p;
-                if (now == paused) return false;
+                bool open = section["SetupOpen"] is JsonValue o && o.TryGetValue<bool>(out var s) && s;
+                if (now == paused && (paused || !open)) return false;
                 section["Paused"] = paused;
+                if (!paused && section["SetupOpen"] is not null) section["SetupOpen"] = false;
                 return true;
             });
         }
@@ -111,6 +114,8 @@ public sealed partial class LocalStatusServer
             objectId,
             tenantId,
             inputRoot = objectId is null ? null : RunModes.AzureInputRoot,
+            timeZone = TimeZoneInfo.Local.Id,
+            region = Environment.GetEnvironmentVariable("REGION_NAME") ?? "",
             message = objectId is null ? "Only an Azure instance has an identity of its own." : "",
         });
     }

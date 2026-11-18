@@ -1,7 +1,9 @@
 // The web console of a Hive BDC instance in Azure. Every element is built with createElement and every value set with
 // textContent or setAttribute (ui.js), so nothing read from the settings or the history can become markup (failure case 52).
 import { attentionRows, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
+import { connectionsPage } from './connections.js';
 import { exportPage } from './export.js';
+import { servicePage } from './service.js';
 import { setupPage } from './setup.js';
 import { api, el, notice, put } from './ui.js';
 
@@ -12,7 +14,9 @@ const state = { me: null, status: null, config: null };
 const pages = [
   { id: 'overview', label: 'Overview' },
   { id: 'export', label: 'Export (from your ERP)' },
+  { id: 'connections', label: 'Connections' },
   { id: 'history', label: 'Document history' },
+  { id: 'service', label: 'Service' },
 ];
 
 /** While the set-up is not finished only the assistant opens; the other pages are shown greyed (board W1). */
@@ -50,7 +54,7 @@ function renderServiceBox() {
   const paused = running && Boolean(state.config && state.config.paused);
   put(box,
     el('span', { class: 'service-state' }, el('span', { class: running && !paused ? 'dot dot-ok' : 'dot dot-off', 'aria-hidden': 'true' }),
-      paused ? 'Paused until the set-up is finished' : running ? 'Running' : 'Stopped'),
+      paused ? (state.config.setupOpen ? 'Paused until the set-up is finished' : 'Paused') : running ? 'Running' : 'Stopped'),
     el('span', { class: line.ok ? 'service-licence' : 'service-licence service-licence-warn', text: line.text }),
   );
 }
@@ -136,6 +140,8 @@ const renderers = {
   overview: overviewPage,
   history: historyPage,
   export: (view, route) => exportPage(view, route, { me: state.me, status: state.status, config: state.config }),
+  connections: (view, route) => connectionsPage(view, route, { me: state.me, status: state.status, config: state.config }),
+  service: (view, route) => servicePage(view, route, { me: state.me, status: state.status, config: state.config }),
 };
 
 async function show() {

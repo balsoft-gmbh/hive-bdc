@@ -537,7 +537,7 @@ async function testRunStep(view, ctx, progress) {
     actions(link('#/setup/3', 'Back'), start));
 }
 
-function runCard(entry, answer) {
+export function runCard(entry, answer) {
   const lines = (answer.events || []).map((e) => runLine(e, timeZone));
   const title = `${answer.documentId ? `${answer.documentId} · ` : ''}${typeWords(entry.type)} · company ${entry.company.dataAreaId}`;
   return el('section', { class: 'card stack', 'aria-label': 'Steps of the test run' },

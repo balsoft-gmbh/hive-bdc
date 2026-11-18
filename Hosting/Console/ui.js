@@ -107,6 +107,6 @@ function conflictPanel(refusal, saveBoth) {
 
 /** A Viewer sees every screen read-only (failure cases 58, 79): no input takes text, no button acts, edit-only parts go. */
 export function lock(view) {
-  for (const node of view.querySelectorAll('input, select, textarea, button')) node.disabled = true;
+  for (const node of view.querySelectorAll('input, select, textarea, button')) if (!node.closest('.view-ok')) node.disabled = true;
   for (const node of view.querySelectorAll('.edit-only')) node.hidden = true;
 }

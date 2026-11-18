@@ -21,7 +21,9 @@ public sealed class TestRunRequest(string documentType, string company, Action<T
 /// </summary>
 public sealed class TestRuns
 {
-    public const string PausedReason = "set-up not finished: Hive BDC starts taking documents when Start is pressed in the set-up assistant.";
+    public const string SetupReason = "set-up not finished: Hive BDC starts taking documents when Start is pressed in the set-up assistant.";
+
+    public const string PausedReason = "paused: Hive BDC takes documents again when Start is pressed on the Service page.";
 
     private readonly object _gate = new();
     private readonly SemaphoreSlim _wake = new(0);
@@ -29,7 +31,8 @@ public sealed class TestRuns
     private bool _running;
 
     /// <summary>The worker's reason to take nothing this cycle: the other reasons first, then the pause.</summary>
-    public static string? Hold(BDCOptions opts, string? gateHold) => gateHold ?? (opts.Paused ? PausedReason : null);
+    public static string? Hold(BDCOptions opts, string? gateHold)
+        => gateHold ?? (opts.Paused ? (opts.SetupOpen ? SetupReason : PausedReason) : null);
 
     public bool TryRequest(string documentType, string company, out Task<TestRunResult> result)
     {

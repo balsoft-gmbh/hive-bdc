@@ -59,6 +59,7 @@ public sealed partial class LocalStatusServer
             pollSeconds = opts.PollSeconds,
             logDir = opts.LogDir,
             paused = opts.Paused,
+            setupOpen = opts.SetupOpen,
             license = new { file = opts.License.File },
             sharePointAuth = new
             {
@@ -363,6 +364,8 @@ public sealed partial class LocalStatusServer
 
         if (dto.Paused is bool paused) section["Paused"] = paused;
         else if (prevSection?["Paused"] is JsonNode storedPause) section["Paused"] = storedPause.DeepClone();
+        if (dto.SetupOpen is bool open) section["SetupOpen"] = open;
+        else if (prevSection?["SetupOpen"] is JsonNode storedOpen) section["SetupOpen"] = storedOpen.DeepClone();
         section["Connections"] = ConnectionsNode(dto.Connections, prevSection, protect);
         section["Flows"] = dto.Flows?.DeepClone() ?? prevSection?["Flows"]?.DeepClone() ?? new JsonArray();
         return section;
@@ -549,6 +552,8 @@ public sealed partial class LocalStatusServer
         public bool? SaveBoth { get; set; }
         /// <summary>Absent (the Windows app) => the stored pause is kept.</summary>
         public bool? Paused { get; set; }
+        /// <summary>Absent => the stored marker of the set-up assistant is kept.</summary>
+        public bool? SetupOpen { get; set; }
     }
 
     private sealed class ConnectionPostDto

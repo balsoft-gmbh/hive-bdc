@@ -189,6 +189,7 @@ public sealed class TestRunTests : IDisposable
     public void PausedSettingsHoldTheWorkerWithItsReasonAndOtherReasonsComeFirst()
     {
         Assert.Equal(TestRuns.PausedReason, TestRuns.Hold(new BDCOptions { Paused = true }, null));
+        Assert.Equal(TestRuns.SetupReason, TestRuns.Hold(new BDCOptions { Paused = true, SetupOpen = true }, null));
         Assert.Equal("Table Storage cannot be reached", TestRuns.Hold(new BDCOptions { Paused = true }, "Table Storage cannot be reached"));
         Assert.Null(TestRuns.Hold(new BDCOptions(), null));
     }

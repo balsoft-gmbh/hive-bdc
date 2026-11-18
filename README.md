@@ -1011,6 +1011,22 @@ completed; without access it answers the role command), and
 that type and company that went through. A document that waits because its company has
 no entry names its type and company in the history.
 
+**Connections** (`#/connections`) lists every connection with what it points at, who uses
+it and Test, Edit and Remove (refused while a source or destination still uses it), plus the
+SharePoint app and the document mailbox. A storage connection in use is tested on a
+container it is used with, since an instance often holds its role on that container only;
+the mail test only reads the mailbox and sends nothing. New connections come from the kinds
+the service reports. Changes join the same draft and Save bar as Export; passwords, keys and
+secrets go only with Save into Key Vault and are never shown again.
+
+**Service** (`#/service`) shows whether the instance takes documents (Pause and Start, a test
+run of the first waiting export of a company with a Blob source), the licence with upload,
+the version, region, time zone and the identity for role commands (`GET /setup/identity`
+also names `timeZone` and `region`), and the last 200 lines of the technical log with a
+filter for warnings and a download. A pause from here keeps the console's pages: only the
+set-up assistant marks its own pause (`SetupOpen` in the settings, `setupOpen` in
+`GET /config`), and Start ends both.
+
 #### Installing in Azure (managed application)
 
 `deploy/azure/` holds the Azure Application offer: `main.bicep` (built into

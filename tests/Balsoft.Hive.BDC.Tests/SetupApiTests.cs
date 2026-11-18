@@ -76,6 +76,32 @@ public sealed class SetupApiTests : IDisposable
     }
 
     [Fact]
+    public async Task APauseKeepsTheSetUpClosedAndStartEndsBoth()
+    {
+        var api = Api(Instance(), (_, _, _) => new Store(new()));
+        await Call(api, "POST", "/setup/pause");
+        var stored = JsonNode.Parse(_settings.Text!)!["HiveBDC"]!;
+        Assert.True(stored["Paused"]!.GetValue<bool>());
+        Assert.Null(stored["SetupOpen"]);
+
+        _settings.Put("""{ "HiveBDC": { "PollSeconds": 30, "Paused": true, "SetupOpen": true } }""");
+        var (_, config, _) = await Call(api, "GET", "/config");
+        Assert.True(config["setupOpen"]!.GetValue<bool>());
+        await Call(api, "POST", "/setup/start");
+        stored = JsonNode.Parse(_settings.Text!)!["HiveBDC"]!;
+        Assert.False(stored["Paused"]!.GetValue<bool>());
+        Assert.False(stored["SetupOpen"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task TheIdentityAlsoNamesTheInstancesTimeZone()
+    {
+        var (_, body, _) = await Call(Api(Instance(), (_, _, _) => new Store(new())), "GET", "/setup/identity");
+        Assert.Equal(TimeZoneInfo.Local.Id, body["timeZone"]!.GetValue<string>());
+        Assert.NotNull(body["region"]);
+    }
+
+    [Fact]
     public async Task TheBlobCheckTakesASavedConnectionByItsName()
     {
         string? usedUrl = null, usedSecret = "unset";
