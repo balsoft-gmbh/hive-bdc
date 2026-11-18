@@ -898,7 +898,7 @@ document waiting. A `servicebus` connection holds the namespace connection strin
 its secret, or, in Azure, `Settings.Namespace` (`{name}.servicebus.windows.net`) for
 the managed identity.
 
-### Azure run mode (in development, 1.8.0)
+### Azure run mode (1.8.0)
 
 The same program runs as an Azure web app. The deployment sets, as app settings:
 

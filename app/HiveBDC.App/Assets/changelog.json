@@ -2,6 +2,21 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.8.0",
+      "date": "2026-11-19",
+      "changes": [
+        "Hive BDC can run in Azure: a web app in the customer's own subscription, installed as a managed application with a short wizard (region, time zone, sign-in app). Settings are kept in Blob Storage, the document history in Table Storage and every password, key and secret in the instance's own Key Vault. The licence is bound to the tenant of the instance and uploaded in the web console. The Azure Marketplace offer follows.",
+        "Web console for an Azure instance, signed in with Microsoft accounts and the roles Viewer, Operator and Administrator: Overview, Document history with Retry, Outbound, Connections and Service, in the same words as the Windows settings. A set-up assistant leads through the licence, the container Dynamics 365 Finance and Operations writes to, the destinations and a test run with the first waiting document. Two administrators who save at the same time do not overwrite each other: the later save is refused and can keep both changes.",
+        "Azure Service Bus as a source and a destination: Dynamics 365 Finance and Operations sends each document as a message (queue or topic) with its PDF in a blob container, and results can go back to a queue or topic that an F&O inbound flow reads. Hive BDC signs in with a connection string or, in Azure, as the instance itself.",
+        "HTTPS as a destination: each document goes as JSON with its file and fields to a Logic App, a Power Automate flow or your own API. On an Azure instance a web address with its own key can also send documents to Hive BDC.",
+        "Updates for Azure instances: Update now on the Service page fetches the signed package from the Balsoft update feed, checks its signature, keeps the settings and can go back to the previous version. Balsoft needs no access to the customer's subscription.",
+        "Word invoices keep their layout on servers without Microsoft fonts (an Azure instance runs on Linux): where Arial, Times New Roman, Courier New, Calibri or Cambria is missing, Hive BDC uses the free font with the same character widths that it carries inside the service. Any other missing font is named in the document history.",
+        "Settings in the Windows app: Save keeps the window open and confirms; the destination and connection pages are built from what the service reports, so new kinds appear without a new dashboard. A DocuWare connection of any name now counts as connected.",
+        "Known limit: a delivery result sent back to Dynamics 365 Finance and Operations arrives there as an inbound record; F&O does not yet book it on the invoice.",
+        "Settings files from 1.5.0 and 1.3.x load unchanged and behave as before; the new options only take effect once they are used."
+      ]
+    },
+    {
       "version": "1.5.0",
       "date": "2026-11-17",
       "changes": [
