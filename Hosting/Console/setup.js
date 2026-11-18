@@ -1,10 +1,10 @@
 // The set-up assistant of an Azure instance (boards W1 to W4): licence, documents from F&O, where they go, test run.
 // Shown instead of the other pages while the settings say "paused" or nothing takes documents from a source yet.
 import {
-  andList, cleanPrefix, conflictView, licenceNote, destinationPicks, destinationProblems, featureWords, germanDate, licenceWorks, postBody, roleCommand,
+  andList, cleanPrefix, licenceNote, destinationPicks, destinationProblems, featureWords, germanDate, licenceWorks, postBody, roleCommand,
   runLine, setupProgress, setupType, sourceEntries, typeWords, uniqueId, withBlobSource, withDestinations,
 } from './logic.js';
-import { api, el, notice, put } from './ui.js';
+import { api, chip, el, field, link, notice, put, save, textInput } from './ui.js';
 
 const timeZone = 'Europe/Berlin';
 const stepNames = ['Licence', 'Documents from F&O', 'Where they go', 'Test run'];
@@ -36,55 +36,8 @@ function stepBar(step, progress) {
   }));
 }
 
-function link(href, text, primary) {
-  return el('a', { class: primary ? 'button button-primary button-big' : 'button button-big', href, text });
-}
-
 function actions(...children) {
   return el('div', { class: 'actions' }, ...children);
-}
-
-function field(label, control, hint) {
-  return el('label', { class: 'field' }, el('span', { class: 'field-label', text: label }), control, hint ? el('span', { class: 'field-hint', text: hint }) : null);
-}
-
-function textInput(attrs) {
-  return el('input', { type: 'text', class: 'input', autocomplete: 'off', spellcheck: 'false', ...attrs });
-}
-
-function chip(ok, text) {
-  return el('span', { class: ok ? 'chip chip-ok' : 'chip chip-warn' }, el('span', { class: ok ? 'dot dot-ok' : 'dot dot-warn', 'aria-hidden': 'true' }), text);
-}
-
-/** Saves the assistant's settings; a refusal shows board W6 (failure case 61). Returns true when saved. */
-async function save(body, slot) {
-  put(slot);
-  try {
-    await api('/config', { method: 'POST', body: JSON.stringify(body) });
-    return true;
-  } catch (error) {
-    if (error.status === 409 && error.body) {
-      put(slot, conflictPanel(error.body, async () => {
-        if (await save({ ...body, saveBoth: true }, slot)) window.dispatchEvent(new HashChangeEvent('hashchange'));
-      }));
-    } else {
-      put(slot, notice('error', error.message));
-    }
-    return false;
-  }
-}
-
-function conflictPanel(refusal, saveBoth) {
-  const view = conflictView(refusal, timeZone);
-  const list = (title, lines) => el('div', { class: 'conflict-side' }, el('h3', { text: title }),
-    lines.length ? el('ul', {}, lines.map((l) => el('li', { text: l }))) : el('p', { class: 'muted', text: 'Nothing.' }));
-  return el('section', { class: 'card conflict', role: 'alert' },
-    el('h2', { text: view.title }),
-    el('p', { text: view.note }),
-    el('div', { class: 'conflict-lists' }, list('Their changes', view.theirs), list('Your changes', view.yours)),
-    el('div', { class: 'row-actions' },
-      view.canSaveBoth ? el('button', { type: 'button', class: 'button button-primary', text: 'Save both', on: { click: saveBoth } }) : null,
-      el('button', { type: 'button', class: 'button', text: 'Load the settings again', on: { click: () => window.location.reload() } })));
 }
 
 function goTo(step) {

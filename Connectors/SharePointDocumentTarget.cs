@@ -20,6 +20,8 @@ public sealed class SharePointDocumentTarget(SharePointUploader? uploader) : IDo
             throw new InvalidOperationException($"SharePoint upload for '{ctx.Type.Id}' / company '{ctx.Route.DataAreaId}': {reason} " +
                 "Set the site URL and library on that company in Settings > Outbound.");
 
+        if (target.Folder.Contains('{'))
+            target = target with { Folder = SharePointFieldTemplate.ResolvePath(ctx.Document, target.Folder) };
         var fields = SharePointFieldTemplate.Resolve(ctx.Document, sp.Fields, ctx.Warn);
         var empty = sp.Fields.Keys.Where(k => !fields.ContainsKey(k)).ToList();
         if (empty.Count > 0)

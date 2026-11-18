@@ -82,6 +82,22 @@ public sealed class EventHistoryTests : IDisposable
     private static TargetOptions Archive() => new() { Kind = "archive", Settings = { ["Cabinet"] = "one" } };
 
     [Fact]
+    public void ADocumentOfACompanyWithoutAnEntryWaitsAndNamesItsTypeAndCompany()
+    {
+        var route = Route(Archive());
+        string path = Path.Combine(route.Input, "other_1.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new { documentType = "PurchaseOrder", dataAreaId = "B", documentNumber = "PO-9" }));
+        File.WriteAllText(Path.ChangeExtension(path, ".pdf"), "Synthetic pass-through fixture");
+
+        Assert.Equal(1, Processor(new FakeTarget("archive")).ScanOnce(Options(route), License, null, null).Held);
+
+        var waiting = _ledger.Events("other", 100).Last();
+        Assert.Equal("waiting", waiting.Step);
+        Assert.Equal("PurchaseOrder", waiting.DocumentType);
+        Assert.Equal("B", waiting.DataAreaId);
+    }
+
+    [Fact]
     public void ADeliveredDocumentHasEveryStepInOrderWithItsNumber()
     {
         var route = Route(Archive());

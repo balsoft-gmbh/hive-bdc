@@ -1,6 +1,7 @@
 // The web console of a Hive BDC instance in Azure. Every element is built with createElement and every value set with
 // textContent or setAttribute (ui.js), so nothing read from the settings or the history can become markup (failure case 52).
 import { attentionRows, initials, licenceLine, newestFirst, parseRoute, setupNeeded, stepLabel, topRole } from './logic.js';
+import { exportPage } from './export.js';
 import { setupPage } from './setup.js';
 import { api, el, notice, put } from './ui.js';
 
@@ -10,6 +11,7 @@ const state = { me: null, status: null, config: null };
 
 const pages = [
   { id: 'overview', label: 'Overview' },
+  { id: 'export', label: 'Export (from your ERP)' },
   { id: 'history', label: 'Document history' },
 ];
 
@@ -130,7 +132,11 @@ async function historyPage(view, route) {
   );
 }
 
-const renderers = { overview: overviewPage, history: historyPage };
+const renderers = {
+  overview: overviewPage,
+  history: historyPage,
+  export: (view, route) => exportPage(view, route, { me: state.me, status: state.status, config: state.config }),
+};
 
 async function show() {
   const route = parseRoute(window.location.hash);

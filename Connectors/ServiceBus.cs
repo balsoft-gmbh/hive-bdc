@@ -70,6 +70,14 @@ public static class AzureServiceBus
         return new AzureBusInbox(receiver, $"{client.FullyQualifiedNamespace}/{entity}");
     }
 
+    /// <summary>How many messages wait (up to <paramref name="max"/>), read by peeking: nothing is locked, received or completed.</summary>
+    public static async Task<int> PeekCount(ConnectionOptions connection, string queue, string topic, string subscription, int max)
+    {
+        var (client, _) = Client(connection);
+        await using var receiver = queue.Length > 0 ? client.CreateReceiver(queue) : client.CreateReceiver(topic, subscription);
+        return (await receiver.PeekMessagesAsync(max)).Count;
+    }
+
     public static IBusOutbox Outbox(ConnectionOptions connection, string queueOrTopic)
     {
         var (client, key) = Client(connection);

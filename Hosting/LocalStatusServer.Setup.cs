@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Azure;
 using Azure.Identity;
+using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -88,6 +89,8 @@ public sealed partial class LocalStatusServer
 
     private sealed class CheckSourceDto
     {
+        /// <summary>A saved Azure Storage connection by its name, instead of the address and connection string.</summary>
+        public string? Connection { get; set; }
         public string? AccountUrl { get; set; }
         public string? Container { get; set; }
         public string? Prefix { get; set; }
@@ -119,6 +122,15 @@ public sealed partial class LocalStatusServer
         catch (JsonException ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
 
         string container = dto?.Container?.Trim() ?? "";
+        if (!string.IsNullOrWhiteSpace(dto?.Connection))
+        {
+            var saved = Snapshot().Connection(dto.Connection.Trim());
+            if (saved is null || saved.Kind != ConnectionKinds.AzureStorage)
+            { Respond(call, 400, new { ok = false, message = $"There is no Azure Storage connection '{dto.Connection.Trim()}'." }); return; }
+            string secret = saved.Secret.Length > 0 ? SecretProtector.Unprotect(saved.Secret) : "";
+            dto.ConnectionString = secret.Length > 0 ? secret : null;
+            dto.AccountUrl = saved.Setting("AccountUrl") is { Length: > 0 } url ? url : AccountUrlOf(secret);
+        }
         if (!Uri.TryCreate(dto?.AccountUrl?.Trim(), UriKind.Absolute, out var account) || account.Scheme != Uri.UriSchemeHttps)
         { Respond(call, 400, new { ok = false, message = "Enter the storage account address, for example https://youraccount.blob.core.windows.net." }); return; }
         if (!ContainerName().IsMatch(container))
@@ -192,6 +204,117 @@ public sealed partial class LocalStatusServer
             _log.LogInformation("Setup check of {Account}/{Container} failed: {Kind}.", ForLog(account.Host), ForLog(container), ex.GetType().Name);
             Respond(call, 200, new { ok = false, message, waiting = 0, byCompany = Array.Empty<object>(), byType = Array.Empty<object>(), command });
         }
+    }
+
+    /// <summary>The blob address a storage connection string names (BlobEndpoint, or AccountName and EndpointSuffix), or "".</summary>
+    private static string AccountUrlOf(string connectionString)
+    {
+        var parts = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('=', 2)).Where(p => p.Length == 2)
+            .GroupBy(p => p[0].Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last()[1].Trim(), StringComparer.OrdinalIgnoreCase);
+        if (parts.TryGetValue("BlobEndpoint", out var endpoint)) return endpoint;
+        if (!parts.TryGetValue("AccountName", out var name)) return "";
+        return $"https://{name}.blob.{(parts.TryGetValue("EndpointSuffix", out var suffix) ? suffix : "core.windows.net")}";
+    }
+
+    private const int PeekAtMost = 50;
+
+    /// <summary>How the queue check peeks; replaced in tests.</summary>
+    internal Func<ConnectionOptions, string, string, string, Task<int>> QueuePeek { get; set; } =
+        (connection, queue, topic, subscription) => AzureServiceBus.PeekCount(connection, queue, topic, subscription, PeekAtMost);
+
+    private sealed class CheckQueueDto
+    {
+        public string? Connection { get; set; }
+        public string? Queue { get; set; }
+        public string? Topic { get; set; }
+        public string? Subscription { get; set; }
+    }
+
+    /// <summary>Can the instance read this queue or subscription (failure case 73)? Peeks only; nothing is stored.</summary>
+    private async Task PostCheckQueue(ApiCall call)
+    {
+        CheckQueueDto? dto;
+        try { dto = JsonSerializer.Deserialize<CheckQueueDto>(call.Body, JsonOpts); }
+        catch (JsonException ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        string id = dto?.Connection?.Trim() ?? "", queue = dto?.Queue?.Trim() ?? "";
+        string topic = dto?.Topic?.Trim() ?? "", subscription = dto?.Subscription?.Trim() ?? "";
+        var connection = Snapshot().Connection(id);
+        if (connection is null || connection.Kind != ConnectionKinds.ServiceBus)
+        { Respond(call, 400, new { ok = false, message = $"There is no Service Bus connection '{id}'." }); return; }
+        if (queue.Length == 0 && (topic.Length == 0 || subscription.Length == 0))
+        { Respond(call, 400, new { ok = false, message = "Name the queue, or the topic and its subscription." }); return; }
+
+        string entity = queue.Length > 0 ? queue : $"{topic}/{subscription}";
+        string space = connection.Setting("Namespace");
+        string spaceName = space.Split('.')[0];
+        var (objectId, _) = InstanceIdentity();
+        string? command = objectId is null || spaceName.Length == 0 ? null
+            : $"az role assignment create --assignee-object-id {objectId} --assignee-principal-type ServicePrincipal "
+              + $"--role \"Azure Service Bus Data Receiver\" --scope \"$(az resource list --name {spaceName} --resource-type Microsoft.ServiceBus/namespaces --query [0].id -o tsv)\"";
+        try
+        {
+            int count = await QueuePeek(connection, queue, topic, subscription);
+            string waiting = count switch
+            {
+                0 => $"No message is waiting in {entity}.",
+                1 => $"1 message is waiting in {entity}.",
+                >= PeekAtMost => $"{PeekAtMost} or more messages are waiting in {entity}.",
+                _ => $"{count} messages are waiting in {entity}.",
+            };
+            Respond(call, 200, new { ok = true, message = "Access works. " + waiting, waiting = count, command });
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or ServiceBusException or AuthenticationFailedException
+                                       or ArgumentException or FormatException or InvalidOperationException)
+        {
+            string where = space.Length > 0 ? space : "the namespace";
+            string message = ex switch
+            {
+                UnauthorizedAccessException when connection.Secret.Length == 0
+                    => $"This instance has no access to {where} yet. Your IT runs the command below once; then wait a minute and check again.",
+                UnauthorizedAccessException => "The connection string was refused. Copy it again from the namespace's Shared access policies.",
+                ServiceBusException { Reason: ServiceBusFailureReason.MessagingEntityNotFound } => $"'{entity}' does not exist in {where}.",
+                ServiceBusException sb => $"Service Bus answered: {sb.Reason}.",
+                _ => $"{where} cannot be reached from this instance. Check the connection.",
+            };
+            _log.LogInformation("Queue check of {Entity}: {Kind}.", ForLog(entity), ex.GetType().Name);
+            Respond(call, 200, new { ok = false, message, waiting = 0, command });
+        }
+    }
+
+    private const long SampleMaxBytes = 5 * 1024 * 1024;
+
+    /// <summary>
+    /// The newest document of one type and company that went through (its processed folder, test runs included), as its
+    /// top-level fields, so a destination screen can show what a template would take (failure case 76).
+    /// </summary>
+    private void GetExportSample(ApiCall call)
+    {
+        string type = call.Query("type")?.Trim() ?? "", company = call.Query("company")?.Trim() ?? "";
+        var route = Snapshot().DocumentTypes.FirstOrDefault(t => string.Equals(t.Id, type, StringComparison.OrdinalIgnoreCase))?
+            .Companies.FirstOrDefault(r => string.Equals(r.DataAreaId, company, StringComparison.OrdinalIgnoreCase));
+        var none = new { file = "", fields = new Dictionary<string, string>(), message = "No document of this company went through yet. Values show after the first one." };
+        if (route is null || string.IsNullOrWhiteSpace(route.Input)) { Respond(call, 200, none); return; }
+
+        var files = new[] { Path.Combine(route.Input, "processed"), Path.Combine(route.Input, TestRun.Folder, "processed") }
+            .Where(Directory.Exists)
+            .SelectMany(d => new DirectoryInfo(d).EnumerateFiles("*.json"))
+            .Where(f => f.Length <= SampleMaxBytes)
+            .OrderByDescending(f => f.LastWriteTimeUtc);
+        foreach (var file in files)
+        {
+            byte[] json = File.ReadAllBytes(file.FullName);
+            if (!BlobStager.ExportIsFor(json, type, company)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(json, AxDocument.DocumentOptions);
+                Respond(call, 200, new { file = file.Name, fields = SharePointFieldTemplate.Fields(doc.RootElement), message = "" });
+                return;
+            }
+            catch (JsonException) { /* not an export */ }
+        }
+        Respond(call, 200, none);
     }
 
     /// <summary>The document type and company an export names ("documentType", "dataAreaId" in any case), "unknown" for what cannot be read.</summary>

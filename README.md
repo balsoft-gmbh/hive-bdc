@@ -362,9 +362,14 @@ Prerequisite: an Entra ID app registration in the target tenant with the
 - `Fields` (dashboard: the **Column templates** table of the company entry) maps SharePoint **internal** column names to templates. `{property}`
   placeholders resolve case-insensitively against the **top level of the
   document JSON** (any field the export writes is usable). `{property:date}`
-  normalizes to `yyyy-MM-dd`. Fields that resolve to empty are skipped.
+  normalizes to `yyyy-MM-dd`; `{property:yyyy}`, `{property:MM}` and other
+  patterns of y, M, d, `-` and `.` format a date. Fields that resolve to empty are skipped.
   `{documentType}` is a handy column value to tell invoices from confirmations
   in one library.
+- `Folder` takes the same placeholders, for example `{IssueDate:yyyy}/{IssueDate:MM}`.
+  A value never adds a folder level (`/` and `\` in it become `-`), characters
+  SharePoint refuses and runs of dots are removed, and empty parts are dropped, so the
+  folder always stays inside the library.
 - `HiveBDC.exe --test-sharepoint` verifies auth and the first enabled
   target without uploading anything (the dashboard's **Test this library** on a
   company's SharePoint library screen does the same for that company).
@@ -988,6 +993,23 @@ document type (`byType`), `GET /setup/identity` names the staging root (`inputRo
 `GET /config` names each company's `source`. A test run takes only an export whose JSON
 names that type and company, and works in the `.test-run` subfolder of the staging folder,
 so other waiting pairs there are not touched.
+
+**Export** (`#/export`) edits the outbound side one level per screen: the document types
+(with a waiting export of a company that has no entry yet offered as "Add company"), one
+type, one company (where documents come from: a Blob container and folder, a Service Bus
+queue or topic with the container its PDFs are in, or a web address with its own key, made
+in the browser and shown once; and where they go), and one destination (its settings with
+lists read from the system, the connection, and for SharePoint and DocuWare the field
+mapping with the values of the last document). All screens edit one draft; the Save bar
+lists its changes and waits until every company has a complete source and somewhere to
+go, since in Azure a company that delivers nowhere holds every document. Companies that
+read the same container, queue or subscription share one staging folder. Calls used:
+`POST /setup/check-source` also takes a saved storage connection by name,
+`POST /setup/check-queue` peeks at a queue or subscription (nothing is received or
+completed; without access it answers the role command), and
+`GET /export/sample?type=&company=` gives the top-level fields of the newest document of
+that type and company that went through. A document that waits because its company has
+no entry names its type and company in the history.
 
 #### Installing in Azure (managed application)
 

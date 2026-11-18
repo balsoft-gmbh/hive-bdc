@@ -204,6 +204,10 @@ public sealed partial class DocumentProcessor
         if (!type.Discovered && !opts.DocumentTypes.Contains(type))
             throw new InvalidOperationException(
                 $"Document type '{type.Id}' was removed in Settings > Outbound. Add it again (New document type, ID {type.Id}), then drop the pair back into the input folder.");
+        // Known before the route, so a document that waits for its company's entry names both in the history.
+        var known = HistoryOf(input);
+        known.DocumentType = type.Id;
+        if (company is not null) known.DataAreaId = company;
         var route = PickRoute(folder.Routes.Where(r => r.Type.Matches(type.Id)).Select(r => r.Route), company)
                     ?? PickRoute(type.Companies, company)
                     ?? (type.Discovered && seed is not null ? _registry.AddCompany(type, seed) : null)
@@ -218,9 +222,7 @@ public sealed partial class DocumentProcessor
             type.Handler == DocumentHandlerKind.EInvoice
                 ? " eInvoiceType=" + (string.IsNullOrWhiteSpace(data.EInvoiceType) ? "(default->xrechnung)" : data.EInvoiceType)
                 : "");
-        var known = HistoryOf(input);
         known.DocumentNumber = documentNumber;
-        known.DocumentType = type.Id;
         known.DataAreaId = area;
         Note(input, documentId, EventSteps.Read, EventStates.Ok,
             $"Read as {type.EffectiveDisplayName} {documentNumber} for company {area}" +

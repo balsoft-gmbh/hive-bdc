@@ -60,15 +60,128 @@ public sealed class SetupApiTests : IDisposable
         return Part("{}") + "." + Part(payload.ToJsonString()) + ".c2ln";
     }
 
-    private LocalStatusServer Api(ILicenseTenant tenant, Func<string, string, string?, IBlobStore> stores)
-        => new(new Monitor(new BDCOptions()), new TableStateStore(new MemoryTableRows(), NullLogger.Instance),
+    private LocalStatusServer Api(ILicenseTenant tenant, Func<string, string, string?, IBlobStore> stores, BDCOptions? options = null)
+        => new(new Monitor(options ?? new BDCOptions()), new TableStateStore(new MemoryTableRows(), NullLogger.Instance),
             NullLogger<LocalStatusServer>.Instance, null, "9.9.9", Path.Combine(_root, "unused.json"), _root,
             new BlobSettingsDocument(_settings), new BlobLicenseStore(new MemoryETagBlob()), tenant)
         { SourceStores = stores };
 
+    private static BDCOptions WithConnections()
+    {
+        var options = new BDCOptions();
+        options.Connections.Add(new ConnectionOptions { Id = "fo", Kind = "azure-storage", Settings = { ["AccountUrl"] = "https://stcontosofo.blob.core.windows.net" } });
+        options.Connections.Add(new ConnectionOptions { Id = "sb", Kind = "servicebus", Settings = { ["Namespace"] = "sb-contoso-fo.servicebus.windows.net" } });
+        options.Normalize();
+        return options;
+    }
+
+    [Fact]
+    public async Task TheBlobCheckTakesASavedConnectionByItsName()
+    {
+        string? usedUrl = null, usedSecret = "unset";
+        var api = Api(Instance(), (url, _, secret) => { usedUrl = url; usedSecret = secret; return new Store(Exports()); }, WithConnections());
+        var (status, body, _) = await Call(api, "POST", "/setup/check-source", new { connection = "fo", container = "bdc-export" });
+        Assert.Equal(200, status);
+        Assert.True(body["ok"]!.GetValue<bool>());
+        Assert.Equal("https://stcontosofo.blob.core.windows.net", usedUrl);
+        Assert.True(string.IsNullOrEmpty(usedSecret));
+
+        var (missing, refusal, _) = await Call(api, "POST", "/setup/check-source", new { connection = "nope", container = "bdc-export" });
+        Assert.Equal(400, missing);
+        Assert.Contains("nope", refusal["message"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task TheQueueCheckPeeksAndCountsWithoutTakingAnything()
+    {
+        string? entity = null;
+        var api = Api(Instance(), (_, _, _) => new Store(new()), WithConnections());
+        api.QueuePeek = (c, queue, topic, subscription) => { entity = queue.Length > 0 ? queue : topic + "/" + subscription; return Task.FromResult(2); };
+        var (status, body, _) = await Call(api, "POST", "/setup/check-queue", new { connection = "sb", queue = "bdc-export" });
+        Assert.Equal(200, status);
+        Assert.True(body["ok"]!.GetValue<bool>());
+        Assert.Equal("Access works. 2 messages are waiting in bdc-export.", body["message"]!.GetValue<string>());
+        Assert.Equal("bdc-export", entity);
+
+        await Call(api, "POST", "/setup/check-queue", new { connection = "sb", topic = "bdc", subscription = "hivebdc" });
+        Assert.Equal("bdc/hivebdc", entity);
+
+        var (bad, refused, _) = await Call(api, "POST", "/setup/check-queue", new { connection = "sb" });
+        Assert.Equal(400, bad);
+        Assert.Contains("queue", refused["message"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task NoQueueAccessNamesTheRoleCommandAndAMissingQueueIsNamed()
+    {
+        var api = Api(Instance(), (_, _, _) => new Store(new()), WithConnections());
+        api.QueuePeek = (_, _, _, _) => throw new UnauthorizedAccessException("Listen claim required");
+        var (_, body, _) = await Call(api, "POST", "/setup/check-queue", new { connection = "sb", queue = "bdc-export" });
+        Assert.False(body["ok"]!.GetValue<bool>());
+        Assert.Contains("no access", body["message"]!.GetValue<string>());
+        string command = body["command"]!.GetValue<string>();
+        Assert.Contains("--assignee-object-id " + ObjectId, command);
+        Assert.Contains("--role \"Azure Service Bus Data Receiver\"", command);
+        Assert.Contains("sb-contoso-fo", command);
+
+        api.QueuePeek = (_, _, _, _) => throw new Azure.Messaging.ServiceBus.ServiceBusException("gone", Azure.Messaging.ServiceBus.ServiceBusFailureReason.MessagingEntityNotFound);
+        var (_, missing, _) = await Call(api, "POST", "/setup/check-queue", new { connection = "sb", queue = "bdc-exprt" });
+        Assert.False(missing["ok"]!.GetValue<bool>());
+        Assert.Contains("'bdc-exprt' does not exist", missing["message"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task TheSampleIsTheNewestExportOfThatTypeAndCompany()
+    {
+        string input = Path.Combine(_root, "staging");
+        Directory.CreateDirectory(Path.Combine(input, "processed"));
+        Directory.CreateDirectory(Path.Combine(input, ".test-run", "processed"));
+        void Put(string path, string json, int minutesAgo)
+        {
+            File.WriteAllText(path, json);
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-minutesAgo));
+        }
+        Put(Path.Combine(input, "processed", "A_blob.json"), """{ "documentType": "SalesInvoice", "dataAreaId": "1000", "documentNumber": "RE-1", "total": 10.5, "lines": [ 1 ] }""", 30);
+        Put(Path.Combine(input, ".test-run", "processed", "B_blob.json"), """{ "documentType": "SalesInvoice", "dataAreaId": "1000", "documentNumber": "RE-2" }""", 20);
+        Put(Path.Combine(input, "processed", "C_blob.json"), """{ "documentType": "SalesInvoice", "dataAreaId": "DEMF", "documentNumber": "RE-3" }""", 10);
+        Put(Path.Combine(input, "processed", "D_blob.json"), """{ "documentType": "SalesConfirmation", "dataAreaId": "1000", "documentNumber": "AB-1" }""", 5);
+
+        var options = new BDCOptions();
+        options.DocumentTypes.Add(new DocumentTypeOptions
+        {
+            Id = "SalesInvoice", Handler = DocumentHandlerKind.Pdf,
+            Companies = { new DocumentRoute { DataAreaId = "1000", Input = input }, new DocumentRoute { DataAreaId = "DEMF", Input = input } },
+        });
+        options.Normalize();
+        var api = Api(Instance(), (_, _, _) => new Store(new()), options);
+
+        var (status, body, _) = await Call(api, "GET", "/export/sample?type=SalesInvoice&company=1000");
+        Assert.Equal(200, status);
+        Assert.Equal("RE-2", body["fields"]!["documentNumber"]!.GetValue<string>());
+        Assert.Null(body["fields"]!["lines"]);
+
+        var (_, demf, _) = await Call(api, "GET", "/export/sample?type=SalesInvoice&company=DEMF");
+        Assert.Equal("RE-3", demf["fields"]!["documentNumber"]!.GetValue<string>());
+
+        var (_, none, _) = await Call(api, "GET", "/export/sample?type=SalesInvoice&company=2000");
+        Assert.Empty(none["fields"]!.AsObject());
+        Assert.Contains("No document", none["message"]!.GetValue<string>());
+    }
+
     private static async Task<(int Status, JsonObject Body, string Text)> Call(LocalStatusServer api, string method, string path, object? body = null)
     {
-        var call = new ApiCall(method, path, new Dictionary<string, string>(), body is null ? "" : System.Text.Json.JsonSerializer.Serialize(body));
+        var query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        int mark = path.IndexOf('?');
+        if (mark >= 0)
+        {
+            foreach (var pair in path[(mark + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = pair.Split('=', 2);
+                query[Uri.UnescapeDataString(parts[0])] = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "";
+            }
+            path = path[..mark];
+        }
+        var call = new ApiCall(method, path, query, body is null ? "" : System.Text.Json.JsonSerializer.Serialize(body));
         await api.Route(call);
         string text = Encoding.UTF8.GetString(call.Answer);
         return (call.Status, JsonNode.Parse(text)!.AsObject(), text);
