@@ -142,7 +142,7 @@ public sealed class AzureWebHost : BackgroundService
         var headers = http.Response.Headers;
         headers["Content-Security-Policy"] = ConsoleFiles.ContentSecurityPolicy;
         headers["X-Content-Type-Options"] = "nosniff";
-        headers["Referrer-Policy"] = "no-referrer";
+        headers["Referrer-Policy"] = "same-origin";   // App Service refuses a signed-in POST without a same-origin Referer
         headers["Cache-Control"] = "no-store";
         string path = (http.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant();
         if (path == "/healthz")
@@ -203,7 +203,7 @@ public sealed class AzureWebHost : BackgroundService
         using (var reader = new StreamReader(http.Request.Body, Encoding.UTF8))
             body = await reader.ReadToEndAsync(http.RequestAborted);
         var query = http.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString(), StringComparer.OrdinalIgnoreCase);
-        var call = new ApiCall(http.Request.Method, http.Request.Path.Value ?? "", query, body);
+        var call = new ApiCall(http.Request.Method, http.Request.Path.Value ?? "", query, body) { User = user.Name };
         string needed = ApiRoles.Needed(call);
         if (!ApiRoles.Allows(user.Roles, needed))
         {

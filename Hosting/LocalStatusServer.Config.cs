@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Balsoft.Hive.BDC.Hosting;
@@ -20,11 +21,38 @@ public sealed partial class LocalStatusServer
     // Structure comes from Snapshot(), which migrates every older shape (top-level companies,
     // single-config) on the fly, so an old file reads back in the new form.
 
-    private void GetConfig(ApiCall call) => Respond(call, 200, BuildConfigResponse());
-
-    private object BuildConfigResponse()
+    // The answer and its version come from one read of the stored settings, so an editor never pairs older content
+    // with a newer version (failure case 54); the read is remembered as the start of a later save.
+    private void GetConfig(ApiCall call)
     {
-        var opts = Snapshot();
+        JsonObject? stored = null;
+        try { stored = _settings.ReadSection(); }
+        catch (InvalidOperationException) { /* unreadable: answer from the running settings, without a version */ }
+        if (stored is null)
+        {
+            Respond(call, 200, BuildConfigResponse(Snapshot(), "", null));
+            return;
+        }
+        string version = ConfigMerge.Version(stored);
+        _versions.Remember(version, stored);
+        // A local install answers from the running settings as it always did (command line and environment included);
+        // the Azure settings blob answers from the read that gave the version.
+        var options = _settings is BlobSettingsDocument ? OptionsFrom(stored) : Snapshot();
+        Respond(call, 200, BuildConfigResponse(options, version, stored[ConfigMerge.LastSavedKey] as JsonObject));
+    }
+
+    private static BDCOptions OptionsFrom(JsonObject section)
+    {
+        var root = new JsonObject { [SettingsFile.Section] = section.DeepClone() };
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var options = new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddJsonStream(stream).Build()
+            .GetSection(SettingsFile.Section).Get<BDCOptions>() ?? new BDCOptions();
+        options.Normalize();
+        return options;
+    }
+
+    private object BuildConfigResponse(BDCOptions opts, string version, JsonObject? lastSaved)
+    {
         var auth = opts.SharePointAuth;
         return new
         {
@@ -90,6 +118,8 @@ public sealed partial class LocalStatusServer
                     }).ToArray(),
                 }).ToArray(),
             }).ToArray(),
+            version,
+            lastSaved = lastSaved is null ? null : new { by = (string?)lastSaved["By"] ?? "", at = (string?)lastSaved["At"] ?? "" },
         };
     }
 
@@ -232,8 +262,12 @@ public sealed partial class LocalStatusServer
         if (errors.Count > 0) { Respond(call, 400, new { ok = false, errors }); return; }
 
         // ── build the new HiveBDC section ─────────────────────────────
+        // Built twice when the editor started from an older version: first with placeholders, so a refused save never
+        // puts a newly typed secret into Key Vault (failure case 54), then for real.
+        JsonObject BuildSection(Func<string, string?, string> protect)
+        {
         string secretToStore = !string.IsNullOrWhiteSpace(postedSecret)
-            ? SecretProtector.Protect(postedSecret, "sharepoint-client-secret")
+            ? protect(postedSecret, "sharepoint-client-secret")
             : storedSecret;
 
         JsonNode? typesNode;
@@ -315,7 +349,7 @@ public sealed partial class LocalStatusServer
                 ["TenantId"] = mail?.TenantId ?? "",
                 ["ClientId"] = mail?.ClientId ?? "",
                 ["ClientSecret"] = !string.IsNullOrWhiteSpace(postedMailSecret)
-                    ? SecretProtector.Protect(postedMailSecret, "mail-client-secret")
+                    ? protect(postedMailSecret, "mail-client-secret")
                     : storedMailSecret,
                 ["From"] = mail?.From ?? "",
                 ["RedirectTo"] = new JsonArray(MailAddresses.Clean(mail?.RedirectTo)
@@ -325,22 +359,72 @@ public sealed partial class LocalStatusServer
             ["DocumentTypes"] = typesNode,
         };
 
-        section["Connections"] = ConnectionsNode(dto.Connections, prevSection);
+        section["Connections"] = ConnectionsNode(dto.Connections, prevSection, protect);
         section["Flows"] = dto.Flows?.DeepClone() ?? prevSection?["Flows"]?.DeepClone() ?? new JsonArray();
+        return section;
+        }
 
+        string? baseVersion = string.IsNullOrWhiteSpace(dto.BaseVersion) ? null : dto.BaseVersion.Trim();
+        bool saveBoth = dto.SaveBoth == true;
+        if (baseVersion is not null && ConfigMerge.Version(prevSection) != baseVersion)
+        {
+            var draft = BuildSection(static (_, name) => "(new value for " + name + ")");
+            var start = _versions.Get(baseVersion);
+            var preview = start is null ? null : ConfigMerge.Merge3(start, prevSection, draft);
+            if (preview is null || !saveBoth || preview.Conflicts.Count > 0)
+            {
+                Respond(call, 409, Refusal(start, prevSection, draft, preview));
+                return;
+            }
+        }
+        var section = BuildSection(SecretProtector.Protect);
+
+        object? refused = null;
+        JsonObject? written = null;
         // The product section is replaced as a whole (a legacy 1.x section is renamed on the way); the rest of the
         // file or blob stays as it is.
         try
         {
             _settings.Update(stored =>
             {
+                refused = null;
+                var write = section;
+                if (baseVersion is not null && ConfigMerge.Version(stored) != baseVersion)
+                {
+                    var start = _versions.Get(baseVersion);
+                    var merge = start is null ? null : ConfigMerge.Merge3(start, stored, section);
+                    if (merge is null || !saveBoth || merge.Conflicts.Count > 0)
+                    {
+                        refused = Refusal(start, stored, section, merge);
+                        return false;
+                    }
+                    write = merge.Result!;
+                }
                 stored.Clear();
-                foreach (var (key, value) in section) stored[key] = value?.DeepClone();
+                foreach (var (key, value) in write) stored[key] = value?.DeepClone();
+                stored[ConfigMerge.LastSavedKey] = new JsonObject
+                {
+                    ["By"] = call.User ?? "Hive BDC dashboard",
+                    ["At"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                };
+                written = (JsonObject)stored.DeepClone();
                 return true;
             });
         }
         catch (Exception ex)
         { Respond(call, 500, new { ok = false, errors = new[] { $"Failed to write the settings ({_settings.Where}): " + ex.Message } }); return; }
+        if (refused is not null)
+        {
+            _log.LogWarning("Settings save by {User} refused: someone saved after the editor opened them.", ForLog(call.User ?? "dashboard"));
+            Respond(call, 409, refused);
+            return;
+        }
+        string newVersion = "";
+        if (written is not null)
+        {
+            newVersion = ConfigMerge.Version(written);
+            _versions.Remember(newVersion, written);
+        }
 
         bool secretChanged = !string.IsNullOrWhiteSpace(postedSecret);
         string mailSummary = mail?.Enabled == true
@@ -353,8 +437,57 @@ public sealed partial class LocalStatusServer
             "Configuration updated via /config — poll={Poll}s, logDir={LogDir}, sharedSecret={Secret}, mail={Mail}, documentTypes: {Types}",
             poll, string.IsNullOrWhiteSpace(dto.LogDir) ? "(default)" : dto.LogDir,
             secretChanged ? "changed" : "unchanged", mailSummary, typeSummary);
-        Respond(call, 200, new { ok = true });
+        Respond(call, 200, new { ok = true, version = newVersion });
     }
+
+    /// <summary>The 409 answer: who saved, what each side changed, and which settings both changed.</summary>
+    private static object Refusal(JsonObject? start, JsonObject? theirs, JsonObject mine, SettingsMerge? merge)
+    {
+        var last = theirs?[ConfigMerge.LastSavedKey] as JsonObject;
+        object Shown(SettingChange c) => new { path = c.Path, before = c.Before, after = c.After };
+        var (their, yours) = start is null ? ([], []) : ConfigMerge.ChangeLists(start, theirs, mine);
+        return new
+        {
+            ok = false,
+            conflict = true,
+            baseKnown = start is not null,
+            savedBy = (string?)last?["By"] ?? "",
+            savedAt = (string?)last?["At"] ?? "",
+            version = ConfigMerge.Version(theirs),
+            theirChanges = their.Select(Shown).ToArray(),
+            yourChanges = yours.Select(Shown).ToArray(),
+            overlaps = merge?.Conflicts.ToArray() ?? [],
+            errors = new[] { start is null
+                ? "The settings were saved by someone else after you opened them. Load them again, then make your change."
+                : "The settings were saved by someone else after you opened them. Nothing of yours was saved yet." },
+        };
+    }
+
+    /// <summary>The settings as GET /config or a save last gave them, by version: where an editor started from.</summary>
+    private sealed class SettingsVersions
+    {
+        private const int Keep = 32;
+        private readonly Dictionary<string, JsonObject> _byVersion = new(StringComparer.Ordinal);
+        private readonly Queue<string> _order = new();
+
+        public void Remember(string version, JsonObject section)
+        {
+            lock (_byVersion)
+            {
+                if (_byVersion.ContainsKey(version)) return;
+                _byVersion[version] = (JsonObject)section.DeepClone();
+                _order.Enqueue(version);
+                while (_order.Count > Keep) _byVersion.Remove(_order.Dequeue());
+            }
+        }
+
+        public JsonObject? Get(string version)
+        {
+            lock (_byVersion) return _byVersion.TryGetValue(version, out var s) ? (JsonObject)s.DeepClone() : null;
+        }
+    }
+
+    private readonly SettingsVersions _versions = new();
 
     // ── request DTOs (camelCase JSON, case-insensitive binding) ─────────────
 
@@ -363,7 +496,7 @@ public sealed partial class LocalStatusServer
     /// The Connections array to store: the posted list with new secrets protected and blank ones taken from the stored
     /// connection of the same id, or the stored list unchanged when the dashboard sent none.
     /// </summary>
-    internal static JsonNode ConnectionsNode(IReadOnlyList<ConnectionPostDtoView>? posted, JsonObject? stored)
+    internal static JsonNode ConnectionsNode(IReadOnlyList<ConnectionPostDtoView>? posted, JsonObject? stored, Func<string, string?, string>? protect = null)
     {
         if (posted is null) return stored?["Connections"]?.DeepClone() ?? new JsonArray();
         var previous = (stored?["Connections"] as JsonArray)?.OfType<JsonObject>().ToList() ?? new List<JsonObject>();
@@ -373,7 +506,7 @@ public sealed partial class LocalStatusServer
             string id = c.Id?.Trim() ?? "";
             if (id.Length == 0) continue;
             string secret = !string.IsNullOrWhiteSpace(c.Secret)
-                ? SecretProtector.Protect(c.Secret, "connection-" + id)
+                ? (protect ?? SecretProtector.Protect)(c.Secret, "connection-" + id)
                 : previous.FirstOrDefault(p => string.Equals((string?)p["Id"], id, StringComparison.OrdinalIgnoreCase))?["Secret"]?.GetValue<string>() ?? "";
             var settings = new JsonObject();
             foreach (var (k, v) in c.Settings ?? new()) settings[k] = v ?? "";
@@ -388,8 +521,8 @@ public sealed partial class LocalStatusServer
         return result;
     }
 
-    private static JsonNode ConnectionsNode(List<ConnectionPostDto>? posted, JsonObject? stored)
-        => ConnectionsNode(posted?.Select(c => new ConnectionPostDtoView(c.Id, c.Kind, c.Settings, c.Secret)).ToList(), stored);
+    private static JsonNode ConnectionsNode(List<ConnectionPostDto>? posted, JsonObject? stored, Func<string, string?, string> protect)
+        => ConnectionsNode(posted?.Select(c => new ConnectionPostDtoView(c.Id, c.Kind, c.Settings, c.Secret)).ToList(), stored, protect);
 
     internal sealed record ConnectionPostDtoView(string? Id, string? Kind, Dictionary<string, string>? Settings, string? Secret);
 
@@ -406,6 +539,10 @@ public sealed partial class LocalStatusServer
         public List<ConnectionPostDto>? Connections { get; set; }
         /// <summary>Absent => keep the stored flows untouched. Stored as sent; the service validates them when it runs them.</summary>
         public JsonArray? Flows { get; set; }
+        /// <summary>The version GET /config gave the editor; absent (the Windows app) => saved as before.</summary>
+        public string? BaseVersion { get; set; }
+        /// <summary>After a refusal: merge with the newer settings when no setting overlaps.</summary>
+        public bool? SaveBoth { get; set; }
     }
 
     private sealed class ConnectionPostDto

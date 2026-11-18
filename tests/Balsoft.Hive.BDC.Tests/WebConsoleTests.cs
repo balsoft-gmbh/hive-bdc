@@ -85,7 +85,7 @@ public sealed class WebConsoleTests : IAsyncLifetime
         Assert.Contains("frame-ancestors 'none'", csp);
         Assert.DoesNotContain("unsafe-inline", csp);
         Assert.Equal("nosniff", page.Headers.GetValues("X-Content-Type-Options").Single());
-        Assert.Equal("no-referrer", page.Headers.GetValues("Referrer-Policy").Single());
+        Assert.Equal("same-origin", page.Headers.GetValues("Referrer-Policy").Single());
         Assert.Equal("no-store", page.Headers.CacheControl?.ToString());
         Assert.Contains("/console/app.js", await page.Content.ReadAsStringAsync());
 
@@ -160,7 +160,7 @@ public sealed class WebConsoleTests : IAsyncLifetime
             }
         }
         // replaceChildren prints "null" for a skipped element; only put() calls it, after dropping empty children.
-        Assert.Equal(1, Regex.Matches(ConsoleFiles.Text("app.js"), @"\.replaceChildren\(").Count);
+        Assert.Single(Regex.Matches(ConsoleFiles.Text("app.js"), @"\.replaceChildren\("));
         Assert.Contains("index.html", ConsoleFiles.Names);
         Assert.Contains("app.js", ConsoleFiles.Names);
         Assert.Contains("logic.js", ConsoleFiles.Names);

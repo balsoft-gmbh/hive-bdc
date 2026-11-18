@@ -1,7 +1,7 @@
 // node --test tests/console/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attentionRows, germanDate, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole } from '../../Hosting/Console/logic.js';
+import { attentionRows, changeLine, conflictView, germanDate, initials, licenceLine, newestFirst, parseRoute, stepLabel, topRole } from '../../Hosting/Console/logic.js';
 
 test('the highest role wins and unknown roles are ignored', () => {
   assert.equal(topRole(['viewer', 'Administrator']), 'Administrator');
@@ -60,4 +60,33 @@ test('history shows the newest event first and leaves the input alone', () => {
   assert.deepEqual(newestFirst(events).map((e) => e.id), [3, 2, 1]);
   assert.deepEqual(events.map((e) => e.id), [1, 3, 2]);
   assert.deepEqual(newestFirst(undefined), []);
+});
+
+test('a change reads as a sentence, with added and removed named', () => {
+  assert.equal(changeLine({ path: 'SalesInvoice › company 1000 › SharePoint › Folder', before: '{yyyy}', after: '{yyyy}/{MM}' }),
+    'SalesInvoice › company 1000 › SharePoint › Folder: {yyyy} is now {yyyy}/{MM}');
+  assert.equal(changeLine({ path: 'SalesInvoice › company 2000', before: '(none)', after: 'added' }), 'SalesInvoice › company 2000: added');
+  assert.equal(changeLine({ path: 'connection dw', before: 'present', after: '(none)' }), 'connection dw: removed');
+});
+
+test('the refusal offers Save both only when nothing overlaps and the start is known', () => {
+  const base = {
+    baseKnown: true, savedBy: 'anna@contoso.example', savedAt: '2026-11-18T09:44:00Z', overlaps: [],
+    theirChanges: [{ path: 'PollSeconds', before: '30', after: '45' }],
+    yourChanges: [{ path: 'SalesInvoice › company 1000 › docuware dw Datapool › Enabled', before: 'false', after: 'true' }],
+  };
+  const view = conflictView(base, 'Europe/Berlin');
+  assert.equal(view.title, 'Not saved: anna@contoso.example saved these settings at 10:44, after you opened them');
+  assert.equal(view.canSaveBoth, true);
+  assert.deepEqual(view.theirs, ['PollSeconds: 30 is now 45']);
+  assert.equal(view.yours.length, 1);
+
+  const overlap = conflictView({ ...base, overlaps: ['PollSeconds'] }, 'Europe/Berlin');
+  assert.equal(overlap.canSaveBoth, false);
+  assert.match(overlap.note, /same setting/);
+
+  const unknown = conflictView({ baseKnown: false, savedBy: '', savedAt: '' });
+  assert.equal(unknown.canSaveBoth, false);
+  assert.equal(unknown.title, 'Not saved: Someone else saved these settings after you opened them');
+  assert.match(unknown.note, /Load the settings again/);
 });

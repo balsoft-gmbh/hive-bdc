@@ -12,6 +12,9 @@ public sealed class ApiCall(string method, string path, IReadOnlyDictionary<stri
 
     public string Body { get; } = body;
 
+    /// <summary>The signed-in user (Azure web host); null for the local dashboard.</summary>
+    public string? User { get; set; }
+
     public int Status { get; private set; } = 200;
 
     public byte[] Answer { get; private set; } = Array.Empty<byte>();

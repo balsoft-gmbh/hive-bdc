@@ -99,3 +99,36 @@ export function parseRoute(hash) {
   const parts = (path || '').split('/').filter(Boolean).map((p) => decodeURIComponent(p));
   return { page: parts[0] || 'overview', parts: parts.slice(1), query };
 }
+
+/** One change of the refusal in words: "SharePoint › Folder: {yyyy} is now {yyyy}/{MM}". */
+export function changeLine(change) {
+  if (change.before === '(none)') return `${change.path}: added`;
+  if (change.after === '(none)') return `${change.path}: removed`;
+  return `${change.path}: ${change.before} is now ${change.after}`;
+}
+
+/**
+ * The panel of board W6 from the 409 answer of POST /config: who saved and when, both change lists, and whether
+ * "Save both" may be offered (only when the start is known and no setting was changed by both).
+ */
+export function conflictView(refusal, timeZone) {
+  const r = refusal || {};
+  const who = r.savedBy || 'Someone else';
+  const at = r.savedAt ? new Date(r.savedAt) : null;
+  const time = at && !Number.isNaN(at.getTime())
+    ? at.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone })
+    : '';
+  const overlaps = r.overlaps || [];
+  const canSaveBoth = Boolean(r.baseKnown) && overlaps.length === 0;
+  let note = 'Nothing was lost. Your change and theirs do not touch the same setting.';
+  if (!r.baseKnown) note = 'Load the settings again, then make your change once more.';
+  else if (overlaps.length > 0) note = 'You both changed the same setting. Take theirs or keep editing.';
+  return {
+    title: time ? `Not saved: ${who} saved these settings at ${time}, after you opened them` : `Not saved: ${who} saved these settings after you opened them`,
+    note,
+    theirs: (r.theirChanges || []).map(changeLine),
+    yours: (r.yourChanges || []).map(changeLine),
+    overlaps,
+    canSaveBoth,
+  };
+}
