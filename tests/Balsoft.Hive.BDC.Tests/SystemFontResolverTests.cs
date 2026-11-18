@@ -80,6 +80,47 @@ public sealed class SystemFontResolverTests : IDisposable
         Assert.Equal(20, fonts.FontCount);
     }
 
+    // Design part 18c: Windows keeps Cambria Regular in cambria.ttc, so "Cambria" is installed with Bold, Italic and Bold
+    // Italic only. Here Liberation Serif plays Cambria (bold face only) and Liberation Sans its twin.
+    private string Installed(params (string Family, bool Bold, string File)[] faces)
+    {
+        var embedded = EmbeddedOnly();
+        Directory.CreateDirectory(_folder);
+        foreach (var (family, bold, file) in faces)
+            File.WriteAllBytes(Path.Combine(_folder, file), embedded.GetFont(embedded.ResolveTypeface(family, bold, false)!.FaceName)!);
+        return _folder;
+    }
+
+    private static readonly Dictionary<string, string> SerifTwin = new() { ["Liberation Serif"] = "Liberation Sans" };
+
+    [Fact]
+    public void AStyleTheInstalledFamilyLacksComesFromItsTwin()
+    {
+        string folder = Installed(("Liberation Serif", true, "serif-bold.ttf"), ("Liberation Sans", false, "sans-regular.ttf"));
+        var fonts = SystemFontResolver.Create(new[] { folder }, embedded: false, SerifTwin);
+        var regular = fonts.ResolveTypeface("Liberation Serif", false, false)!;
+        Assert.Equal(Path.Combine(folder, "sans-regular.ttf"), regular.FaceName);
+        Assert.False(regular.MustSimulateBold);
+        Assert.Equal(Path.Combine(folder, "serif-bold.ttf"), fonts.ResolveTypeface("Liberation Serif", true, false)!.FaceName);
+    }
+
+    [Fact]
+    public void WithoutATwinTheNearestStyleOfTheInstalledFamilyIsUsed()
+    {
+        string folder = Installed(("Liberation Serif", true, "serif-bold.ttf"), ("Liberation Sans", false, "sans-regular.ttf"));
+        var fonts = SystemFontResolver.Create(new[] { folder }, embedded: false, new Dictionary<string, string>());
+        Assert.Equal(Path.Combine(folder, "serif-bold.ttf"), fonts.ResolveTypeface("Liberation Serif", false, false)!.FaceName);
+    }
+
+    [Fact]
+    public void AnInstalledStyleIsAlwaysItsOwnFile()
+    {
+        string folder = Installed(("Liberation Serif", false, "serif-regular.ttf"), ("Liberation Serif", true, "serif-bold.ttf"),
+            ("Liberation Sans", false, "sans-regular.ttf"));
+        var fonts = SystemFontResolver.Create(new[] { folder }, embedded: false, SerifTwin);
+        Assert.Equal(Path.Combine(folder, "serif-regular.ttf"), fonts.ResolveTypeface("Liberation Serif", false, false)!.FaceName);
+    }
+
     [InstalledFontFact("Arial")]
     public void ArialOnWindowsAndMacIsTheInstalledArial()
     {

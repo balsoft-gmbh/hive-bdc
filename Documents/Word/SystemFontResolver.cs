@@ -22,6 +22,7 @@ public sealed class SystemFontResolver : IFontResolver
     private readonly Dictionary<string, Dictionary<int, string>> _index = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, byte[]> _bytes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _missing = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IReadOnlyDictionary<string, string> _twins;
 
     public const string FallbackFamily = "Arial";
 
@@ -46,9 +47,10 @@ public sealed class SystemFontResolver : IFontResolver
     /// <summary>Families a document asked for that are not installed (rendered with the fallback).</summary>
     public IReadOnlyCollection<string> MissingFamilies { get { lock (_missing) return _missing.ToArray(); } }
 
-    private SystemFontResolver(IReadOnlyList<string> folders, bool embedded)
+    private SystemFontResolver(IReadOnlyList<string> folders, bool embedded, IReadOnlyDictionary<string, string>? twins = null)
     {
         Folders = folders;
+        _twins = twins is null ? Twins : new Dictionary<string, string>(twins, StringComparer.OrdinalIgnoreCase);
         foreach (var dir in folders.Where(Directory.Exists))
         {
             IEnumerable<string> files;
@@ -74,7 +76,8 @@ public sealed class SystemFontResolver : IFontResolver
     }
 
     /// <summary>A resolver over these folders and, when asked, the fonts the service brings; not registered with PDFsharp.</summary>
-    internal static SystemFontResolver Create(IReadOnlyList<string> folders, bool embedded) => new(folders, embedded);
+    internal static SystemFontResolver Create(IReadOnlyList<string> folders, bool embedded, IReadOnlyDictionary<string, string>? twins = null)
+        => new(folders, embedded, twins);
 
     /// <summary>Registers the resolver with PDFsharp once per process and returns it.</summary>
     public static SystemFontResolver Install()
@@ -118,7 +121,7 @@ public sealed class SystemFontResolver : IFontResolver
     public string? Draws(string family)
     {
         if (_index.ContainsKey(family)) return family;
-        return Twins.TryGetValue(family, out var twin) && _index.ContainsKey(twin) ? twin : null;
+        return _twins.TryGetValue(family, out var twin) && _index.ContainsKey(twin) ? twin : null;
     }
 
     public FontResolverInfo? ResolveTypeface(string familyName, bool bold, bool italic)
@@ -133,6 +136,10 @@ public sealed class SystemFontResolver : IFontResolver
         var styles = _index[family];
         int want = (bold ? 1 : 0) | (italic ? 2 : 0);
         if (styles.TryGetValue(want, out var exact)) return new FontResolverInfo(exact);
+        // The installed family lacks this face (Windows keeps Cambria Regular in cambria.ttc, which is not read): the
+        // twin's own face keeps the widths, where simulating from another style of the family would not.
+        if (_twins.TryGetValue(family, out var twin) && _index.TryGetValue(twin, out var twinStyles) && twinStyles.TryGetValue(want, out var twinFace))
+            return new FontResolverInfo(twinFace);
         // Simulate what the family does not have, starting from the closest face.
         int[] order = want switch { 3 => new[] { 1, 2, 0 }, 1 => new[] { 0 }, 2 => new[] { 0 }, _ => new[] { 1, 2, 3 } };
         foreach (int s in order)
