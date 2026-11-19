@@ -292,7 +292,8 @@ public sealed class WebConsoleTests : IAsyncLifetime
     {
         string repo = AppContext.BaseDirectory;
         while (!File.Exists(Path.Combine(repo, "HiveBDC.sln"))) repo = Path.GetDirectoryName(repo)!;
-        string serve = File.ReadAllText(Path.Combine(repo, "web", "tests", "e2e", "serve.ts"));
+        // A Windows checkout may turn the file into CRLF; the policy text is the same either way.
+        string serve = File.ReadAllText(Path.Combine(repo, "web", "tests", "e2e", "serve.ts")).Replace("\r\n", "\n");
         string start = serve[(serve.IndexOf("BASE_POLICY =", StringComparison.Ordinal) + "BASE_POLICY =".Length)..];
         string text = string.Concat(System.Text.RegularExpressions.Regex.Matches(start[..start.IndexOf(';' + "\n", StringComparison.Ordinal)], "\"([^\"]*)\"").Select(m => m.Groups[1].Value));
         Assert.Equal(ConsoleSite.PolicyTemplate, text);
