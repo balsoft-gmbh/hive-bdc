@@ -622,7 +622,7 @@ Balsoft.Hive.BDC.csproj   the service (HiveBDC.exe), one project, folders = name
                               references in Azure; KeyVaultSecretVault), SettingsBlob (settings of an
                               Azure instance: AzureETagBlob, BlobSettingsDocument, BlobSettingsProvider)
   Hosting/                    Worker, RunMode (run modes, Azure settings check, processing gate), AzureWebHost
-                              (Azure: App Service sign-in, roles, health, web console from Hosting/Console via ConsoleFiles),
+                              (Azure: App Service sign-in, roles, health, API under /api/, web console from console/ via ConsoleSite),
                               LocalStatusServer (+ .Config, .Probes; Kestrel on 127.0.0.1), ApiCall, LogSetup, Installer,
                               ServiceAccount, SampleData
   Program.cs                  CLI + host wiring
@@ -966,13 +966,29 @@ program does not start (exit code 3); `--once` exits with 2 while it would wait.
 
 An Azure instance serves its console at its own address (`/`), behind the same sign-in
 and roles as the API: the overview (documents delivered today, documents that need
-attention with Retry for Operators, licence) and the document history with search. The
-console is plain HTML, CSS and JavaScript embedded in the service (`Hosting/Console/`);
-only those files are served, every value is set as text, and the Content Security
-Policy allows no inline script and no framing. It looks like the other Balsoft web apps
-(the CRM and ERP): white menu with the Balsoft logo, DM Sans and Manrope. Logo and fonts
-are embedded too, with the fonts' licence texts, so the page loads nothing from outside. `GET /me` names the signed-in user and
-roles. Pure console logic is tested with `node --test tests/console/*.test.mjs`.
+attention with Retry for Operators, licence), the document history with search, Outbound,
+Connections, Service (status, licence, updates, technical log) and, on a fresh instance,
+the set-up assistant, which takes the whole screen until the instance runs.
+
+The console is a Next.js app in `web/` (React, Fluent UI and lucide icons, the Balsoft CRM
+stylesheet), built as a static export. `deploy/azure/package.sh` builds it and puts it into
+the Azure package's `console/` folder; the Windows build does not carry it. The web host
+(`Hosting/ConsoleSite.cs`) reads that folder at start and serves only those files: `/` and
+`/history/` are pages, `/_next/static/` holds the build files (cached, their names change
+with every build), an unknown path gets the 404 page. The API answers only under `/api/`
+(`GET /api/me` names the signed-in user and roles), so pages and API calls never meet;
+`/healthz` and `POST /inbound/...` stay where they are. Every page gets a Content Security
+Policy with the hashes of its own inline scripts (`csp.json`, written by
+`web/scripts/csp-hashes.ts` at build time), so no other inline script runs; styles may be
+inline because Fluent UI writes them at run time. The page loads nothing from outside; logo
+and fonts come with it, the fonts with their licence texts. The logo and the name Hive BDC
+lead back to the overview from every page.
+
+Developing: `cd web && npm ci`, then `npm run dev` (forwards `/api` to a running instance,
+`HIVEBDC_API_URL`, default `http://127.0.0.1:5080`). Tests: `npm run check` (type check,
+unit tests, build) and `npx playwright test` (the export served with the host's policy and a
+mocked API, `tests/e2e/serve.ts`; locally on the installed Google Chrome). The host side is
+covered by `WebConsoleTests` in the .NET suite.
 
 Settings saved from the console carry the version `GET /config` gave: when someone else
 saved in between, the save is refused (409) with who saved and what each side changed,

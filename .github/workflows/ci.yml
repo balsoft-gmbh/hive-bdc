@@ -38,3 +38,38 @@ jobs:
 
       - name: Test
         run: dotnet test tests/Balsoft.Hive.BDC.Tests/Balsoft.Hive.BDC.Tests.csproj -c Release --nologo
+
+  console:
+    # The web console of the Azure edition (web/, Next.js static export; design 2026-11-19).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci --no-fund
+
+      - name: Audit the shipped packages
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Type check and unit tests
+        run: npm run typecheck && npm test
+
+      - name: Build the static export
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: End-to-end tests
+        run: npx playwright install --with-deps chromium && npx playwright test

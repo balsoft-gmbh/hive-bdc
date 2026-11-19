@@ -83,8 +83,8 @@ public sealed class AzureWebHostTests : IAsyncLifetime
         var health = await Call(HttpMethod.Get, "/healthz", null);
         Assert.Equal((HttpStatusCode.OK, "ok", "9.9.9"), (health.Status, (string)health.Body!["status"]!, (string)health.Body["version"]!));
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Call(HttpMethod.Get, "/status", null)).Status);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Call(HttpMethod.Get, "/status", "not base64 json")).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Call(HttpMethod.Get, "/api/status", null)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Call(HttpMethod.Get, "/api/status", "not base64 json")).Status);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class AzureWebHostTests : IAsyncLifetime
     {
         _signInOn = false;
 
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await Call(HttpMethod.Get, "/status", Principal(roles: ApiRoles.Administrator))).Status);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await Call(HttpMethod.Get, "/api/status", Principal(roles: ApiRoles.Administrator))).Status);
         Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Get, "/healthz", null)).Status);
     }
 
@@ -101,14 +101,14 @@ public sealed class AzureWebHostTests : IAsyncLifetime
     {
         string viewer = Principal(roles: ApiRoles.Viewer);
 
-        var status = await Call(HttpMethod.Get, "/status", viewer);
+        var status = await Call(HttpMethod.Get, "/api/status", viewer);
         Assert.Equal(HttpStatusCode.OK, status.Status);
         Assert.Equal("9.9.9", (string)status.Body!["version"]!);
 
-        var change = await Call(HttpMethod.Post, "/config", viewer, "{}");
+        var change = await Call(HttpMethod.Post, "/api/config", viewer, "{}");
         Assert.Equal((HttpStatusCode.Forbidden, "This needs the role Administrator."), (change.Status, (string)change.Body!["error"]!));
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/history/retry", viewer, "{}")).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Get, "/status", Principal())).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/history/retry", viewer, "{}")).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Get, "/api/status", Principal())).Status);
     }
 
     [Fact]
@@ -116,18 +116,18 @@ public sealed class AzureWebHostTests : IAsyncLifetime
     {
         string op = Principal(roles: ApiRoles.Operator);
 
-        Assert.NotEqual(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/history/retry", op, """{"documentId":"none"}""")).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/license", op, """{"content":"x"}""")).Status);
+        Assert.NotEqual(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/history/retry", op, """{"documentId":"none"}""")).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/license", op, """{"content":"x"}""")).Status);
     }
 
     [Fact]
     public async Task AnAdministratorSavesTheSettingsIntoTheBlob()
     {
         string admin = Principal(roleType: "http://schemas.microsoft.com/ws/2008/06/identity/claims/role", roles: ApiRoles.Administrator);
-        var current = (await Call(HttpMethod.Get, "/config", admin)).Body!.AsObject();
+        var current = (await Call(HttpMethod.Get, "/api/config", admin)).Body!.AsObject();
         current["pollSeconds"] = 45;
 
-        var saved = await Call(HttpMethod.Post, "/config", admin, current.ToJsonString());
+        var saved = await Call(HttpMethod.Post, "/api/config", admin, current.ToJsonString());
 
         Assert.Equal(HttpStatusCode.OK, saved.Status);
         Assert.Equal(45, (int)JsonNode.Parse(_settings.Text!)!["HiveBDC"]!["PollSeconds"]!);
@@ -136,7 +136,7 @@ public sealed class AzureWebHostTests : IAsyncLifetime
     [Fact]
     public async Task AUserOfAnotherTenantIsRefused()
     {
-        var other = await Call(HttpMethod.Get, "/status", Principal(tenant: "99999999-9999-9999-9999-999999999999", roles: ApiRoles.Administrator));
+        var other = await Call(HttpMethod.Get, "/api/status", Principal(tenant: "99999999-9999-9999-9999-999999999999", roles: ApiRoles.Administrator));
 
         Assert.Equal((HttpStatusCode.Forbidden, "This instance belongs to another organisation."), (other.Status, (string)other.Body!["error"]!));
     }

@@ -16,7 +16,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-for tool in dotnet jq zip unzip; do command -v "$tool" >/dev/null 2>&1 || fail "$tool not found"; done
+for tool in dotnet jq zip unzip node npm; do command -v "$tool" >/dev/null 2>&1 || fail "$tool not found"; done
 
 version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$root/Balsoft.Hive.BDC.csproj" | head -1)"
 [ -n "$version" ] || fail "no <Version> in Balsoft.Hive.BDC.csproj"
@@ -46,11 +46,20 @@ jq -e '[.runtimeOptions.framework, (.runtimeOptions.frameworks // [])[]] | map(s
   "$runtimeconfig" >/dev/null || fail "HiveBDC.runtimeconfig.json does not name Microsoft.AspNetCore.App"
 [ -f "$work/app/runtimes/linux-x64/native/libe_sqlite3.so" ] || fail "the SQLite library for linux-x64 is missing"
 
+# The web console (design 2026-11-19-web-console-nextjs.md): the static export of web/ in the package's console/
+# folder, with csp.json for the per-page content security policy. A package without it would answer 404 everywhere.
+echo "== Build the web console (web/, Next.js static export)"
+(cd "$root/web" && npm ci --no-fund --no-audit && NODE_ENV=production npm run build) || fail "the web console did not build"
+[ -f "$root/web/out/index.html" ] && [ -f "$root/web/out/csp.json" ] || fail "web/out has no index.html or csp.json"
+cp -R "$root/web/out" "$work/app/console"
+
 mkdir -p "$work/package/app"
 (cd "$work/app" && zip -qrX "$work/package/app/hivebdc.zip" .)
 entries="$(unzip -Z1 "$work/package/app/hivebdc.zip")"   # captured first: grep -q under pipefail would kill unzip
 grep -qx 'HiveBDC.dll' <<<"$entries" || fail "HiveBDC.dll is not at the root of hivebdc.zip"
 grep -qx 'hivebdc-package.json' <<<"$entries" || fail "hivebdc-package.json is not at the root of hivebdc.zip"
+grep -qx 'console/index.html' <<<"$entries" || fail "console/index.html is not in hivebdc.zip"
+grep -qx 'console/csp.json' <<<"$entries" || fail "console/csp.json is not in hivebdc.zip"
 
 cp "$here/mainTemplate.json" "$here/createUiDefinition.json" "$work/package/"
 mkdir -p "$out/azure"

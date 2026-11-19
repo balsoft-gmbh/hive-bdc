@@ -90,12 +90,14 @@ public sealed class AzureWebHost : BackgroundService
     private readonly string _version;
     private readonly Func<BDCOptions> _options;
     private readonly HttpsInbound _inbound;
+    private readonly ConsoleSite _console;
     private bool _warnedSignInOff;
 
     public AzureWebHost(LocalStatusServer api, ILogger log, string version, InstanceTenant? tenant = null,
-        Func<bool>? signInEnabled = null, IPEndPoint? listen = null, Func<BDCOptions>? options = null)
+        Func<bool>? signInEnabled = null, IPEndPoint? listen = null, Func<BDCOptions>? options = null, ConsoleSite? console = null)
     {
         _api = api;
+        _console = console ?? new ConsoleSite(ConsoleSite.DefaultRoot);
         _options = options ?? (() => new BDCOptions());
         _inbound = new HttpsInbound(log);
         _log = log;
@@ -140,7 +142,7 @@ public sealed class AzureWebHost : BackgroundService
     private async Task Serve(HttpContext http)
     {
         var headers = http.Response.Headers;
-        headers["Content-Security-Policy"] = ConsoleFiles.ContentSecurityPolicy;
+        headers["Content-Security-Policy"] = _console.PolicyFor("");
         headers["X-Content-Type-Options"] = "nosniff";
         headers["Referrer-Policy"] = "same-origin";   // App Service refuses a signed-in POST without a same-origin Referer
         headers["Cache-Control"] = "no-store";
@@ -199,11 +201,22 @@ public sealed class AzureWebHost : BackgroundService
             return;
         }
 
+        // Pages and the API share names (/history/ and /history), so the API answers only under /api/ (design
+        // 2026-11-19-web-console-nextjs.md, decision 3a); everything else is a file of the console or not found.
+        string raw = http.Request.Path.Value ?? "";
+        if (!raw.Equals("/api", StringComparison.Ordinal) && !raw.StartsWith("/api/", StringComparison.Ordinal))
+        {
+            await ServeConsole(http, user, raw);
+            return;
+        }
+        string apiPath = raw.Length <= 4 ? "/" : raw[4..];
+        path = apiPath.TrimEnd('/').ToLowerInvariant();
+
         string body;
         using (var reader = new StreamReader(http.Request.Body, Encoding.UTF8))
             body = await reader.ReadToEndAsync(http.RequestAborted);
         var query = http.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString(), StringComparer.OrdinalIgnoreCase);
-        var call = new ApiCall(http.Request.Method, http.Request.Path.Value ?? "", query, body) { User = user.Name };
+        var call = new ApiCall(http.Request.Method, apiPath, query, body) { User = user.Name };
         string needed = ApiRoles.Needed(call);
         if (!ApiRoles.Allows(user.Roles, needed))
         {
@@ -214,22 +227,7 @@ public sealed class AzureWebHost : BackgroundService
 
         if (HttpMethods.IsGet(http.Request.Method))
         {
-            // The web console: the page at /, its files at /console/{name}, and who is signed in at /me.
-            string raw = http.Request.Path.Value ?? "";
-            if (raw is "" or "/" || raw.StartsWith("/console/", StringComparison.Ordinal))
-            {
-                string name = raw is "" or "/" ? "index.html" : raw["/console/".Length..];
-                if (ConsoleFiles.TryGet(name, out var content))
-                {
-                    http.Response.StatusCode = 200;
-                    http.Response.ContentType = ConsoleFiles.ContentType(name);
-                    http.Response.ContentLength = content.Length;
-                    await http.Response.Body.WriteAsync(content, http.RequestAborted);
-                }
-                else
-                    await Write(http, 404, new { error = "Not found." });
-                return;
-            }
+            // Who is signed in, for the console's account menu and its role checks.
             if (path == "/me")
             {
                 await Write(http, 200, new
@@ -251,6 +249,47 @@ public sealed class AzureWebHost : BackgroundService
         http.Response.ContentType = "application/json";
         http.Response.ContentLength = call.Answer.Length;
         await http.Response.Body.WriteAsync(call.Answer, http.RequestAborted);
+    }
+
+    /// <summary>
+    /// A page or file of the web console for GET and HEAD (Next.js prefetches with HEAD) to a user with any role; an
+    /// unknown path gets the console's 404 page. The page carries its own content security policy.
+    /// </summary>
+    private async Task ServeConsole(HttpContext http, AppServicePrincipal user, string raw)
+    {
+        bool head = HttpMethods.IsHead(http.Request.Method);
+        if (!HttpMethods.IsGet(http.Request.Method) && !head)
+        {
+            await Write(http, 404, new { error = "Not found. The API answers under /api/." });
+            return;
+        }
+        if (!ApiRoles.Allows(user.Roles, ApiRoles.Viewer))
+        {
+            await Write(http, 403, new { error = $"This needs the role {ApiRoles.Viewer}." });
+            return;
+        }
+        if (!_console.Available)
+        {
+            await Write(http, 404, new { error = "This package carries no web console." });
+            return;
+        }
+        int status = 200;
+        if (!_console.TryResolve(raw, out var name))
+        {
+            status = 404;
+            if (!_console.TryResolve("/404.html", out name))
+            {
+                await Write(http, 404, new { error = "Not found." });
+                return;
+            }
+        }
+        byte[] content = _console.Content(name);
+        http.Response.StatusCode = status;
+        http.Response.ContentType = ConsoleSite.ContentType(name);
+        http.Response.Headers["Content-Security-Policy"] = _console.PolicyFor(name);
+        http.Response.Headers["Cache-Control"] = ConsoleSite.CacheControlFor(name);
+        http.Response.ContentLength = content.Length;
+        if (!head) await http.Response.Body.WriteAsync(content, http.RequestAborted);
     }
 
     private static async Task Write(HttpContext http, int status, object body)

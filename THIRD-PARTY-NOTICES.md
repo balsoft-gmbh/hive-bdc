@@ -23,6 +23,10 @@ grant for these components.
 | Azure.Storage.Blobs, Azure.Data.Tables, Azure.Messaging.ServiceBus, Azure.Identity, Azure.Security.KeyVault.Secrets (with Azure.Core and their dependencies) | 12.30.1, 12.13.0, 7.21.0, 1.21.0, 4.12.0 | Azure Blob Storage source and target, Azure run mode | Copyright (c) Microsoft Corporation | MIT |
 | .NET runtime (bundled, self-contained build) | 10.0 | runs the service and the dashboard | Copyright (c) .NET Foundation and Contributors | MIT, plus the runtime's own third-party notices: https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT |
 | ASP.NET Core runtime (bundled, self-contained build) | 10.0 | the service's local API (Kestrel) | Copyright (c) .NET Foundation and Contributors | MIT, plus its own third-party notices: https://github.com/dotnet/aspnetcore/blob/main/THIRD-PARTY-NOTICES.txt |
+| Next.js (client runtime of the static export) | 16.4.5 | Azure web console | Copyright (c) 2025 Vercel, Inc. | MIT |
+| React, React DOM, scheduler | 19.3.0, 19.3.0, 0.28.0 | Azure web console | Copyright (c) Meta Platforms, Inc. and affiliates | MIT |
+| Fluent UI React Components (@fluentui/react-components with tabster, keyborg, @griffel and @floating-ui) | 9.74.7 | Azure web console controls | Copyright (c) Microsoft Corporation; @floating-ui: Copyright (c) 2021-present Floating UI contributors | MIT |
+| lucide-react | 0.577.0 | Azure web console icons | Copyright (c) Lucide Contributors; portions Copyright (c) 2013-2026 Cole Bemis (Feather, MIT) | ISC |
 | DM Sans | variable, from the Balsoft web apps | text font of the Azure web console | Copyright 2014 The DM Sans Project Authors | SIL Open Font License 1.1 |
 | Manrope | variable, from the Balsoft web apps | heading font of the Azure web console | Copyright 2018 The Manrope Project Authors | SIL Open Font License 1.1 |
 | Liberation Sans, Liberation Serif, Liberation Mono | 2.1.5 (liberation-fonts-ttf-2.1.5.tar.gz, github.com/liberationfonts/liberation-fonts) | Word to PDF where Arial, Times New Roman or Courier New is not installed | Digitized data copyright (c) 2010 Google Corporation with Reserved Font Arimo, Tinos and Cousine; Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name Liberation | SIL Open Font License 1.1 |
@@ -34,9 +38,9 @@ tools) are not listed.
 
 ## SIL Open Font License 1.1
 
-The fonts DM Sans and Manrope ship inside the service with their full licence texts,
-`Hosting/Console/dm-sans-OFL.txt` and `Hosting/Console/manrope-OFL.txt`, which an Azure
-instance also serves at `/console/dm-sans-OFL.txt` and `/console/manrope-OFL.txt`.
+The fonts DM Sans and Manrope ship in the Azure package's web console with their full
+licence texts, `web/public/fonts/dm-sans-OFL.txt` and `web/public/fonts/manrope-OFL.txt`,
+which an Azure instance also serves at `/fonts/dm-sans-OFL.txt` and `/fonts/manrope-OFL.txt`.
 
 The fonts Liberation Sans, Serif and Mono and Carlito ship unmodified inside the service
 with their full licence texts, `Documents/Word/Fonts/liberation-OFL.txt` and

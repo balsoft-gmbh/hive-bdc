@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- web/ is the Next.js console with its node_modules: not part of this project's items. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);web/**</DefaultItemExcludes>
     <UpdateKeyFile Condition="'$(UpdateKeyFile)' == ''">$(MSBuildThisFileDirectory)Hosting/update-key.pem</UpdateKeyFile>
   </PropertyGroup>
   <PropertyGroup>
@@ -15,7 +17,7 @@
     <AssemblyTitle>Hive BDC</AssemblyTitle>
     <Company>Balsoft GmbH</Company>
     <Copyright>© Balsoft GmbH</Copyright>
-    <Version>1.8.1</Version>
+    <Version>1.9.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,11 +34,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The web console of an Azure instance; Hosting/ConsoleFiles.cs serves exactly these names. -->
-    <EmbeddedResource Include="Hosting\Console\*.html;Hosting\Console\*.css;Hosting\Console\*.js;Hosting\Console\*.svg;Hosting\Console\*.ttf;Hosting\Console\*.txt">
-      <LogicalName>Balsoft.Hive.BDC.Console.%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <None Remove="Hosting\Console\**" />
+    <!-- The web console (web/, Next.js) is not part of this build: deploy/azure/package.sh builds it and puts the
+         static export into the Azure package's console/ folder, which Hosting/ConsoleSite.cs serves. -->
     <!-- Metric twins of the Office fonts for Word to PDF where they are not installed (Linux App Service). -->
     <EmbeddedResource Include="Documents\Word\Fonts\*.ttf;Documents\Word\Fonts\*.txt">
       <LogicalName>Balsoft.Hive.BDC.Fonts.%(Filename)%(Extension)</LogicalName>
