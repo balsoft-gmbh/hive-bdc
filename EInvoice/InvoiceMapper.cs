@@ -204,16 +204,31 @@ public static class InvoiceMapper
             };
         }
 
-        var iban = (data.BankIban ?? "").Replace(" ", "");
-        if (!string.IsNullOrWhiteSpace(iban))
+        var unusedAccount = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var (accounts, accountSource) = ListedAccounts(data, unusedHeader, unusedAccount, warn, info);
+        if (accounts.Count == 0 && Compact(data.BankIban) is { Length: > 0 } flatIban)
         {
-            inv.PaymentInstructions = PaymentInstructions.SepaCreditTransfer(iban);
-            var account = inv.PaymentInstructions.CreditTransfers[0];
-            account.AccountName = Pick(InvoiceFieldAliases.AccountName);
-            account.ServiceProviderIdentifier = Pick(InvoiceFieldAliases.Bic)?.Replace(" ", "");
-            inv.PaymentInstructions.RemittanceInformation = Pick(InvoiceFieldAliases.RemittanceInformation);
+            accounts.Add(new CreditTransferAccount
+            {
+                AccountIdentifier = flatIban,
+                AccountName = Pick(InvoiceFieldAliases.AccountName),
+                ServiceProviderIdentifier = Pick(InvoiceFieldAliases.Bic)?.Replace(" ", ""),
+            });
+            accountSource = "bankIban";
         }
-
+        if (accounts.Count > 0)
+        {
+            inv.PaymentInstructions = new PaymentInstructions
+            {
+                MeansCode = CreditTransferCode(accounts, warn),
+                RemittanceInformation = Pick(InvoiceFieldAliases.RemittanceInformation),
+            };
+            inv.PaymentInstructions.CreditTransfers.AddRange(accounts);
+            info?.Invoke($"e-invoice BG-17: {accounts.Count} account{(accounts.Count == 1 ? "" : "s")} from '{accountSource}' ({string.Join(", ", accounts.Select(a => LastFour(a.AccountIdentifier)))})");
+            if (accountSource != "bankIban" && Compact(data.BankIban) is { Length: > 0 } flat
+                && !Iban.Compact(flat).Equals(Iban.Compact(accounts[0].AccountIdentifier), StringComparison.Ordinal))
+                info?.Invoke($"e-invoice BG-17: bankIban {LastFour(flat)} differs from the first '{accountSource}' entry {LastFour(accounts[0].AccountIdentifier)}; the list is written");
+        }
 
         // ── Lines ───────────────────────────────────────────────────────────
         var periodStart = ParseDate(data.ServicePeriodFrom);
@@ -290,7 +305,7 @@ public static class InvoiceMapper
         if (lineTerms.Count > 0)
             info?.Invoke("e-invoice line fields from the JSON: " + string.Join("; ", lineTerms));
 
-        var leftOut = unusedHeader.Concat(unusedLine.Select(k => "lineItems." + k))
+        var leftOut = unusedHeader.Concat(unusedAccount).Concat(unusedLine.Select(k => "lineItems." + k))
             .Where(k => !NotForTheXml.Contains(InvoiceFieldAliases.Normalize(k.Replace("lineItems.", ""))))
             .ToList();
         if (leftOut.Count > 0)
@@ -354,6 +369,87 @@ public static class InvoiceMapper
         return !v.Contains('@') && LeitwegId.IsMatch(v)
             ? new SchemedIdentifier(v, ElectronicAddressScheme.LeitwegId)
             : new SchemedIdentifier(v, ElectronicAddressScheme.Email);
+    }
+
+    /// <summary>
+    /// BG-17 from the ERP's account list ("bankAccounts", also "BG-17"): JSON order, an entry without an IBAN
+    /// skipped, a repeated IBAN written once. Empty when no list carries an account, so the flat bank keys apply.
+    /// </summary>
+    private static (List<CreditTransferAccount> Accounts, string Source) ListedAccounts(AxDocument data, List<string> unusedHeader,
+        ISet<string> unusedAccount, Action<string>? warn, Action<string>? info)
+    {
+        var lists = new List<(string Key, List<AxBankAccount>? Entries)> { ("bankAccounts", data.BankAccounts) };
+        foreach (var (key, value) in data.Extra)
+        {
+            if (InvoiceFieldAliases.Normalize(key) != "bg17") continue;
+            unusedHeader.Remove(key);
+            lists.Add((key, AxBankAccount.ListFrom(value)));
+        }
+
+        foreach (var (key, entries) in lists)
+        {
+            if (entries is null)
+            {
+                warn?.Invoke($"'{key}' is not a list of bank accounts; ignored.");
+                continue;
+            }
+            var accounts = new List<CreditTransferAccount>();
+            var positions = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                int position = i + 1;
+                var (found, unused) = InvoiceFieldAliases.ReadAccount(entries[i].Extra);
+                foreach (var k in unused) unusedAccount.Add(key + "." + k);
+                string id = found.TryGetValue(InvoiceFieldAliases.AccountIdentifier.Bt, out var identifier) ? Compact(identifier.Value) : "";
+                if (id.Length == 0)
+                {
+                    warn?.Invoke($"'{key}' entry {position} has no IBAN; skipped.");
+                    continue;
+                }
+                if (positions.TryGetValue(Iban.Compact(id), out int first))
+                {
+                    info?.Invoke($"e-invoice BG-17: '{key}' entry {position} repeats the account of entry {first} ({LastFour(id)}); written once");
+                    continue;
+                }
+                positions[Iban.Compact(id)] = position;
+                accounts.Add(new CreditTransferAccount
+                {
+                    AccountIdentifier = id,
+                    AccountName = found.TryGetValue(InvoiceFieldAliases.AccountName.Bt, out var name) ? name.Value : null,
+                    ServiceProviderIdentifier = found.TryGetValue(InvoiceFieldAliases.Bic.Bt, out var bic) ? bic.Value.Replace(" ", "") : null,
+                });
+            }
+            if (accounts.Count > 0) return (accounts, key);
+        }
+        return (new List<CreditTransferAccount>(), "");
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex IbanShape =
+        new(@"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// BT-81, one code for every account because CII-SR-467 demands it: 58 when each is a valid IBAN, else 30.
+    /// An identifier shaped like an IBAN whose check digits fail gets a warning.
+    /// </summary>
+    private static string CreditTransferCode(IReadOnlyList<CreditTransferAccount> accounts, Action<string>? warn)
+    {
+        bool sepa = true;
+        foreach (var account in accounts)
+        {
+            if (Iban.IsValid(account.AccountIdentifier)) continue;
+            sepa = false;
+            if (IbanShape.IsMatch(Iban.Compact(account.AccountIdentifier)))
+                warn?.Invoke($"bank account {LastFour(account.AccountIdentifier)} looks like an IBAN but its check digits are wrong; written as an account number with payment means 30.");
+        }
+        return sepa ? PaymentMeansCode.SepaCreditTransfer : PaymentMeansCode.CreditTransfer;
+    }
+
+    private static string Compact(string? value) => new((value ?? "").Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+    private static string LastFour(string accountIdentifier)
+    {
+        string compact = Iban.Compact(accountIdentifier);
+        return "…" + (compact.Length <= 4 ? compact : compact[^4..]);
     }
 
     private static InvoiceTypeCode ResolveInvoiceType(string? code, decimal rawTotal, Action<string>? warn)

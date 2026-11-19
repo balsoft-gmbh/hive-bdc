@@ -9,7 +9,9 @@
         "A new instance opens the set-up assistant on the whole screen: the licence, with the tenant ID and the instance address to send to Balsoft and a ready mail, who can do what, where Dynamics 365 Finance and Operations hands over its documents, where they go and a test run. A reload continues at the step reached.",
         "Service has tabs for status, licence, updates and the technical log; the licence file can be dropped onto the page.",
         "When the sign-in of the console ends, the console signs in again by itself instead of showing an error.",
-        "The Windows app and the Windows service work as in 1.8.1."
+        "E-invoices carry every bank account the ERP lists: each entry of bankAccounts in the export becomes its own payment means in the XML, in the ERP's order, with IBAN, BIC and account holder. An export without the list gives the single account from bankIban as before. An account that is not a valid IBAN is written with payment means code 30 instead of 58.",
+        "Windows settings: moving from one company or document type to the next no longer changes the choice of the one shown before (ERP export or Word, Customers or Vendors, E-invoice or PDF).",
+        "Otherwise the Windows app and the Windows service work as in 1.8.1."
       ]
     },
     {

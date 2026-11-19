@@ -42,6 +42,7 @@ public static class InvoiceFieldAliases
     public static readonly Term ShipToPostcode = new("BT-78", "Deliver to post code");
     public static readonly Term ShipToCountry = new("BT-80", "Deliver to country code");
     public static readonly Term RemittanceInformation = new("BT-83", "Remittance information");
+    public static readonly Term AccountIdentifier = new("BT-84", "Payment account identifier");
     public static readonly Term AccountName = new("BT-85", "Payment account name");
     public static readonly Term Bic = new("BT-86", "Payment service provider identifier (BIC)");
 
@@ -60,6 +61,9 @@ public static class InvoiceFieldAliases
     public static readonly Term BuyersItemId = new("BT-156", "Item buyer's identifier");
     public static readonly Term Gtin = new("BT-157", "Item standard identifier (GTIN)");
     public static readonly Term OriginCountry = new("BT-159", "Item country of origin");
+
+    private static readonly string[] AccountNameKeys = { "bankAccountHolder", "accountName", "kontoinhaber", "BT-85" };
+    private static readonly string[] BicKeys = { "bankSwift", "bic", "swift", "swiftCode", "BT-86" };
 
     private static readonly Dictionary<string, Term> Header = Build(new()
     {
@@ -86,8 +90,15 @@ public static class InvoiceFieldAliases
         [ShipToPostcode] = new[] { "deliveryPostcode", "deliveryZipCode", "deliveryZip", "shipToPostcode", "lieferanschriftPlz", "BT-78" },
         [ShipToCountry] = new[] { "deliveryCountry", "shipToCountry", "deliverToCountry", "lieferanschriftLand", "BT-80" },
         [RemittanceInformation] = new[] { "remittanceInformation", "paymentReference", "verwendungszweck", "BT-83" },
-        [AccountName] = new[] { "bankAccountHolder", "accountName", "kontoinhaber", "BT-85" },
-        [Bic] = new[] { "bankSwift", "bic", "swift", "swiftCode", "BT-86" },
+        [AccountName] = AccountNameKeys,
+        [Bic] = BicKeys,
+    });
+
+    private static readonly Dictionary<string, Term> Account = Build(new()
+    {
+        [AccountIdentifier] = new[] { "bankIban", "iban", "BT-84" },
+        [AccountName] = AccountNameKeys,
+        [Bic] = BicKeys,
     });
 
     private static readonly Dictionary<string, Term> Line = Build(new()
@@ -143,6 +154,10 @@ public static class InvoiceFieldAliases
     /// <summary>The line level terms present in <paramref name="extra"/>, and the keys that matched no term.</summary>
     public static (Dictionary<string, Found> Found, List<string> Unused) ReadLine(IReadOnlyDictionary<string, JsonElement>? extra)
         => Read(extra, Line);
+
+    /// <summary>The BT-84, BT-85 and BT-86 terms of one entry of the account list, and the keys that matched no term.</summary>
+    public static (Dictionary<string, Found> Found, List<string> Unused) ReadAccount(IReadOnlyDictionary<string, JsonElement>? extra)
+        => Read(extra, Account);
 
     private static (Dictionary<string, Found>, List<string>) Read(IReadOnlyDictionary<string, JsonElement>? extra, Dictionary<string, Term> table)
     {

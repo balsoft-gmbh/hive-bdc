@@ -620,4 +620,233 @@ public class InvoiceMapperTests
         Assert.Equal("R-1", inv.PurchaseOrderReference);
         Assert.Null(inv.ProjectReference);
     }
+
+    private static readonly System.Xml.Linq.XNamespace Ram = "urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100";
+    private static readonly System.Xml.Linq.XNamespace Cac = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
+    private static readonly System.Xml.Linq.XNamespace Cbc = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
+
+    private static List<System.Xml.Linq.XElement> CiiPaymentMeans(Invoice inv)
+        => System.Xml.Linq.XDocument.Parse(System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv)))
+            .Descendants(Ram + "SpecifiedTradeSettlementPaymentMeans").ToList();
+
+    private static System.Xml.Linq.XDocument Ubl(Invoice inv)
+        => System.Xml.Linq.XDocument.Parse(Balsoft.Hive.EInvoice.Ubl.UblWriter.WriteToString(inv, EInvoiceGenerator.Profile, new Balsoft.Hive.EInvoice.Cii.WriterOptions { ValidateBeforeWriting = false }));
+
+    [Fact]
+    public void BankAccountsMissingKeepsTheFlatAccount()
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat()), null, info.Add);
+        var account = Assert.Single(inv.PaymentInstructions!.CreditTransfers);
+        Assert.Equal((BankAccountSamples.Ibans[0], "MUSTDEFFXXX", "Muster Lieferant GmbH"), (account.AccountIdentifier, account.ServiceProviderIdentifier, account.AccountName));
+        Assert.Equal(PaymentMeansCode.SepaCreditTransfer, inv.PaymentInstructions.MeansCode);
+        Assert.Equal("RE-2026-0101", inv.PaymentInstructions.RemittanceInformation);
+        Assert.Single(CiiPaymentMeans(inv));
+        Assert.Contains("e-invoice BG-17: 1 account from 'bankIban' (…3000)", info);
+    }
+
+    [Theory]
+    [InlineData("[]", false)]
+    [InlineData("null", false)]
+    [InlineData("\"DE89370400440532013000\"", true)]
+    [InlineData("{ \"bankIban\": \"DE89370400440532013000\" }", true)]
+    [InlineData("42", true)]
+    public void BankAccountsEmptyOrNotAListFallBackToTheFlatKeys(string list, bool warned)
+    {
+        var warnings = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat(1) + ", \"bankAccounts\": " + list), warnings.Add);
+        Assert.Equal(BankAccountSamples.Ibans[1], Assert.Single(inv.PaymentInstructions!.CreditTransfers).AccountIdentifier);
+        Assert.Equal(warned, warnings.Contains("'bankAccounts' is not a list of bank accounts; ignored."));
+        Assert.Equal(warned ? 1 : 0, warnings.Count);
+    }
+
+    [Fact]
+    public void BankAccountsWithOneEntryEqualToTheFlatKeysGiveTheSameXml()
+    {
+        var flat = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat()));
+        var listed = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat() + ", " + BankAccountSamples.List(1)));
+        Assert.Equal(EInvoiceGenerator.BuildCiiXml(flat), EInvoiceGenerator.BuildCiiXml(listed));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void BankAccountsWriteOnePaymentMeansPerEntryInJsonOrder(int count)
+    {
+        var info = new List<string>();
+        var warnings = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Export(count)), warnings.Add, info.Add);
+        Assert.Empty(warnings);
+        Assert.Equal(BankAccountSamples.Ibans.Take(count), inv.PaymentInstructions!.CreditTransfers.Select(a => a.AccountIdentifier));
+        Assert.Equal(BankAccountSamples.Bics.Take(count), inv.PaymentInstructions.CreditTransfers.Select(a => a.ServiceProviderIdentifier));
+        Assert.Contains($"e-invoice BG-17: {count} accounts from 'bankAccounts' ({string.Join(", ", BankAccountSamples.Ibans.Take(count).Select(i => "…" + i[^4..]))})", info);
+        Assert.Contains(info, m => m.StartsWith("JSON fields not written", StringComparison.Ordinal) && m.Contains("bankAccounts.bankName"));
+
+        var cii = CiiPaymentMeans(inv);
+        Assert.Equal(count, cii.Count);
+        Assert.All(cii, m => Assert.Equal("58", m.Element(Ram + "TypeCode")!.Value));
+        Assert.Equal(BankAccountSamples.Ibans.Take(count), cii.Select(m => m.Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "IBANID")!.Value));
+        var ciiXml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(ciiXml, "<ram:PaymentReference>"));
+
+        var ubl = Ubl(inv).Root!.Elements(Cac + "PaymentMeans").ToList();
+        Assert.Equal(count, ubl.Count);
+        Assert.All(ubl, m => Assert.Equal("58", m.Element(Cbc + "PaymentMeansCode")!.Value));
+        Assert.All(ubl, m => Assert.Equal("RE-2026-0101", m.Element(Cbc + "PaymentID")!.Value));
+        Assert.Equal(BankAccountSamples.Ibans.Take(count), ubl.Select(m => m.Element(Cac + "PayeeFinancialAccount")!.Element(Cbc + "ID")!.Value));
+        Assert.Empty(EInvoiceGenerator.Preflight(inv, _ => { }).Issues);
+    }
+
+    [Theory]
+    [InlineData("BG-17", "iban", "bic")]
+    [InlineData("bg17", "BT-84", "BT-86")]
+    public void BankAccountsAreReadUnderTheirAliases(string listKey, string ibanKey, string bicKey)
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice($$"""
+            "bankIban": "{{BankAccountSamples.Ibans[0]}}",
+            "{{listKey}}": [ { "{{ibanKey}}": "{{BankAccountSamples.Ibans[0]}}", "{{bicKey}}": "MUSTDEFFXXX", "kontoinhaber": "Muster Lieferant GmbH" },
+                             { "{{ibanKey}}": "{{BankAccountSamples.Ibans[1]}}", "{{bicKey}}": "BEISDEB1XXX" } ]
+            """), null, info.Add);
+        Assert.Equal(BankAccountSamples.Ibans.Take(2), inv.PaymentInstructions!.CreditTransfers.Select(a => a.AccountIdentifier));
+        Assert.Equal("Muster Lieferant GmbH", inv.PaymentInstructions.CreditTransfers[0].AccountName);
+        Assert.Equal("BEISDEB1XXX", inv.PaymentInstructions.CreditTransfers[1].ServiceProviderIdentifier);
+        Assert.Contains($"e-invoice BG-17: 2 accounts from '{listKey}' (…3000, …2051)", info);
+        Assert.DoesNotContain(info, m => m.StartsWith("JSON fields not written", StringComparison.Ordinal) && m.Contains(listKey));
+    }
+
+    [Fact]
+    public void BankAccountsEntryWithoutIbanIsSkippedWithAWarning()
+    {
+        var warnings = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat() + """
+            , "bankAccounts": [ { "bankIban": " ", "bankSwift": "MUSTDEFFXXX" }, "not an object", {{ENTRY}} ]
+            """.Replace("{{ENTRY}}", BankAccountSamples.Entry(1))), warnings.Add);
+        Assert.Equal(BankAccountSamples.Ibans[1], Assert.Single(inv.PaymentInstructions!.CreditTransfers).AccountIdentifier);
+        Assert.Equal(new[] { "'bankAccounts' entry 1 has no IBAN; skipped.", "'bankAccounts' entry 2 has no IBAN; skipped." }, warnings);
+    }
+
+    [Fact]
+    public void BankAccountsWithoutAnyIbanFallBackToTheFlatKeys()
+    {
+        var warnings = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat(2) + """
+            , "bankAccounts": [ { "bankSwift": "MUSTDEFFXXX" }, { "bankIban": "" } ]
+            """), warnings.Add);
+        var account = Assert.Single(inv.PaymentInstructions!.CreditTransfers);
+        Assert.Equal((BankAccountSamples.Ibans[2], "TESTGB2LXXX"), (account.AccountIdentifier, account.ServiceProviderIdentifier));
+        Assert.Equal(2, warnings.Count);
+    }
+
+    [Fact]
+    public void BankAccountsNoneAnywhereLeaveBg16OutAndThePreflightReportsBrDe1()
+    {
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice("\"bankAccounts\": [ { \"bankIban\": \"\" } ]"));
+        Assert.Null(inv.PaymentInstructions);
+        Assert.Empty(CiiPaymentMeans(inv));
+        var findings = new List<string>();
+        EInvoiceGenerator.Preflight(inv, findings.Add);
+        Assert.Contains(findings, f => f.Contains("BR-DE-1"));
+        Assert.Null(InvoiceMapper.Map(BankAccountSamples.Invoice("")).PaymentInstructions);
+    }
+
+    [Fact]
+    public void BankAccountsRepeatedIbanIsWrittenOnce()
+    {
+        var info = new List<string>();
+        string spaced = "de02 1203 0000 0000 2020 51";
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat() + ", \"bankAccounts\": [ "
+            + BankAccountSamples.Entry(0) + ", " + BankAccountSamples.Entry(1) + ", { \"bankIban\": \"" + spaced + "\" }, " + BankAccountSamples.Entry(0) + " ]"), null, info.Add);
+        Assert.Equal(BankAccountSamples.Ibans.Take(2), inv.PaymentInstructions!.CreditTransfers.Select(a => a.AccountIdentifier));
+        Assert.Contains("e-invoice BG-17: 'bankAccounts' entry 3 repeats the account of entry 2 (…2051); written once", info);
+        Assert.Contains("e-invoice BG-17: 'bankAccounts' entry 4 repeats the account of entry 1 (…3000); written once", info);
+        Assert.Equal(2, CiiPaymentMeans(inv).Count);
+    }
+
+    [Fact]
+    public void BankAccountsEntryWithoutBicOrHolderLeavesThatElementOut()
+    {
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat() + ", \"bankAccounts\": [ "
+            + BankAccountSamples.Entry(0) + ", " + BankAccountSamples.Entry(1, bic: false) + ", " + BankAccountSamples.Entry(2, holder: false) + " ]"));
+        var accounts = inv.PaymentInstructions!.CreditTransfers;
+        Assert.Null(accounts[1].ServiceProviderIdentifier);
+        Assert.Equal("Muster Lieferant GmbH", accounts[1].AccountName);
+        Assert.Null(accounts[2].AccountName);
+        Assert.Equal("TESTGB2LXXX", accounts[2].ServiceProviderIdentifier);
+
+        var cii = CiiPaymentMeans(inv);
+        Assert.Null(cii[1].Element(Ram + "PayeeSpecifiedCreditorFinancialInstitution"));
+        Assert.NotNull(cii[1].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "AccountName"));
+        Assert.Null(cii[2].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "AccountName"));
+        Assert.Equal("TESTGB2LXXX", cii[2].Element(Ram + "PayeeSpecifiedCreditorFinancialInstitution")!.Element(Ram + "BICID")!.Value);
+        Assert.Empty(EInvoiceGenerator.Preflight(inv, _ => { }).Issues);
+    }
+
+    [Fact]
+    public void BankAccountsWithANonIbanAccountNumberUseCode30ForEveryAccount()
+    {
+        var warnings = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat() + ", \"bankAccounts\": [ "
+            + BankAccountSamples.Entry(0) + ", { \"bankIban\": \"1234567890\", \"bankSwift\": \"BEISDEB1XXX\" } ]"), warnings.Add);
+        Assert.Equal(PaymentMeansCode.CreditTransfer, inv.PaymentInstructions!.MeansCode);
+        Assert.Empty(warnings);
+        var cii = CiiPaymentMeans(inv);
+        Assert.All(cii, m => Assert.Equal("30", m.Element(Ram + "TypeCode")!.Value));
+        Assert.Equal(BankAccountSamples.Ibans[0], cii[0].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "IBANID")!.Value);
+        Assert.Equal("1234567890", cii[1].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "ProprietaryID")!.Value);
+        var findings = new List<string>();
+        EInvoiceGenerator.Preflight(inv, findings.Add);
+        Assert.DoesNotContain(findings, f => f.Contains("BR-DE-19") || f.Contains("BR-DE-23"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BankAccountsIbanWithAWrongChecksumIsAnAccountNumberWithCode30(bool listed)
+    {
+        var warnings = new List<string>();
+        string bank = listed
+            ? BankAccountSamples.Flat() + ", \"bankAccounts\": [ " + BankAccountSamples.Entry(1) + ", { \"bankIban\": \"" + BankAccountSamples.WrongCheckDigits + "\" } ]"
+            : "\"bankIban\": \"DE89 3704 0044 0532 0130 01\"";
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(bank), warnings.Add);
+        Assert.Equal(PaymentMeansCode.CreditTransfer, inv.PaymentInstructions!.MeansCode);
+        Assert.Equal(new[] { "bank account …3001 looks like an IBAN but its check digits are wrong; written as an account number with payment means 30." }, warnings);
+        var wrong = CiiPaymentMeans(inv).Last().Element(Ram + "PayeePartyCreditorFinancialAccount")!;
+        Assert.Equal(BankAccountSamples.WrongCheckDigits, wrong.Element(Ram + "ProprietaryID")!.Value);
+        Assert.Null(wrong.Element(Ram + "IBANID"));
+        var findings = new List<string>();
+        EInvoiceGenerator.Preflight(inv, findings.Add);
+        Assert.DoesNotContain(findings, f => f.Contains("BR-DE-19"));
+    }
+
+    [Fact]
+    public void BankAccountsWinWhenTheFlatIbanDiffersFromTheFirstEntry()
+    {
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat(4) + ", " + BankAccountSamples.List(2)), null, info.Add);
+        Assert.Equal(BankAccountSamples.Ibans.Take(2), inv.PaymentInstructions!.CreditTransfers.Select(a => a.AccountIdentifier));
+        Assert.Contains("e-invoice BG-17: bankIban …3201 differs from the first 'bankAccounts' entry …3000; the list is written", info);
+        Assert.DoesNotContain(info, m => m.Contains("BT-85") || m.Contains("BT-86"));
+    }
+
+    // An older Hive BDC does not bind the list: the header reader turns the array into an unused key and
+    // the flat fields give account 1, which is the first account the current version writes.
+    [Fact]
+    public void BankAccountsFirstAccountIsTheOneOlderVersionsWrite()
+    {
+        string json = BankAccountSamples.Export(3);
+        var current = InvoiceMapper.Map(BankAccountSamples.Invoice(json)).PaymentInstructions!;
+        var older = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat())).PaymentInstructions!;
+        var first = current.CreditTransfers[0];
+        var only = Assert.Single(older.CreditTransfers);
+        Assert.Equal((only.AccountIdentifier, only.AccountName, only.ServiceProviderIdentifier), (first.AccountIdentifier, first.AccountName, first.ServiceProviderIdentifier));
+        Assert.Equal(older.MeansCode, current.MeansCode);
+
+        using var raw = System.Text.Json.JsonDocument.Parse("{" + json + "}");
+        var extra = raw.RootElement.EnumerateObject().Where(p => p.Name == "bankAccounts").ToDictionary(p => p.Name, p => p.Value);
+        var (found, unused) = InvoiceFieldAliases.ReadHeader(extra);
+        Assert.Empty(found);
+        Assert.Equal(new[] { "bankAccounts" }, unused);
+    }
 }

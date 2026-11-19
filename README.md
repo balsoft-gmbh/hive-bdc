@@ -102,7 +102,11 @@ for e-invoices:
   "paymentTermsText": "Bitte zahlen Sie bis zum 22 Juli 2026 ohne Abzug.",   // optional, default generated
   "cashDiscountDate": "2026-07-02", "cashDiscountPercent": "2", "cashDiscountAmount": "77.30",  // one Skonto
   "cashDiscounts": [ { "date": "2026-07-02", "percent": "3", "amount": "115.95" },             // or a chain
-                     { "date": "2026-07-12", "percent": "2", "amount": "77.30" } ]
+                     { "date": "2026-07-12", "percent": "2", "amount": "77.30" } ],
+  // bank accounts (BG-16 / BG-17): one account in the flat keys, several in the list
+  "bankIban": "DE89 3704 0044 0532 0130 00", "bankSwift": "MUSTDEFFXXX", "bankAccountHolder": "Muster Lieferant GmbH",
+  "bankAccounts": [ { "bankIban": "DE89370400440532013000", "bankSwift": "MUSTDEFFXXX", "bankAccountHolder": "Muster Lieferant GmbH" },
+                    { "bankIban": "DE02120300000000202051", "bankSwift": "BEISDEB1XXX", "bankAccountHolder": "Muster Lieferant GmbH" } ]
 }
 ```
 
@@ -113,6 +117,21 @@ invoice a negative unit price is written as a positive price with the sign moved
 to the quantity (BR-27), so a discount line keeps its effect. The VAT breakdown
 (BT-116 to BT-119) is emitted **per rate and category**, so an invoice mixing
 19 % and 7 % lines is representable; a line without `vatRate` uses the header rate.
+
+Bank accounts: every entry of `bankAccounts` (also accepted as `BG-17`) becomes its
+own payment means (`SpecifiedTradeSettlementPaymentMeans`) in JSON order, so an
+invoice that names three banks carries three accounts. All of them share one
+payment means code and one remittance information (BT-83, written once). Per entry
+`bankIban` (or `iban`, `BT-84`) is the account, `bankAccountHolder` the account name
+(BT-85) and `bankSwift` the BIC (BT-86); `bankName` has no EN 16931 term and is not
+written. An entry without an IBAN is skipped with a warning, the same IBAN twice is
+written once. Without a list, or when no entry has an IBAN, the flat `bankIban`,
+`bankSwift` and `bankAccountHolder` give one account as before; when the list and
+the flat `bankIban` disagree, the list wins and the log names both. The code is 58
+(SEPA credit transfer) when every account is a valid IBAN and 30 otherwise, so an
+account number that is not an IBAN, or an IBAN with wrong check digits (logged as a
+warning), is written as `ProprietaryID`. With no account at all the invoice has no
+payment instructions and the pre-flight check logs BR-DE-1.
 
 Payment terms land in the XML as one `SpecifiedTradePaymentTerms`: the readable
 lines plus, per discount, the machine-readable XRechnung line
@@ -145,7 +164,7 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | BT-25 / BT-26 Preceding invoice | `precedingInvoiceNumber`, `precedingInvoiceDate` |
 | BT-72 Delivery date | `deliveryDate`, `lieferdatum` (else the issue date) |
 | BG-13 Deliver to (BT-70, 75, 77, 78, 80) | `deliveryName`, `deliveryStreet`, `deliveryCity`, `deliveryPostcode`, `deliveryCountry` (country falls back to the buyer's; BT-80 is required for intra-community supplies, BR-IC-12) |
-| BT-83 / BT-85 / BT-86 Payment | `paymentReference`, `bankAccountHolder`, `bankSwift` / `bic` |
+| BT-83 / BT-85 / BT-86 Payment | `paymentReference`, `bankAccountHolder`, `bankSwift` / `bic`; the same BT-85 and BT-86 keys, plus `bankIban` / `iban` / `BT-84`, inside each `bankAccounts` entry |
 | BT-99 / BT-104 Document level charge | `chargeTotalAmount` (the sum of the ERP's header charges: freight, small-quantity surcharge, ...), `chargeReason` (default "Zuschläge"); one header charge taxed with the header `vatCategory` / `vatRate`, counted in BT-108, BT-109 and the VAT breakdown. A negative value on a plain invoice is a document level allowance ("Rabatt"); credit notes take the absolute value |
 | Line BT-127, 132, 133 | `lineNote`, `orderLineReference`, `costCenter` |
 | Line BT-155, 156, 157, 159 | `itemId` / `sellerItemId`, `customerItemId`, `gtin` / `ean`, `originCountry` |

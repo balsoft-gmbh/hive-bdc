@@ -101,6 +101,15 @@ public sealed class AxDocument
     public string VatNote { get; set; } = "";
 
     public string BankIban { get; set; } = "";
+
+    /// <summary>
+    /// BG-17: every account the invoice names, in the ERP's order, each with the keys of the flat bank
+    /// fields (bankIban, bankSwift, bankAccountHolder, bankName). Wins over <see cref="BankIban"/> when an
+    /// entry carries an IBAN. Null when the key holds something other than a list.
+    /// </summary>
+    [JsonConverter(typeof(TolerantBankAccountsConverter))]
+    public List<AxBankAccount>? BankAccounts { get; set; } = new();
+
     public string Notes { get; set; } = "";
 
     /// <summary>
@@ -212,6 +221,51 @@ public sealed class AxCashDiscount
     /// <summary>Days after the issue date; 0 = derive from <see cref="Date"/>.</summary>
     [JsonConverter(typeof(TolerantInt32Converter))]
     public int Days { get; set; }
+}
+
+/// <summary>One BG-17 account from the ERP's account list; its keys are read through InvoiceFieldAliases.ReadAccount.</summary>
+public sealed class AxBankAccount
+{
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement> Extra { get; set; } = new();
+
+    /// <summary>The accounts in a JSON value: one per array item (an item that is not an object stays empty), none for null, null for anything else.</summary>
+    public static List<AxBankAccount>? ListFrom(JsonElement value)
+    {
+        if (value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return new();
+        if (value.ValueKind != JsonValueKind.Array) return null;
+        var accounts = new List<AxBankAccount>();
+        foreach (var item in value.EnumerateArray())
+        {
+            var account = new AxBankAccount();
+            if (item.ValueKind == JsonValueKind.Object)
+                foreach (var property in item.EnumerateObject())
+                    account.Extra[property.Name] = property.Value.Clone();
+            accounts.Add(account);
+        }
+        return accounts;
+    }
+}
+
+/// <summary>Binds the account list without failing the document: a value that is not a list becomes null.</summary>
+public sealed class TolerantBankAccountsConverter : JsonConverter<List<AxBankAccount>?>
+{
+    public override bool HandleNull => true;
+
+    public override List<AxBankAccount>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        return AxBankAccount.ListFrom(document.RootElement);
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<AxBankAccount>? value, JsonSerializerOptions options)
+    {
+        if (value is null) { writer.WriteNullValue(); return; }
+        writer.WriteStartArray();
+        foreach (var account in value)
+            JsonSerializer.Serialize(writer, account.Extra, options);
+        writer.WriteEndArray();
+    }
 }
 
 public sealed class AxLineItem
