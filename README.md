@@ -1002,22 +1002,31 @@ service takes no document (`POST /setup/pause`, `POST /setup/start`); `POST
 through every step and answers with its steps. A success is settled as usual; a failed or
 waiting run leaves the export where it was in the container.
 
-The console opens on the set-up assistant while the settings say `Paused` or no outbound
-company takes documents from a source; the other pages stay grey until Start. Its four
-steps: the licence; the container F&O writes to (account, container, an optional folder in
-it, access through the instance's identity or a connection string), saved after the check
-as one company entry per waiting company of the document type with the most waiting
-exports, all staging into one folder per container under `/home/data/hivebdc/in` (other
-waiting types wait until they are added); where those documents go (every destination
-kind the service reports, plus mail once a mailbox is set up, with the connection made on
-the spot when it is missing); and the test run with Start. The check also counts per
+The console opens on the set-up assistant (`/setup/`, the whole screen, no menu) while the
+settings say `Paused` or no outbound company takes documents from a source; once set up, the
+assistant is gone. A step bar shows its four steps, and a reload or a later visit resumes at
+the step reached. 1, the licence: the tenant ID and the instance address to send to Balsoft,
+a mail to support@balsoft.de with both filled in, the upload, and who can do what. 2, where
+F&O hands over: a container (account, container, an optional folder in it, access through the
+instance's identity or a connection string), saved after the check as one company entry per
+waiting company of the document type with the most waiting exports, all staging into one
+folder per container under `/home/data/hivebdc/in` (other waiting types wait until they are
+added); or a Service Bus queue or topic subscription (namespace through the identity or a
+connection string, the account and container of the PDFs, the type and its companies picked
+by hand), saved with the body the Outbound page would send and then checked with
+`POST /setup/check-queue`; or a web address with one key per company, shown once with
+`/inbound/{type}/{company}`. 3, where those documents go (every destination kind the service
+reports, plus mail once a mailbox is set up, with the connection made on the spot when it is
+missing). 4, a test run for a Blob source, or for Service Bus and web addresses where to send
+the first document; Start leads to the overview. The check also counts per
 document type (`byType`), `GET /setup/identity` names the staging root (`inputRoot`), and
 `GET /config` names each company's `source`. A test run takes only an export whose JSON
 names that type and company, and works in the `.test-run` subfolder of the staging folder,
 so other waiting pairs there are not touched.
 
-**Outbound** (`#/outbound`; links to the former `#/export` still open it) uses the Windows
-app's words and edits the outbound side one level per screen: the document types (with a
+**Outbound** (`/outbound/`; one type at `/outbound/type/?id={type}&company={code}&tab=from|to`)
+uses the Windows app's words and edits the outbound side one level per screen: the document
+types as a list whose name opens the type (with a
 waiting document of a company that has no entry yet offered as "Add company"), one type, one
 company with its Active switch (Comes from: a Blob container and folder, a Service Bus queue or
 topic with the container its PDFs are in, or a web address with its own key, made in the
@@ -1039,15 +1048,17 @@ documents from Blob Storage and Service Bus because their staged copy stays on t
 (the blob stays under error/, the message dead-lettered); the Windows app keeps its
 "Settings > ..." wording.
 
-**Connections** (`#/connections`) lists every connection with what it points at, who uses
-it and Test, Edit and Remove (refused while a source or destination still uses it), plus the
-SharePoint app and the document mailbox. A storage connection in use is tested on a
+**Connections** (`/connections/`) lists every connection with its kind, how it signs in, how
+many use it and its state; the name opens it (`?open={id}`) with Test, Remove (refused while a
+source or destination still uses it) and Apply. The SharePoint app and the document mailbox
+are a second list (`?app=sharepoint|mail`). A storage connection in use is tested on a
 container it is used with, since an instance often holds its role on that container only;
 the mail test only reads the mailbox and sends nothing. New connections come from the kinds
-the service reports. Changes join the same draft and Save bar as Export; passwords, keys and
+the service reports. Changes join the same draft and Save bar as Outbound; passwords, keys and
 secrets go only with Save into Key Vault and are never shown again.
 
-**Service** (`#/service`) shows whether the instance takes documents (Pause and Start, a test
+**Service** (`/service/`, tabs Status, Licence, Updates and Technical log through `?tab=`) shows
+whether the instance takes documents (Pause and Start, a test
 run of the first waiting export of a company with a Blob source), the licence with upload,
 the version, region, time zone and the identity for role commands (`GET /setup/identity`
 also names `timeZone` and `region`), and the last 200 lines of the technical log with a

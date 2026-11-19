@@ -67,3 +67,60 @@ export function upperFirst(text: string) {
 export function entryName(type: any, company: string) {
   return `${upperFirst(typesWord(type))} · Company ${company}`;
 }
+
+/** Where a sender posts one company's documents of a type (Documents/HttpsInbound.cs). */
+export function inboundAddress(origin: string, typeId: string, company: string) {
+  return `${origin}/inbound/${encodeURIComponent(typeId)}/${encodeURIComponent(company)}`;
+}
+
+export type BusChoice = {
+  access: "identity" | "key";
+  namespace: string;
+  connectionString: string;
+  mode: "queue" | "topic";
+  queue: string;
+  topic: string;
+  subscription: string;
+  pdfAccount: string;
+  pdfContainer: string;
+  type: string;
+  companies: string[];
+};
+
+/**
+ * Whether the Service Bus form can be saved: a namespace, or a connection string (a stored one counts), the queue or
+ * the topic with its subscription, a type, one company or more, and the PDFs' account and container both or neither.
+ */
+export function busChoiceReady(choice: BusChoice, keyStored: boolean) {
+  const has = (v: string) => v.trim() !== "";
+  const access = choice.access === "key" ? has(choice.connectionString) || keyStored : has(choice.namespace);
+  const entity = choice.mode === "topic" ? has(choice.topic) && has(choice.subscription) : has(choice.queue);
+  return access && entity && has(choice.type) && choice.companies.length > 0 && has(choice.pdfAccount) === has(choice.pdfContainer);
+}
+
+/** What the check of a queue or topic subscription is sent, as the Outbound page sends it. */
+export function queueCheckBody(connection: string, choice: BusChoice) {
+  const topic = choice.mode === "topic";
+  return {
+    connection,
+    queue: topic ? "" : choice.queue.trim(),
+    topic: topic ? choice.topic.trim() : "",
+    subscription: topic ? choice.subscription.trim() : "",
+  };
+}
+
+/**
+ * What step 4 says to send where for a source without a test run: the queue or topic F&O sends to, or the address a
+ * sender posts to.
+ */
+export function sendLine(entry: { type: any; company: any }, config: any, origin: string) {
+  const source = entry.company.source || {};
+  const s = source.settings || {};
+  if (source.kind === "https") {
+    return { text: "With the key in the x-api-key header.", address: inboundAddress(origin, entry.type.id, entry.company.dataAreaId) };
+  }
+  const connection = ((config && config.connections) || []).find((c: any) => c.id === source.connection);
+  const space = connection?.settings?.Namespace ? ` on ${connection.settings.Namespace}` : "";
+  const text = s.Queue ? `A message to queue ${s.Queue}${space}.` : `A message to topic ${s.Topic}${space}. Hive BDC reads subscription ${s.Subscription}.`;
+  return { text, address: "" };
+}

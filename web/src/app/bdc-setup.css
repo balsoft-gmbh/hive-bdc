@@ -239,8 +239,39 @@
   grid-template-columns: minmax(0, 1fr);
   max-width: 560px;
 }
-.setup-flow .field input:not([type="checkbox"]):not([type="radio"]) {
+.setup-flow .field input:not([type="checkbox"]):not([type="radio"]),
+.setup-flow .field select {
   width: 100%;
+}
+.setup-flow .field select:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.setup-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 32px;
+}
+.setup-choices .setup-access {
+  flex: 0 1 auto;
+}
+.setup-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.setup-key {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.setup-fact-note {
+  display: block;
+  margin-top: 2px;
 }
 .setup-hint {
   font-size: 12px;

@@ -323,6 +323,8 @@ test("Tonight at 22:00 plans the update and Cancel the plan takes it back", asyn
   });
   await page.goto("/service/?tab=updates");
   await opened(page);
+  // The offer must be on screen before the next answer is mocked, or a first read still on its way gets the plan.
+  await expect(page.getByRole("button", { name: "Tonight at 22:00" })).toBeVisible();
   await mock(request, { "GET /service/updates": scheduled() });
   await page.getByRole("button", { name: "Tonight at 22:00" }).click();
   await expect(fact(page, "Planned")).toHaveText("19.11.2026 22:00 by Anna Weber");

@@ -1,5 +1,6 @@
 // Pure functions of the web console: no DOM, no network, so Node's test runner checks them (tests/logic.test.ts).
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { addCompany, addConnection, httpsConnectionId, setCompanyActive, setHttpsKey, setSource, setType, suggestId, updateConnection } from './exportlogic';
 
 const roleOrder = ['Viewer', 'Operator', 'Administrator'];
 
@@ -325,6 +326,84 @@ export function withBlobSource(body: any, source: any, byType: any, inputRoot: a
     entry.source = { kind: 'blob', connection: connection.id, settings: prefix ? { Container: source.container, Prefix: prefix } : { Container: source.container } };
   }
   return { body: next, ...plan };
+}
+
+/** "1000, demf;DEMF 2000" as ["1000", "demf", "2000"]: company IDs typed by hand, each once. */
+export function companyList(text: any) {
+  const list: string[] = [];
+  for (const part of String(text || '').split(/[\s,;]+/)) if (part && !list.some((c) => same(c, part))) list.push(part);
+  return list;
+}
+
+/** The company entry of the type switched on; a missing one is added the way the Outbound page adds it. */
+function activeCompany(body: any, typeId: any, company: any) {
+  const type = body.documentTypes.find((t: any) => same(t.id, typeId));
+  const entry = type && type.companies.find((c: any) => same(c.dataAreaId, company));
+  return entry ? setCompanyActive(body, typeId, entry.dataAreaId, true) : addCompany(body, typeId, company);
+}
+
+/**
+ * The settings after step 2 for a Service Bus source, made with the Outbound and Connections pages' own helpers
+ * (exportlogic.ts), so the body is theirs for the same choice (design version 3, S1). The bus connection is one with the
+ * same namespace, else the one the set-up saved before (choice.connection), else a new one; a connection whose secret is
+ * stored (choice.withSecret) serves the connection string only, so a managed identity gets its own. The storage
+ * account of the PDFs is reused by its address as in withBlobSource. Paused until Start.
+ */
+export function withServiceBusSource(body: any, choice: any, inputRoot: any) {
+  let next = structuredClone(body);
+  const keyed = (id: any) => (choice.withSecret || []).includes(id);
+  const key = choice.access === 'key';
+  const namespace = key ? '' : String(choice.namespace || '').trim();
+  const secret = key ? String(choice.connectionString || '').trim() : '';
+  const buses = next.connections.filter((c: any) => c.kind === 'servicebus');
+  const twin = key || !namespace ? null : buses.find((c: any) => !keyed(c.id) && same(c.settings && c.settings.Namespace, namespace));
+  const kept = buses.find((c: any) => c.id === choice.connection && (key || !keyed(c.id)));
+  let id: string;
+  if (twin) id = twin.id;
+  else if (kept) {
+    id = kept.id;
+    next = updateConnection(next, id, key ? {} : { Namespace: namespace }, secret);
+  } else {
+    id = suggestId(next.connections, 'servicebus');
+    next = addConnection(next, { id, kind: 'servicebus', settings: { Namespace: namespace }, secret });
+  }
+
+  const account = cleanAccount(choice.pdfAccount);
+  let pdf = '';
+  if (account) {
+    const found = next.connections.find((c: any) => c.kind === 'azure-storage' && cleanAccount(c.settings && c.settings.AccountUrl) === account);
+    pdf = found ? found.id : uniqueId(next.connections, 'fo-storage');
+    if (!found) next = addConnection(next, { id: pdf, kind: 'azure-storage', settings: { AccountUrl: account } });
+  }
+  const entity = choice.mode === 'topic' ? { Topic: choice.topic, Subscription: choice.subscription } : { Queue: choice.queue };
+  const settings = { ...entity, PdfConnection: pdf, PdfContainer: pdf ? choice.pdfContainer : '' };
+
+  next = setType(next, choice.type, { enabled: true });
+  for (const company of choice.companies) {
+    next = activeCompany(next, choice.type, company);
+    next = setSource(next, choice.type, company, { kind: 'servicebus', connection: id, settings }, inputRoot);
+  }
+  next.paused = true;
+  next.setupOpen = true;
+  return { body: next, connection: id };
+}
+
+/**
+ * The settings after step 2 for a web address: per company the Outbound page's setHttpsKey with its new key, on the
+ * connection the company has already, else in-{type}-{company}; the type switched on, paused until Start.
+ */
+export function withHttpsSource(body: any, typeId: any, keys: { company: string; key: string }[], inputRoot: any) {
+  let next = setType(body, typeId, { enabled: true });
+  for (const { company, key } of keys) {
+    next = activeCompany(next, typeId, company);
+    const type = next.documentTypes.find((t: any) => same(t.id, typeId));
+    const entry = type.companies.find((c: any) => same(c.dataAreaId, company));
+    const id = (entry.source && entry.source.kind === 'https' && entry.source.connection) || httpsConnectionId(type.id, entry.dataAreaId);
+    next = setHttpsKey(next, type.id, entry.dataAreaId, key, inputRoot, id);
+  }
+  next.paused = true;
+  next.setupOpen = true;
+  return next;
 }
 
 /**

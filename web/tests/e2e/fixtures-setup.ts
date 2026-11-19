@@ -52,6 +52,71 @@ export const destinationConfig = () => {
 /** After Start: running, the set-up closed. */
 export const startedConfig = () => ({ ...destinationConfig(), version: "v4", paused: false, setupOpen: false });
 
+const storage = { id: "fo-storage", kind: "azure-storage", settings: { AccountUrl: "https://stcontosofo.blob.core.windows.net" }, hasSecret: false };
+const bus = { id: "servicebus", kind: "servicebus", settings: { Namespace: "sb-contoso.servicebus.windows.net" }, hasSecret: false };
+const key = (company: string) => ({ id: `in-salesinvoice-${company.toLowerCase()}`, kind: "https", settings: {}, hasSecret: true });
+
+const busCompany = (dataAreaId: string, targets: unknown[] = []) => ({
+  ...company(dataAreaId, targets),
+  input: `${root}/sb-servicebus-bdc-export`,
+  source: { kind: "servicebus", connection: "servicebus", settings: { Queue: "bdc-export", PdfConnection: "fo-storage", PdfContainer: "bdc-pdf" } },
+});
+
+const httpsCompany = (dataAreaId: string, targets: unknown[] = []) => ({
+  ...company(dataAreaId, targets),
+  input: `${root}/https-SalesInvoice-${dataAreaId}`,
+  source: { kind: "https", connection: `in-salesinvoice-${dataAreaId.toLowerCase()}`, settings: {} },
+});
+
+/** After step 2 with Service Bus: sales invoices of 1000 and DEMF from the queue bdc-export, the PDFs from fo-storage. */
+export const busConfig = () => {
+  const c = freshConfig();
+  c.version = "v2";
+  c.connections = [bus, storage];
+  c.documentTypes[0].companies = [busCompany("1000"), busCompany("DEMF")];
+  return c;
+};
+
+/** After step 2 with a web address: sales invoices of 1000 and DEMF, each posted with its own key. */
+export const httpsConfig = () => {
+  const c = freshConfig();
+  c.version = "v2";
+  c.connections = [key("1000"), key("DEMF")];
+  c.documentTypes[0].companies = [httpsCompany("1000"), httpsCompany("DEMF")];
+  return c;
+};
+
+/** After step 3 without Blob: 1000 from Service Bus, 2000 posted to its web address. */
+export const busHttpsDestinationConfig = () => {
+  const c = freshConfig();
+  c.version = "v3";
+  c.connections = [bus, storage, key("2000")];
+  c.documentTypes[0].companies = [busCompany("1000", [blobTarget]), httpsCompany("2000", [blobTarget])];
+  return c;
+};
+
+/** After step 3 with every kind: 1000 from Blob, DEMF from Service Bus, 2000 posted. */
+export const mixedDestinationConfig = () => {
+  const c = freshConfig();
+  c.version = "v3";
+  c.connections = [storage, bus, key("2000")];
+  c.documentTypes[0].companies = [company("1000", [blobTarget]), busCompany("DEMF", [blobTarget]), httpsCompany("2000", [blobTarget])];
+  return c;
+};
+
+export const busRoleCommand =
+  'az role assignment create --assignee-object-id 00000000-0000-0000-0000-000000000001 --assignee-principal-type ServicePrincipal ' +
+  '--role "Azure Service Bus Data Receiver" --scope "$(az resource list --name sb-contoso --resource-type Microsoft.ServiceBus/namespaces --query [0].id -o tsv)"';
+
+export const queueRefused = () => ({
+  ok: false,
+  message: "This instance has no access to sb-contoso.servicebus.windows.net yet. Your IT runs the command below once; then wait a minute and check again.",
+  waiting: 0,
+  command: busRoleCommand,
+});
+
+export const queueOk = () => ({ ok: true, message: "Access works. 1 message is waiting in bdc-export.", waiting: 1, command: busRoleCommand });
+
 export const roleCommand =
   'az role assignment create --assignee-object-id 00000000-0000-0000-0000-000000000001 --assignee-principal-type ServicePrincipal ' +
   '--role "Storage Blob Data Contributor" --scope "$(az storage account show -n stcontosofo --query id -o tsv)"';
@@ -185,3 +250,5 @@ export const conflict = () => ({
 });
 
 export const viewer = { name: "Vera Viewer", roles: ["Viewer"], canRetry: false, canChange: false, version: "1.9.0" };
+
+export const operator = { name: "Otto Operator", roles: ["Operator"], canRetry: true, canChange: false, version: "1.9.0" };

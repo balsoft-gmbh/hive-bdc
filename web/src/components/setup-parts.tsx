@@ -151,6 +151,87 @@ export function TextField({
   );
 }
 
+export function SelectField({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/** Two or three choices as one bordered row of radios, as Access in the Blob panel. */
+export function Segments<T extends string>({
+  legend,
+  name,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  legend: string;
+  name: string;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset className="setup-access">
+      <legend>{legend}</legend>
+      <div className="setup-segments">
+        {options.map((o) => (
+          <label key={o.value} className="setup-segment">
+            <input type="radio" name={name} value={o.value} checked={value === o.value} disabled={disabled} onChange={() => onChange(o.value)} />
+            {o.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** The role command a check answered with, to copy into Azure Cloud Shell. */
+export function CommandBox({ command }: { command: string }) {
+  return (
+    <div className="setup-command">
+      <div className="setup-code">
+        <code>{command}</code>
+        <CopyButton text={command} label="Copy the command" />
+      </div>
+      <Hint>IT runs this once in Azure Cloud Shell.</Hint>
+    </div>
+  );
+}
+
+/**
+ * Keeps step 2 on screen while a save makes it done: without a step in the address the assistant opens the step
+ * reached, and the check answer or the new keys would go with the step.
+ */
+export function holdStep(step: number) {
+  if (new URLSearchParams(window.location.search).get("step") !== String(step)) window.history.replaceState(null, "", stepHref(step));
+}
+
 /** An icon-only copy button: the label is its accessible name and tooltip; a check shows for a moment once copied. */
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const [said, setSaid] = useState("");

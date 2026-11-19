@@ -2,11 +2,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  andList, cleanAccount, cleanPrefix, destinationPicks, destinationProblems, featureWords, hasDestination, licenceNote, postBody,
-  roleCommand, runLine, setupNeeded, setupProgress, setupType, typeWords, uniqueId, withBlobSource, withDestinations,
+  andList, cleanAccount, cleanPrefix, companyList, destinationPicks, destinationProblems, featureWords, hasDestination, licenceNote, postBody,
+  roleCommand, runLine, setupNeeded, setupProgress, setupType, typeWords, uniqueId, withBlobSource, withDestinations, withHttpsSource,
+  withServiceBusSource,
 } from '../src/lib/logic';
+import * as X from '../src/lib/exportlogic';
 import {
-  ENTRA_PATH, ROLES, SETUP_LINE, SETUP_TITLE, STEP_NAMES, entryName, licenceRequest, shownStep, stepHref, stepLabel, typesWord, upperFirst,
+  ENTRA_PATH, ROLES, SETUP_LINE, SETUP_TITLE, STEP_NAMES, busChoiceReady, entryName, inboundAddress, licenceRequest, queueCheckBody, sendLine,
+  shownStep, stepHref, stepLabel, typesWord, upperFirst, type BusChoice,
 } from '../src/app/setup/steps';
 
 const fresh = (): any => ({
@@ -296,4 +299,188 @@ test('no set-up text uses a dash as a pause', async () => {
     });
   }
   assert.deepEqual(found, []);
+});
+
+// Design version 3: Service Bus and a web address in step 2, step 4 per source kind (failure cases S1 and S4).
+
+const root = '/home/data/hivebdc/in';
+
+/** A fresh instance as the assistant reads it: paused and the set-up open. */
+const setupConfig = (): any => ({ ...fresh(), paused: true, setupOpen: true });
+
+type BusInput = BusChoice & { connection?: string; withSecret?: string[] };
+
+const bus = (changes: Partial<BusInput> = {}): BusInput => ({
+  access: 'identity',
+  namespace: 'sb-contoso.servicebus.windows.net',
+  connectionString: '',
+  mode: 'queue',
+  queue: 'bdc-export',
+  topic: '',
+  subscription: '',
+  pdfAccount: 'https://StContosoFo.blob.core.windows.net/',
+  pdfContainer: 'bdc-pdf',
+  type: 'SalesInvoice',
+  companies: ['1000', 'DEMF'],
+  ...changes,
+});
+
+const sbKey = 'Endpoint=sb://sb-contoso.servicebus.windows.net/;SharedAccessKeyName=listen-test-only';
+
+test('S1: the Service Bus save is the body the Connections and Outbound pages send for the same choice', () => {
+  const built = withServiceBusSource(postBody(setupConfig()), bus(), root);
+  // Connections: New connection for the namespace and for the PDFs' account; Outbound: the company, Comes from Service Bus.
+  let page: any = postBody(setupConfig());
+  page = X.addConnection(page, { id: 'servicebus', kind: 'servicebus', settings: { Namespace: 'sb-contoso.servicebus.windows.net' }, secret: '' });
+  page = X.addConnection(page, { id: 'fo-storage', kind: 'azure-storage', settings: { AccountUrl: 'https://stcontosofo.blob.core.windows.net' } });
+  for (const company of ['1000', 'DEMF']) {
+    page = X.addCompany(page, 'SalesInvoice', company);
+    page = X.setSource(page, 'SalesInvoice', company, {
+      kind: 'servicebus', connection: 'servicebus', settings: { Queue: 'bdc-export', PdfConnection: 'fo-storage', PdfContainer: 'bdc-pdf' },
+    }, root);
+  }
+  assert.equal(built.connection, 'servicebus');
+  assert.deepEqual(built.body, page);
+  for (const entry of built.body.documentTypes[0].companies) {
+    assert.equal(entry.input, '/home/data/hivebdc/in/sb-servicebus-bdc-export');
+    assert.deepEqual(entry.source, { kind: 'servicebus', connection: 'servicebus', settings: { Queue: 'bdc-export', PdfConnection: 'fo-storage', PdfContainer: 'bdc-pdf' } });
+  }
+  assert.equal(built.body.paused, true);
+  assert.equal(built.body.setupOpen, true);
+});
+
+test('S1: a topic read with a connection string and no PDFs is the same pages\' body too', () => {
+  const choice = bus({ access: 'key', connectionString: sbKey, mode: 'topic', queue: 'left over', topic: 'bdc-export', subscription: 'hivebdc', pdfAccount: '', pdfContainer: '', companies: ['1000'] });
+  const built = withServiceBusSource(postBody(setupConfig()), choice, root);
+  let page: any = postBody(setupConfig());
+  page = X.addConnection(page, { id: 'servicebus', kind: 'servicebus', settings: { Namespace: '' }, secret: sbKey });
+  page = X.addCompany(page, 'SalesInvoice', '1000');
+  page = X.setSource(page, 'SalesInvoice', '1000', { kind: 'servicebus', connection: 'servicebus', settings: { Topic: 'bdc-export', Subscription: 'hivebdc' } }, root);
+  assert.deepEqual(built.body, page);
+  assert.equal(built.body.documentTypes[0].companies[0].input, '/home/data/hivebdc/in/sb-servicebus-bdc-export-hivebdc');
+  assert.equal(withServiceBusSource(postBody(setupConfig()), { ...choice, connectionString: ` ${sbKey} ` }, root).body.connections[0].secret, sbKey);
+});
+
+test('S1: the web address save is setHttpsKey per company, as the Outbound page makes a key', () => {
+  const config = setupConfig();
+  config.documentTypes[1].enabled = false;
+  const keys = [{ company: '1000', key: 'key-1000' }, { company: 'DEMF', key: 'key-demf' }];
+  const built = withHttpsSource(postBody(config), 'SalesConfirmation', keys, root);
+  let page: any = X.setType(postBody(config), 'SalesConfirmation', { enabled: true });
+  for (const { company, key } of keys) {
+    page = X.addCompany(page, 'SalesConfirmation', company);
+    page = X.setHttpsKey(page, 'SalesConfirmation', company, key, root, X.httpsConnectionId('SalesConfirmation', company));
+  }
+  assert.deepEqual(built, page);
+  assert.deepEqual(built.connections, [
+    { id: 'in-salesconfirmation-1000', kind: 'https', settings: {}, secret: 'key-1000' },
+    { id: 'in-salesconfirmation-demf', kind: 'https', settings: {}, secret: 'key-demf' },
+  ]);
+  assert.equal(built.documentTypes[1].enabled, true);
+  assert.equal(built.documentTypes[1].companies[1].input, '/home/data/hivebdc/in/https-SalesConfirmation-DEMF');
+  assert.deepEqual(built.documentTypes[1].companies[1].source, { kind: 'https', connection: 'in-salesconfirmation-demf', settings: {} });
+});
+
+test('a new key goes onto the connection the company has, and a switched-off company is switched on', () => {
+  const config = setupConfig();
+  config.connections = [{ id: 'web-1000', kind: 'https', settings: {} }];
+  config.documentTypes[0].companies = [{
+    dataAreaId: '1000', input: `${root}/https-SalesInvoice-1000`, inputFormat: 'Json', output: '', enabled: false, mail: false,
+    sharePoint: { enabled: false, siteUrl: '', library: '', folder: '', fields: {} }, targets: [],
+    source: { kind: 'https', connection: 'web-1000', settings: {} },
+  }];
+  const built = withHttpsSource(postBody(config), 'salesinvoice', [{ company: '1000', key: 'new' }], root);
+  assert.deepEqual(built.connections, [{ id: 'web-1000', kind: 'https', settings: {}, secret: 'new' }]);
+  assert.equal(built.documentTypes[0].companies.length, 1);
+  assert.equal(built.documentTypes[0].companies[0].enabled, true);
+});
+
+test('saving step 2 again reuses the bus connection and keeps what the companies had', () => {
+  const first = withServiceBusSource(postBody(setupConfig()), bus(), root).body;
+  first.documentTypes[0].companies[0].targets = [{ kind: 'blob', connection: 'fo-storage', enabled: true, settings: { Container: 'out' }, fields: {} }];
+  const again = withServiceBusSource(first, bus({ companies: ['1000', 'DEMF', '2000'], connection: 'servicebus' }), root);
+  assert.equal(again.connection, 'servicebus');
+  assert.deepEqual(again.body.connections.map((c: any) => c.id), ['servicebus', 'fo-storage']);
+  assert.deepEqual(again.body.documentTypes[0].companies.map((c: any) => c.dataAreaId), ['1000', 'DEMF', '2000']);
+  assert.equal(again.body.documentTypes[0].companies[0].targets.length, 1);
+
+  const fixed = withServiceBusSource(first, bus({ namespace: 'sb-fixed.servicebus.windows.net', connection: 'servicebus' }), root).body;
+  assert.equal(fixed.connections.length, 2);
+  assert.deepEqual(fixed.connections[0].settings, { Namespace: 'sb-fixed.servicebus.windows.net' });
+
+  const keyed = withServiceBusSource(first, bus({ access: 'key', connectionString: sbKey, connection: 'servicebus' }), root).body;
+  assert.equal(keyed.connections[0].secret, sbKey);
+  assert.deepEqual(keyed.connections[0].settings, { Namespace: 'sb-contoso.servicebus.windows.net' });
+  const kept = withServiceBusSource(first, bus({ access: 'key', connection: 'servicebus', withSecret: ['servicebus'] }), root).body;
+  assert.equal('secret' in kept.connections[0], false);
+
+  const own = withServiceBusSource(first, bus({ connection: 'servicebus', withSecret: ['servicebus'] }), root);
+  assert.equal(own.connection, 'servicebus-2');
+  assert.deepEqual(own.body.connections[2], { id: 'servicebus-2', kind: 'servicebus', settings: { Namespace: 'sb-contoso.servicebus.windows.net' } });
+});
+
+test('S4: a company with a Service Bus or web address source counts as set up, one without a source does not', () => {
+  const status = { license: { state: 'Valid' } };
+  const viaBus = withServiceBusSource(postBody(setupConfig()), bus(), root).body;
+  assert.deepEqual(setupProgress(status, viaBus), { done: [true, true, false, false], open: 3 });
+  const viaHttps = withHttpsSource(postBody(setupConfig()), 'SalesInvoice', [{ company: '1000', key: 'k' }], root);
+  assert.deepEqual(setupProgress(status, viaHttps), { done: [true, true, false, false], open: 3 });
+  const delivering = withDestinations(viaHttps, 'SalesInvoice', [{ kind: 'blob', companies: ['1000'], settings: { Container: 'out' }, connection: 'own' }], ['blob']);
+  assert.deepEqual(setupProgress(status, delivering), { done: [true, true, true, false], open: 4 });
+  const bare = X.addCompany(postBody(setupConfig()), 'SalesInvoice', '1000');
+  assert.deepEqual(setupProgress(status, bare), { done: [true, false, false, false], open: 2 });
+  assert.equal(setupNeeded({ ...viaBus, setupOpen: false }), false);
+});
+
+test('company IDs typed by hand are read once each, in their order', () => {
+  assert.deepEqual(companyList(' 1000, demf;DEMF  2000,,'), ['1000', 'demf', '2000']);
+  assert.deepEqual(companyList(''), []);
+  assert.deepEqual(companyList(undefined), []);
+});
+
+test('the Service Bus form saves with access, queue or topic, type and companies, and the PDFs both or neither', () => {
+  assert.equal(busChoiceReady(bus(), false), true);
+  assert.equal(busChoiceReady(bus({ namespace: ' ' }), false), false);
+  assert.equal(busChoiceReady(bus({ access: 'key' }), false), false);
+  assert.equal(busChoiceReady(bus({ access: 'key' }), true), true);
+  assert.equal(busChoiceReady(bus({ access: 'key', connectionString: sbKey }), false), true);
+  assert.equal(busChoiceReady(bus({ mode: 'topic' }), false), false);
+  assert.equal(busChoiceReady(bus({ mode: 'topic', topic: 'bdc-export', subscription: ' ' }), false), false);
+  assert.equal(busChoiceReady(bus({ mode: 'topic', topic: 'bdc-export', subscription: 'hivebdc' }), false), true);
+  assert.equal(busChoiceReady(bus({ companies: [] }), false), false);
+  assert.equal(busChoiceReady(bus({ type: '' }), false), false);
+  assert.equal(busChoiceReady(bus({ pdfContainer: '' }), false), false);
+  assert.equal(busChoiceReady(bus({ pdfAccount: '' }), false), false);
+  assert.equal(busChoiceReady(bus({ pdfAccount: '', pdfContainer: '' }), false), true);
+});
+
+test('the queue check gets what the Outbound page sends: the saved connection, the queue or the topic and subscription', () => {
+  assert.deepEqual(queueCheckBody('servicebus', bus({ queue: ' bdc-export ', topic: 'old' })), { connection: 'servicebus', queue: 'bdc-export', topic: '', subscription: '' });
+  assert.deepEqual(queueCheckBody('sb', bus({ mode: 'topic', topic: 'bdc-export', subscription: 'hivebdc' })), {
+    connection: 'sb', queue: '', topic: 'bdc-export', subscription: 'hivebdc',
+  });
+});
+
+test('step 4 names what to send where for Service Bus and a web address', () => {
+  const config = {
+    connections: [
+      { id: 'sb', kind: 'servicebus', settings: { Namespace: 'sb-contoso.servicebus.windows.net' } },
+      { id: 'keyed', kind: 'servicebus', settings: { Namespace: '' } },
+    ],
+  };
+  const type = { id: 'Sales Invoice' };
+  const entry = (dataAreaId: string, source: any) => ({ type, company: { dataAreaId, source } });
+  assert.deepEqual(sendLine(entry('1000', { kind: 'servicebus', connection: 'sb', settings: { Queue: 'bdc-export' } }), config, 'https://h'), {
+    text: 'A message to queue bdc-export on sb-contoso.servicebus.windows.net.',
+    address: '',
+  });
+  assert.equal(
+    sendLine(entry('1000', { kind: 'servicebus', connection: 'keyed', settings: { Topic: 'bdc-export', Subscription: 'hivebdc' } }), config, 'https://h').text,
+    'A message to topic bdc-export. Hive BDC reads subscription hivebdc.',
+  );
+  assert.deepEqual(sendLine(entry('DE/MF', { kind: 'https', connection: 'in', settings: {} }), config, 'https://hivebdc.example'), {
+    text: 'With the key in the x-api-key header.',
+    address: 'https://hivebdc.example/inbound/Sales%20Invoice/DE%2FMF',
+  });
+  assert.equal(inboundAddress('https://h', 'SalesInvoice', '1000'), 'https://h/inbound/SalesInvoice/1000');
 });

@@ -2,13 +2,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Container, Globe, LoaderCircle, MessagesSquare, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { andList, cleanPrefix, postBody, roleCommand, setupType, sourceEntries, typeWords, withBlobSource } from "@/lib/logic";
 import { companiesWord, stepHref, typesWord } from "@/app/setup/steps";
 import { useConsole } from "./console-context";
 import { Notice } from "./notice";
+import { BusSource } from "./setup-source-bus";
+import { HttpsSource } from "./setup-source-https";
 import { CopyButton, Hint, ICON, Loading, Panel, Result, StepActions, StepFrame, TextField, useConfigSave, type Progress } from "./setup-parts";
 
 const ICON_18 = { size: 18, strokeWidth: 1.75 };
@@ -23,6 +25,9 @@ const ACCESS = [
   { value: "identity", label: "Managed identity" },
   { value: "key", label: "Connection string" },
 ] as const;
+
+/** What each kind's form gets: the step's state, the instance's input root and the notes about reading the instance. */
+export type SourceProps = { progress: Progress; readOnly: boolean; identity: any; notes: ReactNode };
 
 function PlanNote({ check, config }: { check: any; config: any }) {
   const plan = setupType(check.byType, config.documentTypes);
@@ -42,16 +47,61 @@ function PlanNote({ check, config }: { check: any; config: any }) {
   );
 }
 
+/** Step 2: the three ways F&O hands over. The form of the kind already saved opens first. */
 export function SourceStep({ progress, readOnly }: { progress: Progress; readOnly: boolean }) {
+  const { config } = useConsole();
+  const [identity, setIdentity] = useState<any>(null);
+  const [identityError, setIdentityError] = useState("");
+  const saved = sourceEntries(config)[0]?.company.source.kind;
+  const [kind, setKind] = useState<string>(SOURCES.some((s) => s.value === saved) ? saved : "blob");
+
+  useEffect(() => {
+    api("/setup/identity")
+      .then(setIdentity)
+      .catch((e: Error) => setIdentityError(e.message));
+  }, []);
+
+  const notes = (
+    <>
+      {identityError && <Notice kind="error">{identityError}</Notice>}
+      {!identity && !identityError && !readOnly && <Loading text="Reading this instance's identity" />}
+    </>
+  );
+  const props: SourceProps = { progress, readOnly, identity, notes };
+
+  return (
+    <StepFrame step={2} progress={progress} readOnly={readOnly}>
+      <fieldset className="setup-group">
+        <legend>
+          <h2 className="setup-group-title">Comes from</h2>
+        </legend>
+        <div className="setup-tiles setup-choose">
+          {SOURCES.map((s) => (
+            <label key={s.value} className="setup-tile">
+              <input type="radio" name="source" value={s.value} checked={kind === s.value} disabled={readOnly} onChange={() => setKind(s.value)} />
+              <span className="setup-tile-icon">
+                <s.icon {...ICON_18} />
+              </span>
+              <span className="setup-tile-body">
+                <strong>{s.title}</strong>
+                <span>{s.text}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {kind === "servicebus" ? <BusSource {...props} /> : kind === "https" ? <HttpsSource {...props} /> : <BlobSource {...props} />}
+    </StepFrame>
+  );
+}
+
+function BlobSource({ progress, readOnly, identity, notes }: SourceProps) {
   const { config, refresh } = useConsole();
   const router = useRouter();
   const existing = sourceEntries(config).find((e) => e.company.source.kind === "blob");
   const existingConnection = existing && (config.connections || []).find((c: any) => c.id === existing.company.source.connection);
   const sourceSettings = existing?.company.source.settings ?? {};
 
-  const [identity, setIdentity] = useState<any>(null);
-  const [identityError, setIdentityError] = useState("");
-  const [kind, setKind] = useState("blob");
   const [account, setAccount] = useState<string>(existingConnection?.settings?.AccountUrl || "");
   const [container, setContainer] = useState<string>(sourceSettings.Container || "");
   const [prefix, setPrefix] = useState<string>(sourceSettings.Prefix || "");
@@ -62,12 +112,6 @@ export function SourceStep({ progress, readOnly }: { progress: Progress; readOnl
   const [checking, setChecking] = useState(false);
   const [dirty, setDirty] = useState(!progress.done[1]);
   const { save, slot, busy } = useConfigSave();
-
-  useEffect(() => {
-    api("/setup/identity")
-      .then(setIdentity)
-      .catch((e: Error) => setIdentityError(e.message));
-  }, []);
 
   const edit = (set: (value: any) => void) => (value: any) => {
     set(value);
@@ -114,16 +158,15 @@ export function SourceStep({ progress, readOnly }: { progress: Progress; readOnl
 
   const plan = check?.ok ? setupType(check.byType, config.documentTypes) : null;
   const command: string = check?.command || roleCommand(identity?.objectId, account);
-  const blob = kind === "blob";
 
   let next = null;
-  if (blob && !dirty) {
+  if (!dirty) {
     next = (
       <Link className="button primary" href={stepHref(3)}>
         Continue
       </Link>
     );
-  } else if (blob && !readOnly) {
+  } else if (!readOnly) {
     next = (
       <button type="button" className="button primary" disabled={!plan?.type || busy || !identity} onClick={saveSource}>
         {busy && <LoaderCircle className="spin" {...ICON} />}
@@ -133,113 +176,87 @@ export function SourceStep({ progress, readOnly }: { progress: Progress; readOnl
   }
 
   return (
-    <StepFrame step={2} progress={progress} readOnly={readOnly}>
-      <fieldset className="setup-group">
-        <legend>
-          <h2 className="setup-group-title">Comes from</h2>
-        </legend>
-        <div className="setup-tiles setup-choose">
-          {SOURCES.map((s) => (
-            <label key={s.value} className="setup-tile">
-              <input type="radio" name="source" value={s.value} checked={kind === s.value} disabled={readOnly} onChange={() => setKind(s.value)} />
-              <span className="setup-tile-icon">
-                <s.icon {...ICON_18} />
-              </span>
-              <span className="setup-tile-body">
-                <strong>{s.title}</strong>
-                <span>{s.text}</span>
-              </span>
-            </label>
-          ))}
+    <>
+      <Panel id="blob-heading" title="Blob container">
+        <div className="setup-fields">
+          <TextField
+            id="src-account"
+            label="Storage account address"
+            type="url"
+            value={account}
+            placeholder="https://<account>.blob.core.windows.net"
+            disabled={readOnly}
+            onChange={edit(setAccount)}
+          />
+          <TextField
+            id="src-container"
+            label="Container"
+            value={container}
+            placeholder="bdc-export"
+            hint="Done exports move to processed/ or error/."
+            disabled={readOnly}
+            onChange={edit(setContainer)}
+          />
+          <TextField id="src-prefix" label="Folder in the container (optional)" value={prefix} disabled={readOnly} onChange={edit(setPrefix)} />
         </div>
-      </fieldset>
 
-      {blob ? (
-        <Panel id="blob-heading" title="Blob container">
-          <div className="setup-fields">
-            <TextField
-              id="src-account"
-              label="Storage account address"
-              type="url"
-              value={account}
-              placeholder="https://<account>.blob.core.windows.net"
-              disabled={readOnly}
-              onChange={edit(setAccount)}
-            />
-            <TextField
-              id="src-container"
-              label="Container"
-              value={container}
-              placeholder="bdc-export"
-              hint="Done exports move to processed/ or error/."
-              disabled={readOnly}
-              onChange={edit(setContainer)}
-            />
-            <TextField id="src-prefix" label="Folder in the container (optional)" value={prefix} disabled={readOnly} onChange={edit(setPrefix)} />
-          </div>
-
-          <fieldset className="setup-access">
-            <legend>Access</legend>
-            <div className="setup-segments">
-              {ACCESS.map((a) => (
-                <label key={a.value} className="setup-segment">
-                  <input
-                    type="radio"
-                    name="access"
-                    value={a.value}
-                    checked={access === a.value}
-                    disabled={readOnly}
-                    onChange={() => edit(setAccess)(a.value)}
-                  />
-                  {a.label}
-                </label>
-              ))}
-            </div>
-            {access === "identity" ? (
-              <div className="setup-command">
-                <div className="setup-code">
-                  {command ? <code>{command}</code> : <span className="setup-code-empty">Enter the storage account address above.</span>}
-                  {!readOnly && command && <CopyButton text={command} label="Copy the command" />}
-                </div>
-                <Hint>IT runs this once in Azure Cloud Shell. No key to store or renew.</Hint>
-              </div>
-            ) : (
-              <div className="setup-fields one">
-                <TextField
-                  id="src-key"
-                  label="Connection string"
-                  type="password"
-                  value={key}
-                  placeholder="DefaultEndpointsProtocol=https;AccountName=..."
-                  hint="From the storage account, Access keys. Kept in this instance's Key Vault."
+        <fieldset className="setup-access">
+          <legend>Access</legend>
+          <div className="setup-segments">
+            {ACCESS.map((a) => (
+              <label key={a.value} className="setup-segment">
+                <input
+                  type="radio"
+                  name="access"
+                  value={a.value}
+                  checked={access === a.value}
                   disabled={readOnly}
-                  onChange={edit(setKey)}
+                  onChange={() => edit(setAccess)(a.value)}
                 />
+                {a.label}
+              </label>
+            ))}
+          </div>
+          {access === "identity" ? (
+            <div className="setup-command">
+              <div className="setup-code">
+                {command ? <code>{command}</code> : <span className="setup-code-empty">Enter the storage account address above.</span>}
+                {!readOnly && command && <CopyButton text={command} label="Copy the command" />}
               </div>
-            )}
-          </fieldset>
-
-          {!readOnly && (
-            <div className="setup-inline">
-              <button type="button" className="button secondary" disabled={checking} onClick={() => void runCheck()}>
-                {checking ? <LoaderCircle className="spin" {...ICON} /> : <ShieldCheck {...ICON} />}
-                Check access
-              </button>
-              <span aria-live="polite" className="setup-check-line">
-                {checking ? <span className="muted">Checking</span> : checkLine && <Result ok={checkLine.ok}>{checkLine.text}</Result>}
-              </span>
+              <Hint>IT runs this once in Azure Cloud Shell. No key to store or renew.</Hint>
+            </div>
+          ) : (
+            <div className="setup-fields one">
+              <TextField
+                id="src-key"
+                label="Connection string"
+                type="password"
+                value={key}
+                placeholder="DefaultEndpointsProtocol=https;AccountName=..."
+                hint="From the storage account, Access keys. Kept in this instance's Key Vault."
+                disabled={readOnly}
+                onChange={edit(setKey)}
+              />
             </div>
           )}
-          {dirty && check?.ok && <PlanNote check={check} config={config} />}
-        </Panel>
-      ) : (
-        <p className="setup-note">The assistant checks and tests a Blob container. For Service Bus or HTTPS, add the companies under Outbound.</p>
-      )}
+        </fieldset>
 
-      {identityError && <Notice kind="error">{identityError}</Notice>}
-      {!identity && !identityError && blob && !readOnly && <Loading text="Reading this instance's identity" />}
+        {!readOnly && (
+          <div className="setup-inline">
+            <button type="button" className="button secondary" disabled={checking} onClick={() => void runCheck()}>
+              {checking ? <LoaderCircle className="spin" {...ICON} /> : <ShieldCheck {...ICON} />}
+              Check access
+            </button>
+            <span aria-live="polite" className="setup-check-line">
+              {checking ? <span className="muted">Checking</span> : checkLine && <Result ok={checkLine.ok}>{checkLine.text}</Result>}
+            </span>
+          </div>
+        )}
+        {dirty && check?.ok && <PlanNote check={check} config={config} />}
+      </Panel>
+      {notes}
       {slot}
       <StepActions back={1} next={next} />
-    </StepFrame>
+    </>
   );
 }
