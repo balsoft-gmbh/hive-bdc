@@ -625,15 +625,15 @@
                                     <TextBlock Text="Sent to" Style="{StaticResource Label}" Margin="0,0,0,4"/>
                                     <Border Background="#F1F5F9" CornerRadius="10" Padding="4">
                                         <UniformGrid Columns="2">
-                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsCustomer}" GroupName="Party"><TextBlock Text="Customers" FontSize="13"/></RadioButton>
-                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsVendor}" GroupName="Party"><TextBlock Text="Vendors" FontSize="13"/></RadioButton>
+                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsCustomer, Mode=OneWay}" Tag="IsCustomer" Checked="OnSegmentChecked" GroupName="Party"><TextBlock Text="Customers" FontSize="13"/></RadioButton>
+                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsVendor, Mode=OneWay}" Tag="IsVendor" Checked="OnSegmentChecked" GroupName="Party"><TextBlock Text="Vendors" FontSize="13"/></RadioButton>
                                         </UniformGrid>
                                     </Border>
                                     <TextBlock Text="Hive BDC makes" Style="{StaticResource Label}"/>
                                     <Border Background="#F1F5F9" CornerRadius="10" Padding="4">
                                         <UniformGrid Columns="2">
-                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding MakesEInvoice}" GroupName="Makes"><TextBlock Text="E-invoice" FontSize="13"/></RadioButton>
-                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding MakesPdf}" GroupName="Makes"><TextBlock Text="PDF as it is" FontSize="13"/></RadioButton>
+                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding MakesEInvoice, Mode=OneWay}" Tag="MakesEInvoice" Checked="OnSegmentChecked" GroupName="Makes"><TextBlock Text="E-invoice" FontSize="13"/></RadioButton>
+                                            <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding MakesPdf, Mode=OneWay}" Tag="MakesPdf" Checked="OnSegmentChecked" GroupName="Makes"><TextBlock Text="PDF as it is" FontSize="13"/></RadioButton>
                                         </UniformGrid>
                                     </Border>
                                     <TextBlock Text="{Binding ProducedDetail}" Style="{StaticResource Hint}"/>
@@ -738,8 +738,8 @@
                                 <TextBlock Text="COMES FROM" Style="{StaticResource PanelTitle}"/>
                                 <Border Background="#F1F5F9" CornerRadius="10" Padding="4">
                                     <UniformGrid Columns="2">
-                                        <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsJson}" GroupName="Source"><TextBlock Text="ERP export" FontSize="13"/></RadioButton>
-                                        <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsWord}" GroupName="Source"><TextBlock Text="Word" FontSize="13"/></RadioButton>
+                                        <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsJson, Mode=OneWay}" Tag="IsJson" Checked="OnSegmentChecked" GroupName="Source"><TextBlock Text="ERP export" FontSize="13"/></RadioButton>
+                                        <RadioButton Style="{StaticResource Segment}" IsChecked="{Binding IsWord, Mode=OneWay}" Tag="IsWord" Checked="OnSegmentChecked" GroupName="Source"><TextBlock Text="Word" FontSize="13"/></RadioButton>
                                     </UniformGrid>
                                 </Border>
                                 <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" Visibility="{Binding IsJson, Converter={StaticResource BoolToVis}}"

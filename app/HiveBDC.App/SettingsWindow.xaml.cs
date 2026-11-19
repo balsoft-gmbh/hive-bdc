@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using Balsoft.Hive.BDC.App.Services;
 using Balsoft.Hive.BDC.App.ViewModels;
@@ -119,6 +120,12 @@ public partial class SettingsWindow : Window
 
     private async void OnTestDocuWare(object sender, RoutedEventArgs e)
         => await _vm.TestDocuWareAsync(DocuWareSecretBox.Password);
+
+    private void OnSegmentChecked(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string property, DataContext: { } record })
+            record.GetType().GetProperty(property)?.SetValue(record, true);
+    }
 
     private void OnAskRemove(object sender, RoutedEventArgs e) => SetConfirm(sender, true);
 
