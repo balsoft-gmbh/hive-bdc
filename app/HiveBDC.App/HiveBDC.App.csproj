@@ -21,6 +21,11 @@
   <ItemGroup>
     <Resource Include="Assets\hive-bdc-logo.png" />
     <Resource Include="Assets\changelog.json" />
+    <!-- DM Sans and Manrope, the fonts of the web console, embedded so a clean Windows shows them too (SIL OFL 1.1). -->
+    <Resource Include="Assets\Fonts\dm-sans.ttf" />
+    <Resource Include="Assets\Fonts\manrope.ttf" />
+    <Content Include="Assets\Fonts\dm-sans-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fonts\manrope-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

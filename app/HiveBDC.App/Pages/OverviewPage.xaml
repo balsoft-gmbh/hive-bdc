@@ -1,0 +1,120 @@
+<UserControl x:Class="Balsoft.Hive.BDC.App.Pages.OverviewPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="24,18,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,14">
+            <TextBlock Text="Overview" Style="{StaticResource H1}"/>
+            <TextBlock Text="What was exported, and how the service runs." Style="{StaticResource Lead}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1">
+            <Border Style="{StaticResource NoticeError}" Visibility="{Binding LicenseBlocked, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="Processing is stopped. Install a valid licence to resume." FontWeight="SemiBold" Foreground="{StaticResource Danger}" TextWrapping="Wrap"/>
+            </Border>
+            <Border Style="{StaticResource NoticeWarn}" Visibility="{Binding DocumentTypesDetail, Converter={StaticResource Match}, ConverterParameter=!}">
+                <TextBlock Text="{Binding DocumentTypesDetail}" TextWrapping="Wrap"/>
+            </Border>
+        </StackPanel>
+
+        <UniformGrid Grid.Row="2" Columns="3" Margin="0,0,-12,12">
+            <Button Style="{StaticResource StatCardLink}" Margin="0,0,12,0" Click="OnOpenExports"
+                    AutomationProperties.AutomationId="StatExports" AutomationProperties.Name="Exports today, open all documents">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="Exports today" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,0,34,0"/>
+                        <TextBlock Text="{Binding ExportedToday}" Style="{StaticResource StatValue}" Margin="0,6,0,0"/>
+                        <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0">
+                            <Run Text="{Binding ExportedMonth, Mode=OneWay}"/><Run Text=" this month, "/><Run Text="{Binding ExportedTotal, Mode=OneWay}"/><Run Text=" in total"/>
+                        </TextBlock>
+                    </StackPanel>
+                    <Border Style="{StaticResource StatIconGreen}">
+                        <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.CircleCheck}"/>
+                    </Border>
+                </Grid>
+            </Button>
+            <Button Style="{StaticResource StatCardLink}" Margin="0,0,12,0" Click="OnOpenService"
+                    AutomationProperties.AutomationId="StatService" AutomationProperties.Name="Service, open its status">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="Service" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,0,34,0"/>
+                        <TextBlock Text="{Binding ServiceStatus}" Style="{StaticResource StatValue}" Margin="0,6,0,0"/>
+                        <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0">
+                            <Run Text="{Binding CompanyCount, Mode=OneWay}"/><Run Text=", "/><Run Text="{Binding DocumentTypes, Mode=OneWay}"/>
+                        </TextBlock>
+                    </StackPanel>
+                    <Border Style="{StaticResource StatIconBlue}">
+                        <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ServerCog}"/>
+                    </Border>
+                </Grid>
+            </Button>
+            <Button Style="{StaticResource StatCardLink}" Margin="0,0,12,0" Click="OnOpenLicence"
+                    AutomationProperties.AutomationId="StatLicence" AutomationProperties.Name="Licence, open it">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="Licence" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,0,34,0"/>
+                        <TextBlock Text="{Binding LicenseState}" Style="{StaticResource StatValue}" Margin="0,6,0,0"/>
+                        <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0"
+                                   Visibility="{Binding LicenseExpires, Converter={StaticResource Match}, ConverterParameter=!—}">
+                            <Run Text="Until "/><Run Text="{Binding LicenseExpires, Mode=OneWay}"/>
+                        </TextBlock>
+                    </StackPanel>
+                    <Border>
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource StatIcon}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding LicenseState}" Value="Valid">
+                                        <Setter Property="Background" Value="{StaticResource StatBlueSoft}"/>
+                                        <Setter Property="TextElement.Foreground" Value="{StaticResource StatBlue}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.BadgeCheck}"/>
+                    </Border>
+                </Grid>
+            </Button>
+        </UniformGrid>
+
+        <Border Grid.Row="3" Style="{StaticResource Panel}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Style="{StaticResource SectionHeading}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Click="OnOpenExports" AutomationProperties.AutomationId="AllDocuments" AutomationProperties.Name="All documents">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="All documents"/>
+                                <ContentControl Style="{StaticResource IconTiny}" Tag="{StaticResource Icon.ArrowRight}" Margin="5,0,0,0"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="Recent exports" Style="{StaticResource H2}"/>
+                    </DockPanel>
+                </Border>
+                <DataGrid Grid.Row="1" x:Name="RecentGrid" ItemsSource="{Binding Recent}" IsReadOnly="True"
+                          MouseDoubleClick="OnRecentDoubleClick" PreviewKeyDown="OnRecentKeyDown"
+                          ToolTip="Double-click a row to open its produced file" AutomationProperties.Name="Recent exports">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Document ID" Binding="{Binding DocumentId}" Width="1.4*" MinWidth="140" ElementStyle="{StaticResource CellStrong}"/>
+                        <DataGridTextColumn Header="Type" Binding="{Binding DocumentType}" Width="*" MinWidth="110" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn x:Name="RecentSourceColumn" Header="Source" Binding="{Binding Source}" Width="80" MinWidth="80" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="Format" Binding="{Binding Format}" Width="100" MinWidth="100" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="Exported" Binding="{Binding ExportedAt}" Width="160" MinWidth="160" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="80" MinWidth="80" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn x:Name="RecentSharePointColumn" Header="SharePoint" Binding="{Binding TargetSite}" Width="*" MinWidth="100" ElementStyle="{StaticResource CellText}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <TextBlock Grid.Row="1" Text="No exports yet." Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,60,0,0" VerticalAlignment="Top"
+                           Visibility="{Binding Recent.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,414 @@
+<UserControl x:Class="Balsoft.Hive.BDC.App.Pages.InboundPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Balsoft.Hive.BDC.App.ViewModels">
+    <Grid>
+        <!-- Inbound: the document types brought into the ERP -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Inbound}">
+            <StackPanel Margin="24,18,24,24">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Command="{Binding NewInboundTypeCommand}" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="NewInboundType" AutomationProperties.Name="New document type">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.Plus}" Margin="0,0,6,0"/>
+                            <TextBlock Text="New document type"/>
+                        </StackPanel>
+                    </Button>
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Inbound" Style="{StaticResource H1}"/>
+                        <TextBlock Text="Documents waiting in a document system, brought into your ERP." Style="{StaticResource Lead}"/>
+                    </StackPanel>
+                </DockPanel>
+
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" TextElement.FontSize="13" TextElement.Foreground="{StaticResource Muted}">
+                                    <TextBlock Text="Document system" VerticalAlignment="Center"/>
+                                    <ContentControl Style="{StaticResource IconTiny}" Tag="{StaticResource Icon.ArrowRight}" Margin="8,0"/>
+                                    <TextBlock Text="Hive BDC" VerticalAlignment="Center"/>
+                                    <ContentControl Style="{StaticResource IconTiny}" Tag="{StaticResource Icon.ArrowRight}" Margin="8,0"/>
+                                    <TextBlock Text="CSV in the folder the ERP reads" VerticalAlignment="Center"/>
+                                    <Border Style="{StaticResource BadgeGreen}" Margin="12,0,0,0"><TextBlock Text="INBOUND"/></Border>
+                                </StackPanel>
+                                <TextBlock Text="Document types" Style="{StaticResource H2}"/>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource ListHeader}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.3*"/>
+                                    <ColumnDefinition Width="1.5*"/>
+                                    <ColumnDefinition Width="1.3*"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Document type" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="Comes from" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="State" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" TextTrimming="None" Margin="14,14"
+                                   Text="No inbound document type yet. New document type sets one up: its companies, where their documents come from and the folder the ERP reads."
+                                   Visibility="{Binding InboundTypes.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
+                        <ItemsControl ItemsSource="{Binding InboundTypes}" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource ListRow}" Click="OnOpenInboundType"
+                                            AutomationProperties.AutomationId="InboundTypeCard" AutomationProperties.Name="{Binding Name}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.3*"/>
+                                                <ColumnDefinition Width="1.5*"/>
+                                                <ColumnDefinition Width="1.3*"/>
+                                                <ColumnDefinition Width="20"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource CellStrong}" Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding SystemsText}" Style="{StaticResource CellText}" Margin="0,0,12,0"/>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                                                <Ellipse>
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse" BasedOn="{StaticResource Dot}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding StatusKind}" Value="setup"><Setter Property="Fill" Value="{StaticResource Gold}"/></DataTrigger>
+                                                                <DataTrigger Binding="{Binding StatusKind}" Value="off"><Setter Property="Fill" Value="{StaticResource Subtle}"/></DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="8,0,0,0"/>
+                                            </StackPanel>
+                                            <ContentControl Grid.Column="3" Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ChevronRight}"
+                                                            Foreground="{StaticResource Chevron}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                           Text="Every imported document has its steps under Document history, searchable by its id in the document system."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Inbound / one document type: its name and its companies -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Inbound/type}">
+            <StackPanel Margin="24,18,24,24" DataContext="{Binding SelectedInboundType}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource H1}"/>
+                    <Border Style="{StaticResource BadgeGreen}" Margin="10,0,0,0"><TextBlock Text="INBOUND"/></Border>
+                </StackPanel>
+                <TextBlock Text="A document type the ERP receives, with the companies that receive it." Style="{StaticResource Lead}"/>
+
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <TextBlock Text="Document type" Style="{StaticResource H2}"/>
+                        </Border>
+                        <Border Style="{StaticResource PanelBody}">
+                            <StackPanel>
+                                <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxWidth="420" HorizontalAlignment="Left" Width="420"
+                                         AutomationProperties.AutomationId="InboundTypeName" AutomationProperties.Name="Name"/>
+                                <TextBlock Style="{StaticResource Hint}" Text="What the ERP receives, e.g. Purchase order or Vendor invoice. Shown in the document history."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" VerticalAlignment="Center" AutomationProperties.AutomationId="AddInboundCompany" AutomationProperties.Name="Add company"
+                                        Command="{Binding DataContext.AddInboundCompanyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.Plus}" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Add company"/>
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Text="Companies" Style="{StaticResource H2}"/>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource ListHeader}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="1.6*"/>
+                                    <ColumnDefinition Width="1.4*"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Company" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="Comes from" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="Which documents" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <TextBlock Style="{StaticResource WarnText}" Margin="14,14" Text="No company yet. Add company sets up the first one. A document type without companies is not saved."
+                                   Visibility="{Binding Companies.Count, Converter={StaticResource CountToVis}, ConverterParameter=Empty}"/>
+                        <ItemsControl ItemsSource="{Binding Companies}" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource ListRow}" Click="OnOpenInboundCompany"
+                                            AutomationProperties.AutomationId="InboundCompanyCard" AutomationProperties.Name="{Binding CardTitle}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="1.6*"/>
+                                                <ColumnDefinition Width="1.4*"/>
+                                                <ColumnDefinition Width="20"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                                                <TextBlock Text="{Binding CardTitle}" Style="{StaticResource CellStrong}"/>
+                                                <Border Style="{StaticResource Badge}" Margin="8,0,0,0"
+                                                        Visibility="{Binding Enabled, Converter={StaticResource Match}, ConverterParameter=False}">
+                                                    <TextBlock Text="Off"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding CardSource}" Style="{StaticResource CellText}" Margin="0,0,12,0" ToolTip="{Binding CardSource}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding CardReady}" Style="{StaticResource CellText}" Margin="0,0,12,0" ToolTip="{Binding CardReady}"/>
+                                            <ContentControl Grid.Column="3" Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ChevronRight}"
+                                                            Foreground="{StaticResource Chevron}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Margin="0,14,0,0">
+                    <Button Style="{StaticResource DangerLinkButton}" Click="OnAskRemove" AutomationProperties.AutomationId="RemoveInboundType" AutomationProperties.Name="{Binding Name, StringFormat=Remove {0}}"
+                            Visibility="{Binding ConfirmRemove, Converter={StaticResource Match}, ConverterParameter=False}">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.Trash2}" Margin="0,0,6,0"/>
+                            <TextBlock><Run Text="Remove "/><Run Text="{Binding Name, Mode=OneWay}"/></TextBlock>
+                        </StackPanel>
+                    </Button>
+                    <Border Style="{StaticResource ConfirmStrip}" Visibility="{Binding ConfirmRemove, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="Keep" Margin="0,0,8,0" Click="OnKeepItem"/>
+                                <Button Content="Remove" Style="{StaticResource DangerSolidButton}" Click="OnRemoveInboundType" AutomationProperties.AutomationId="ConfirmRemoveInboundType"/>
+                            </StackPanel>
+                            <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"><Run Text="Remove "/><Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" with all its companies? Nothing changes until you save."/></TextBlock>
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Inbound / where from: one tile per document system the service reads from -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Inbound/pick}">
+            <StackPanel Margin="24,18,24,24">
+                <TextBlock Text="Where do the documents come from?" Style="{StaticResource H1}"/>
+                <TextBlock Text="Choose the document system. Its own settings follow on the next screen." Style="{StaticResource Lead}"/>
+                <ItemsControl ItemsSource="{Binding Sources}" Margin="0,14,-12,0" Focusable="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource WidthToColumns}, ConverterParameter=3}"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource Tile}" Click="OnPickSource"
+                                    AutomationProperties.AutomationId="SourceTile" AutomationProperties.Name="{Binding Name}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource TileMark}">
+                                        <TextBlock Text="{Binding Initial}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                        <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Hint}" FontSize="13"/>
+                                        <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,8,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="Connect first"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Warn}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Connected}" Value="True">
+                                                            <Setter Property="Text" Value="Connected"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource BrandText}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Style="{StaticResource Hint}" Text="Further document systems appear here when a Hive BDC update brings their connector."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Inbound / one company: comes from (the system's own settings) and goes to (CSV for the ERP) -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Inbound/company}">
+            <StackPanel Margin="24,18,24,24" DataContext="{Binding OpenInbound}">
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Enabled}" Content="Active" VerticalAlignment="Center"
+                              AutomationProperties.Name="Company active"/>
+                    <StackPanel Margin="0,0,16,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource H1}"/>
+                            <Border Style="{StaticResource BadgeGreen}" Margin="10,0,0,0"><TextBlock Text="INBOUND"/></Border>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Lead}">
+                            <Run Text="Where this company's documents of the type "/><Run Text="{Binding DataContext.SelectedInboundType.Name, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}"/><Run Text=" come from, and where the ERP reads them."/>
+                        </TextBlock>
+                    </StackPanel>
+                </DockPanel>
+
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <TextBlock Text="Comes from" Style="{StaticResource H2}"/>
+                        </Border>
+                        <Border Style="{StaticResource PanelBody}">
+                            <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+                                <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="10,8" Margin="0,14,0,0">
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Change" Style="{StaticResource LinkButton}" Click="OnChangeSource"
+                                                AutomationProperties.AutomationId="ChangeSource" AutomationProperties.Name="Change the document system"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Style="{StaticResource TileMark}" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Source.Initial}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding SourceName}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <TextBlock Text="Company in the ERP" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Text="{Binding DataAreaId, UpdateSourceTrigger=PropertyChanged}" Width="160" HorizontalAlignment="Left"
+                                         AutomationProperties.AutomationId="InboundCompanyId" AutomationProperties.Name="Company in the ERP"/>
+                                <TextBlock Style="{StaticResource Hint}" Text="Also usable in the CSV as {DataAreaId}."/>
+                                <ItemsControl ItemsSource="{Binding WhichSettings}" ItemTemplate="{StaticResource SourceSettingTemplate}" Focusable="False"/>
+                                <TextBlock Text="AFTER IMPORT" Style="{StaticResource FactLabel}" Margin="0,22,0,0"/>
+                                <ItemsControl ItemsSource="{Binding AfterSettings}" ItemTemplate="{StaticResource SourceSettingTemplate}" Focusable="False" Margin="0,-10,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <TextBlock Text="Goes to" Style="{StaticResource H2}"/>
+                        </Border>
+                        <Border Style="{StaticResource PanelBody}">
+                            <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock Text="Folder the ERP reads" Style="{StaticResource FieldLabel}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding Folder, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="InboundFolder" AutomationProperties.Name="Folder the ERP reads"/>
+                                    <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding BrowseFolderCommand}" AutomationProperties.Name="Browse for the folder the ERP reads">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.FolderOpen}" Margin="0,0,6,0"/>
+                                            <TextBlock Text="Browse…"/>
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <CheckBox IsChecked="{Binding SaveFile}" Content="Save the document file next to the CSV" Margin="0,14,0,0"/>
+                                <TextBlock Style="{StaticResource Hint}" Text="Its path is {FilePath} in the CSV."/>
+                                <TextBlock Text="CSV file name" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Text="{Binding FileName, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="CSV file name"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Separator" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Text="{Binding Delimiter, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Separator"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Numbers and dates" Style="{StaticResource FieldLabel}"/>
+                                        <ComboBox ItemsSource="{x:Static vm:InboundFlowViewModel.NumberFormats}" SelectedItem="{Binding NumberFormat}" AutomationProperties.Name="Numbers and dates"/>
+                                    </StackPanel>
+                                </Grid>
+                                <StackPanel Visibility="{Binding HasTables, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="One CSV row per row of the table" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox ItemsSource="{Binding TableChoices}" SelectedItem="{Binding RowsFrom}" AutomationProperties.Name="One CSV row per row of the table"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <TextBlock Text="CSV columns" Style="{StaticResource H2}"/>
+                        </Border>
+                        <Border Style="{StaticResource PanelBody}">
+                            <StackPanel>
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Button Content="One column per field" Margin="0,0,6,6" Command="{Binding FillFromFieldsCommand}"/>
+                                    <Button Content="Columns from a CSV the ERP reads…" Margin="0,0,6,6" Command="{Binding ColumnsFromCsvCommand}"/>
+                                    <Button Content="Preview with a ready document" Margin="0,0,6,6" Command="{Binding PreviewCommand}"
+                                            AutomationProperties.AutomationId="InboundPreview"/>
+                                </WrapPanel>
+                                <DataGrid ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn}" Style="{StaticResource EditGrid}"
+                                          MinHeight="76" MaxHeight="280" Margin="0,4,0,0" AutomationProperties.Name="CSV columns">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Column" Width="*" Binding="{Binding Column, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <DataGridTextColumn Header="Value" Width="*" Binding="{Binding Template, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="Add row" Command="{Binding AddColumnCommand}" Margin="0,0,6,6"/>
+                                    <Button Content="Remove" Command="{Binding RemoveColumnCommand}" Margin="0,0,6,6" AutomationProperties.Name="Remove the selected column"/>
+                                </WrapPanel>
+                                <TextBlock Style="{StaticResource Hint}" Text="{}{FIELD} takes a field of the document, {TABLE.COLUMN} a column of the table the rows come from, {FIELD:date} writes a date."/>
+                                <TextBlock Text="{Binding StatusMessage}" Tag="{Binding StatusIsError}" Style="{StaticResource ResultText}" Margin="0,10,0,0"/>
+                                <Border Background="{StaticResource Hover}" CornerRadius="{StaticResource Radius}" Padding="10,8" Margin="0,8,0,0"
+                                        Visibility="{Binding Preview.Count, Converter={StaticResource CountToVis}}">
+                                    <ItemsControl ItemsSource="{Binding Preview}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" Style="{StaticResource MonoLine}" FontSize="12"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Margin="0,14,0,0" DataContext="{Binding Row}">
+                    <Button Style="{StaticResource DangerLinkButton}" Click="OnAskRemove" AutomationProperties.AutomationId="RemoveInboundCompany" AutomationProperties.Name="{Binding CardTitle, StringFormat=Remove {0}}"
+                            Visibility="{Binding ConfirmRemove, Converter={StaticResource Match}, ConverterParameter=False}">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.Trash2}" Margin="0,0,6,0"/>
+                            <TextBlock><Run Text="Remove "/><Run Text="{Binding CardTitle, Mode=OneWay}"/></TextBlock>
+                        </StackPanel>
+                    </Button>
+                    <Border Style="{StaticResource ConfirmStrip}" Visibility="{Binding ConfirmRemove, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="Keep" Margin="0,0,8,0" Click="OnKeepItem"/>
+                                <Button Content="Remove" Style="{StaticResource DangerSolidButton}" Click="OnRemoveInboundCompany" AutomationProperties.AutomationId="ConfirmRemoveInboundCompany"/>
+                            </StackPanel>
+                            <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"><Run Text="Remove "/><Run Text="{Binding CardTitle, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" from this document type? Nothing changes until you save."/></TextBlock>
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

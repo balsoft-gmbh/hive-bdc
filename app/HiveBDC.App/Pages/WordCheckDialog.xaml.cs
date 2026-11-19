@@ -1,17 +1,18 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using Balsoft.Hive.BDC.App.Services;
 using Balsoft.Hive.BDC.Documents.Word;
 using Microsoft.Win32;
 
-namespace Balsoft.Hive.BDC.App;
+namespace Balsoft.Hive.BDC.App.Pages;
 
 /// <summary>
 /// Shows what Hive BDC reads from a Word invoice before anyone drops it into the input folder: every field with its
 /// value and status, the lines, the totals check, the format, and Word elements the renderer does not draw. Runs the
 /// service's own reader and renderer (linked into the dashboard); nothing is sent to the service.
 /// </summary>
-public partial class WordCheckWindow : Window
+public partial class WordCheckDialog : UserControl
 {
     private readonly string _path;
 
@@ -26,12 +27,17 @@ public partial class WordCheckWindow : Window
     public List<FieldRow> Fields { get; } = new();
     public List<LineRow> Lines { get; } = new();
 
+    /// <summary>The dialog asks its host to close it.</summary>
+    public event Action? CloseRequested;
+
     private static readonly HashSet<string> Required = new(StringComparer.OrdinalIgnoreCase) { "BT-1", "BT-2", "BT-44" };
     private static readonly HashSet<string> RequiredForXRechnung = new(StringComparer.OrdinalIgnoreCase) { "BT-10", "BT-49" };
 
-    public WordCheckWindow(string path)
+    public WordCheckDialog(string path)
     {
         InitializeComponent();
+        ListColumns.TabOnce(FieldsGrid);
+        ListColumns.TabOnce(LinesGrid);
         _path = path;
         FileName = Path.GetFileName(path);
 
@@ -89,13 +95,14 @@ public partial class WordCheckWindow : Window
 
     private void OnSavePreview(object sender, RoutedEventArgs e)
     {
+        var owner = Window.GetWindow(this);
         var dlg = new SaveFileDialog
         {
             Title = "Save the PDF Hive BDC would make",
             Filter = "PDF (*.pdf)|*.pdf",
             FileName = Path.GetFileNameWithoutExtension(_path) + " (Hive BDC preview).pdf",
         };
-        if (dlg.ShowDialog(this) != true) return;
+        if (dlg.ShowDialog(owner) != true) return;
         try
         {
             var result = DocxPdfRenderer.Render(_path);
@@ -103,15 +110,15 @@ public partial class WordCheckWindow : Window
             AppLog.Info($"Saved a Word PDF preview of {FileName} ({result.Pages} page(s)) to {Path.GetFileName(dlg.FileName)}.");
             string fonts = result.MissingFonts.Count == 0 ? "" :
                 $"\n\nFonts not installed on this computer (replaced by {SystemFontResolver.FallbackFamily}): {string.Join(", ", result.MissingFonts)}.";
-            MessageBox.Show(this, $"Saved {result.Pages} page(s) to {Path.GetFileName(dlg.FileName)}.{fonts}", "Hive BDC",
+            MessageBox.Show(owner!, $"Saved {result.Pages} page(s) to {Path.GetFileName(dlg.FileName)}.{fonts}", "Hive BDC",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             AppLog.Warn($"Word PDF preview of {FileName} failed: {ex.Message}");
-            MessageBox.Show(this, "The preview could not be made: " + ex.Message, "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(owner!, "The preview could not be made: " + ex.Message, "Hive BDC", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
+    private void OnClose(object sender, RoutedEventArgs e) => CloseRequested?.Invoke();
 }

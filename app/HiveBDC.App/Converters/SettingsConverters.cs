@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
-using System.Windows.Media;
 
 namespace Balsoft.Hive.BDC.App.Converters;
 
@@ -15,14 +14,11 @@ public sealed class InverseBoolConverter : IValueConverter
         => value is not true;
 }
 
-/// <summary>Status message brush: true (error) → red, false → green.</summary>
+/// <summary>Status message brush: true (error) → the theme's danger red, false → its ok green.</summary>
 public sealed class StatusToBrushConverter : IValueConverter
 {
-    private static readonly Brush Error = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26));
-    private static readonly Brush Ok = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
-
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is true ? Error : Ok;
+        => ThemeBrush.Get(value is true ? "Danger" : "Ok");
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
@@ -64,4 +60,17 @@ public sealed class AllEqualConverter : IMultiValueConverter
 
     public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
+}
+
+/// <summary>
+/// A radio button that stands for one value of a string (a tab): checked while the string equals the parameter, and
+/// checking it sets the string to the parameter.
+/// </summary>
+public sealed class EqualsToBoolConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => Equals(value?.ToString(), parameter?.ToString());
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true ? parameter?.ToString() ?? "" : Binding.DoNothing;
 }

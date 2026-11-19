@@ -1,0 +1,92 @@
+<UserControl x:Class="Balsoft.Hive.BDC.App.Pages.WordCheckDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MaxWidth="960" MinWidth="560">
+    <Border Style="{StaticResource DialogCard}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Border Style="{StaticResource DialogHeading}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Click="OnClose" VerticalAlignment="Top"
+                            ToolTip="Close" AutomationProperties.AutomationId="CloseWordCheck" AutomationProperties.Name="Close">
+                        <ContentControl Style="{StaticResource Icon}" Tag="{StaticResource Icon.X}"/>
+                    </Button>
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Check a Word file" FontFamily="{StaticResource Font.Heading}" FontSize="19" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding FileName}" Style="{StaticResource Lead}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False">
+                <StackPanel Margin="22,16,22,18">
+                    <TextBlock Text="{Binding Verdict}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Totals}" Style="{StaticResource Hint}" Margin="0,2,0,12"/>
+                    <Border Style="{StaticResource NoticeError}" Visibility="{Binding Problems.Count, Converter={StaticResource CountToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="Not ready" FontWeight="SemiBold" Foreground="{StaticResource Danger}"/>
+                            <ItemsControl ItemsSource="{Binding Problems}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="{StaticResource Danger}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Notice}" Visibility="{Binding Notes.Count, Converter={StaticResource CountToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="Notes" FontWeight="SemiBold"/>
+                            <ItemsControl ItemsSource="{Binding Notes}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="FIELDS" Style="{StaticResource FactLabel}" Margin="0,4,0,6"/>
+                    <Border Style="{StaticResource Panel}">
+                        <DataGrid x:Name="FieldsGrid" ItemsSource="{Binding Fields}" IsReadOnly="True" MaxHeight="360" AutomationProperties.Name="Fields of the Word file">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Tag" Binding="{Binding Tag}" Width="80" MinWidth="80" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Field" Binding="{Binding Title}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="3*" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="170" MinWidth="170" ElementStyle="{StaticResource CellText}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <TextBlock Text="LINES" Style="{StaticResource FactLabel}" Margin="0,16,0,6"/>
+                    <Border Style="{StaticResource Panel}">
+                        <DataGrid x:Name="LinesGrid" ItemsSource="{Binding Lines}" IsReadOnly="True" MaxHeight="300" AutomationProperties.Name="Lines of the Word file">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Pos." Binding="{Binding Position}" Width="56" MinWidth="56" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Quantity" Binding="{Binding Quantity}" Width="84" MinWidth="84" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="64" MinWidth="64" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Net price" Binding="{Binding Price}" Width="100" MinWidth="100" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="VAT %" Binding="{Binding Vat}" Width="70" MinWidth="70" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Amount" Binding="{Binding Amount}" Width="100" MinWidth="100" ElementStyle="{StaticResource CellText}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" Style="{StaticResource DialogFooter}">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Close" Click="OnClose" Margin="0,0,8,0" AutomationProperties.AutomationId="CloseWordCheckFooter"/>
+                    <Button Content="Save PDF preview…" Style="{StaticResource PrimaryButton}" Click="OnSavePreview"
+                            AutomationProperties.AutomationId="SavePdfPreview" ToolTip="Render the PDF Hive BDC would make from this file and save it"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

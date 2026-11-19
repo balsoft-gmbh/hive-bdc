@@ -126,7 +126,7 @@ public sealed class UpdateService
             if (!string.Equals(actual, m.Sha256!.Replace(" ", ""), StringComparison.OrdinalIgnoreCase))
             {
                 TryDelete(file);
-                throw new InvalidOperationException("The downloaded installer failed its checksum — update aborted.");
+                throw new InvalidOperationException("The downloaded installer failed its checksum, so the update was stopped.");
             }
         }
 
@@ -139,7 +139,7 @@ public sealed class UpdateService
         if (!signatureValid)
         {
             TryDelete(file);
-            throw new InvalidOperationException($"The downloaded installer is not signed by Balsoft ({signer}) — update aborted.");
+            throw new InvalidOperationException($"The downloaded installer is not signed by Balsoft ({signer}), so the update was stopped.");
         }
 
         return file;

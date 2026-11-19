@@ -33,7 +33,7 @@ public sealed partial class LogsViewModel : ObservableObject
                 if (d.Lines is { Count: > 0 })
                 {
                     LogLines = LogParser.ParseNewestFirst(d.Lines);
-                    StatusMessage = $"{d.Lines.Count} line(s)" + (string.IsNullOrEmpty(d.File) ? "" : $" — {d.File}");
+                    StatusMessage = $"{d.Lines.Count} line(s)" + (string.IsNullOrEmpty(d.File) ? "" : $", {d.File}");
                 }
                 else
                 {
@@ -43,7 +43,7 @@ public sealed partial class LogsViewModel : ObservableObject
             }
             else
             {
-                LogLines = LogParser.Parse(new[] { "(service not reachable — logs unavailable)" });
+                LogLines = LogParser.Parse(new[] { "(service not reachable, logs unavailable)" });
                 StatusMessage = res.Error ?? "";
             }
         }

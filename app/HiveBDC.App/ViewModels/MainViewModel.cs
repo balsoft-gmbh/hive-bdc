@@ -147,7 +147,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else
         {
-            LogLines = LogParser.Parse(new[] { "(service not reachable — logs unavailable)" });
+            LogLines = LogParser.Parse(new[] { "(service not reachable, logs unavailable)" });
         }
     }
 
@@ -164,7 +164,7 @@ public sealed partial class MainViewModel : ObservableObject
         int unrouted = types.Count(t => t.Enabled && t.CompanyCount == 0);
         if (disabled > 0) notes.Add($"{disabled} disabled");
         if (unrouted > 0) notes.Add($"{unrouted} without a company entry (not picked up)");
-        if (discovered > 0) notes.Add($"{discovered} auto-registered, review in Settings");
+        if (discovered > 0) notes.Add($"{discovered} auto-registered, review under Outbound");
         if (unlicensed.Count > 0) notes.Add("not licensed: " + string.Join(", ", unlicensed));
         DocumentTypesDetail = string.Join(" · ", notes);
     }
@@ -264,8 +264,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Select the license file Balsoft emailed you",
-            Filter = "License files (*.lic)|*.lic|All files (*.*)|*.*",
+            Title = "Select the licence file Balsoft emailed you",
+            Filter = "Licence files (*.lic)|*.lic|All files (*.*)|*.*",
             CheckFileExists = true,
         };
         if (dlg.ShowDialog() != true) return;
@@ -277,11 +277,11 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             AppLog.Warn("Renew license: could not read the file — " + ex.Message);
-            ActionMessage = "Could not read the license file: " + ex.Message;
+            ActionMessage = "Could not read the licence file: " + ex.Message;
             return;
         }
 
-        ActionMessage = "Installing license…";
+        ActionMessage = "Installing licence…";
         var res = await _client.UploadLicenseAsync(new LicenseUploadRequestDto
         {
             Content = content,
@@ -291,7 +291,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (res is not { Reachable: true, Data: { } r })
         {
             AppLog.Warn("Renew license: " + (res.Error ?? "service not reachable — not installed."));
-            ActionMessage = res.Error ?? "Service not reachable — license not installed.";
+            ActionMessage = res.Error ?? "Service not reachable. The licence is not installed.";
             return;
         }
 
@@ -299,7 +299,7 @@ public sealed partial class MainViewModel : ObservableObject
         // tenant, expired) comes back ok:false with the reason.
         if (r.Ok) AppLog.Info("Renew license: installed — " + r.Message);
         else AppLog.Warn("Renew license: rejected — " + r.Message);
-        ActionMessage = r.Ok ? $"License installed — {r.Message}" : $"License rejected — {r.Message}";
+        ActionMessage = r.Ok ? $"Licence installed: {r.Message}" : $"Licence rejected: {r.Message}";
         await RefreshStatusAndMetricsAsync();
     }
 

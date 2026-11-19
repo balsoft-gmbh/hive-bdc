@@ -16,12 +16,13 @@ export into the deliverable (a German **e-invoice** as **XRechnung** or **ZUGFeR
 for sales invoices, the ERP's own **PDF** for everything else), then **mails** it
 and/or uploads it to **SharePoint**. It ships as two parts:
 
-- **Service** (`HiveBDC.exe`) — a .NET 10 Windows service that watches one
+- **Service** (`HiveBDC.exe`): a .NET 10 Windows service that watches one
   input folder per company, produces and delivers each document, and keeps a
   local activity log and export ledger. Runs headless under the SCM.
-- **Dashboard** (`HiveBDC.App.exe`) — a WPF app to monitor the service,
-  see the licence and export counts, read the log, configure companies, document
-  types and mail, start/stop the service, renew the licence, and install updates.
+- **Dashboard** (`HiveBDC.App.exe`): a WPF app in one window, laid out like the
+  web console. It shows the service, the licence, the exports, the document history
+  and the log, sets up document types, companies, connections and mail, starts and
+  stops the service, renews the licence and installs updates (see [Dashboard](#dashboard)).
 
 Everything runs **100% on the customer's machine** — document content never
 leaves it except to the recipients you configure. The dashboard talks to the
@@ -29,6 +30,27 @@ service only over a loopback (`127.0.0.1`) API: a minimal ASP.NET Core (Kestrel)
 server on a port the system picks, with a bearer token; port and token are in
 `%ProgramData%\HiveBDC\app-endpoint.json`, and a request from any other address
 is refused.
+
+## Dashboard
+
+One window, laid out like the web console of an Azure instance: the Balsoft logo and the licence holder at the top of
+a white sidebar, then **WORK** (Overview, Document history) and **SET UP** (Outbound from your ERP, Inbound into your
+ERP, Connections, Service). The top bar shows where you are and whether the service runs.
+
+- **Overview:** exports today, the service and the licence as cards, and the recent exports (double-click opens the
+  produced file).
+- **Document history:** **Steps** lists what needs attention, or every step of one document by its number, with
+  **Retry** for a stopped document; **Documents** lists every exported document.
+- **Outbound**, **Inbound** and **Connections:** the settings, one level per screen (document type, company, where its
+  documents come from and where they go); **Remove** sits at the end of each screen and asks first.
+- **Service:** **Status** (start and stop the service, how often it checks for documents, the log folder),
+  **Licence** (**Renew licence…**), **Updates** (**Check for updates** and the release notes) and **Technical log**
+  (the log, newest first, and **Open log folder**).
+
+The four SET UP pages edit one set of settings: **Save changes** at the bottom saves all of it and the service uses it
+at once. Leaving them for Overview or Document history, or closing the window, with changes that are not saved asks
+first: **Keep editing** or **Leave without saving**. The app carries the console's fonts (DM Sans and Manrope) and line
+icons (lucide); its colours and styles live in `app/HiveBDC.App/Theme/`.
 
 ## Document types
 
@@ -43,7 +65,7 @@ The service knows six types out of the box (AX terminology, English ids):
 | `PurchaseOrder` | Bestellung | Vendor | Pdf |
 | `PaymentAdvice` | Zahlungsavis (SEPA) | Vendor | Pdf |
 
-Per type you set (dashboard → **Settings → Document types**, or `DocumentTypes[]`
+Per type you set (dashboard: **Outbound >** a document type, or `DocumentTypes[]`
 in `appsettings.json`): the **party** ("Sent to"), the **handler** ("Produced
 as"), whether it is **enabled**, whether it is **mailed**, and its
 **companies**: one entry per AX company the type is picked up for, each with
@@ -53,10 +75,10 @@ its own input folder, output folder and SharePoint target (see Companies).
 `documentType` is not listed into any watched folder, the service registers it
 on the spot as a PDF pass-through (party from the JSON's `party`, else
 Customer; mail on) with the same company entry as the folder it arrived in, logs
-a warning, and processes it. It appears in Settings marked **auto-registered**
-until you save it. A type you never want processed is set to disabled; its pairs
-then go to `error\` with that reason. A built-in type you remove (**Remove** in
-Settings) stays removed: it is not added back on the next start or save, and a
+a warning, and processes it. It appears under **Outbound**, marked **auto-registered**
+on its screen, until you save it. A type you never want processed is set to disabled; its pairs
+then go to `error\` with that reason. A built-in type you remove (**Remove** on its
+screen under Outbound) stays removed: it is not added back on the next start or save, and a
 pair the ERP still sends for it goes to `error\` instead of being registered
 again. Removing every type is refused; disable them instead. An input folder
 that only disabled types point at is not scanned at all, so the installer
@@ -189,7 +211,7 @@ They resume automatically after the input or configuration is repaired.
 
 ## Word input (filled Word invoices instead of an ERP export)
 
-A company entry can take **Word documents** instead of ERP export pairs (**Settings > Outbound >** a document type **>** a company **>
+A company entry can take **Word documents** instead of ERP export pairs (**Outbound >** a document type **>** a company **>
 Comes from: Word**, or `InputFormat: "Word"` on the entry). Hive BDC then reads every `.docx` in the
 input folder, builds the same JSON an ERP export would drop, renders the PDF itself and runs the normal pipeline:
 XRechnung or ZUGFeRD, SharePoint, mail, ledger. Local folders and network shares work the same way as for JSON (a
@@ -202,7 +224,7 @@ position or label. The invoice lines are a **repeating section** tagged `lines`;
 (a drop-down with the values `xrechnung` and `zugferd`) decides the format; without it, XRechnung is produced, as for
 a JSON without `eInvoiceType`. Date pickers deliver their ISO date; typed dates are read as `dd.MM.yyyy`. Amounts are
 read in German notation (`721.613,72 EUR`, `19,0 %`). A control that still shows its placeholder counts as empty.
-**Word template...** in Settings saves a generic template; **Check a Word file...** shows what Hive BDC reads from a
+**Word template...** on that company's screen saves a generic template; **Check a Word file...** shows what Hive BDC reads from a
 file, the totals check and a PDF preview, without touching the service.
 
 **Checks before anything is produced.** BT-1, BT-2, BT-44 and one line are required; XRechnung also needs BT-10 and
@@ -229,7 +251,7 @@ dashboard. A `.doc` (Word 97-2003) cannot carry the fields and goes to `error\` 
 
 The service serves several AX companies at once, and the routing is defined
 **per document type**: each type lists the companies it is picked up for
-(**Settings → Document types → Companies**, or `DocumentTypes[i].Companies` in
+(**Outbound >** a document type **> Companies**, or `DocumentTypes[i].Companies` in
 `appsettings.json`). Every entry has:
 
 - **Company** (`DataAreaId`) — the AX company. The JSON's `dataAreaId` selects
@@ -287,13 +309,13 @@ foreign, expired or tampered one never replaces a working one.
 
 ## Updates
 
-The dashboard checks a public update feed (**Help → Check for updates**),
+The dashboard checks a public update feed (**Service > Updates > Check for updates**),
 downloads the signed `Setup.exe`, verifies its SHA-256 and Balsoft Authenticode
 signature, runs it silently, and relaunches. Windows verifies the signed file digest,
 certificate trust and revocation status; the publisher must be exactly `Balsoft GmbH`.
 Hive BDC has its own feed (container `hive-bdc`), so a dashboard of an earlier
 Balsoft product never offers Hive BDC as an update. The full
-version history is in **Help → Release notes** (works offline).
+version history is under **Service > Updates** (works offline).
 
 ## Install
 
@@ -362,7 +384,7 @@ Prerequisite: an Entra ID app registration in the target tenant with the
 [App registrations](#app-registrations)). The secret is stored **DPAPI-encrypted**
 (`enc:...`, machine-bound) and is never returned by the status API.
 
-- `Fields` (dashboard: the **Column templates** table of the company entry) maps SharePoint **internal** column names to templates. `{property}`
+- `Fields` (dashboard: the **Columns** table of the company's SharePoint library) maps SharePoint **internal** column names to templates. `{property}`
   placeholders resolve case-insensitively against the **top level of the
   document JSON** (any field the export writes is usable). `{property:date}`
   normalizes to `yyyy-MM-dd`; `{property:yyyy}`, `{property:MM}` and other
@@ -379,7 +401,7 @@ Prerequisite: an Entra ID app registration in the target tenant with the
 
 ### Importing column templates
 
-Settings > Outbound > a document type > a company > SharePoint **Edit**, then
+**Outbound >** a document type **>** a company **>** **SharePoint** under Goes to, then
 **Import columns…** on the SharePoint library screen reads a JSON file and
 applies the entry for exactly that type and company (target and column
 templates), so nobody types internal column names by hand. One file can carry
@@ -428,7 +450,7 @@ Test, Dev, and a document that carries no environment at all are all sent to the
 recipients** from the settings instead, with `[Test]` on the subject and the addresses it
 would have gone to named at the top of the body.
 
-Configure it in the **dashboard → Settings → Document mail**: the sending mailbox, the
+Configure it in the dashboard under **Connections > Document mail**: the sending mailbox, the
 client ID and secret, and the test recipients. Mail can be switched off per document type.
 **Test mail** checks the app registration and the mailbox without sending anything, and
 `HiveBDC.exe --test-mail` does the same from the console.
@@ -595,8 +617,8 @@ HiveBDC.exe install --quiet [--account DOMAIN\user] [--password ***]
 The service logs every poll cycle, each watched folder, the document types in
 play, and each produce / upload / mail step to a rolling daily file (default
 `%ProgramData%\HiveBDC\logs`). The **dashboard** logs its own actions into
-the **same** file, tagged `UI ·`. The dashboard's log view is colour-coded by
-severity — read it there, or open the folder from **All logs → Open log folder**.
+the **same** file, tagged `UI ·`. The dashboard's log view (**Service > Technical log**) is colour-coded by
+severity; read it there, or open the folder with **Open log folder**.
 
 ## Project layout
 
@@ -779,14 +801,14 @@ from Settings writes each company's own value.
 
 In the dashboard:
 
-1. **Settings > Connections > DocuWare:** address, user name and password, then
+1. **Connections > DocuWare:** address, user name and password, then
    **Test connection**. It signs in and lists the file cabinets the user can see.
-2. **Settings > Outbound >** a document type **>** a company **> Goes to >
-   + Add a destination > DocuWare file cabinet:** choose the file cabinet by name. Its fields
+2. **Outbound >** a document type **>** a company **> Goes to >
+   Add a destination > DocuWare file cabinet:** choose the file cabinet by name. Its fields
    are listed with their kind and whether they are required; fill the ones you want with
    templates. Choose the field that holds the document number under **Never store twice**.
-3. **Save.** Every document of that type and company now also goes to DocuWare.
-4. **View > Document history** shows what needs attention (stopped or waiting
+3. **Save changes.** Every document of that type and company now also goes to DocuWare.
+4. **Document history** shows what needs attention (stopped or waiting
    documents) and every step of one document by its number; **Retry** puts a stopped
    document back into its input folder.
 
@@ -1136,7 +1158,7 @@ package: Bicep build and linter, Microsoft's ARM template test toolkit (arm-ttk)
 
 ### Inbound flows (DocuWare, SharePoint)
 
-**Settings > Inbound > + New document type**, then **+ Add company** asks where the
+**Inbound > New document type**, then **Add company** asks where the
 documents come from: one tile per document system this version reads from (DocuWare and
 SharePoint today; a further system is one source connector in the service and shows up
 here without a dashboard change). The company's screen then shows that system's own
@@ -1199,7 +1221,7 @@ its own name:
 
 Every document gets a history in `hive.db` (table `events`): received, read,
 produced, one line per target (or "skipped", for example a mail without recipient),
-waiting, failed and done, in plain words. Mail switched off in Settings writes no line.
+waiting, failed and done, in plain words. Mail switched off in the settings writes no line.
 A waiting document's reason is written once, not on every scan. Mail addresses are
 masked, line breaks flattened and a line is capped at 2000 characters. The history is
 pruned with the export ledger. The loopback API serves it as

@@ -1,0 +1,175 @@
+<UserControl x:Class="Balsoft.Hive.BDC.App.Pages.HistoryPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="24,18,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="Document history" Style="{StaticResource H1}"/>
+            <TextBlock Text="Every step of every document, and every file Hive BDC made." Style="{StaticResource Lead}"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" x:Name="TabsBar" Style="{StaticResource TabBar}" Margin="0,10,0,12">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton Style="{StaticResource TabItem}" GroupName="HistoryTabs" Content="Steps" AutomationProperties.AutomationId="TabSteps"
+                             IsChecked="{Binding HistoryTab, Converter={StaticResource EqualsTo}, ConverterParameter=Steps}"/>
+                <RadioButton Style="{StaticResource TabItem}" GroupName="HistoryTabs" Content="Documents" AutomationProperties.AutomationId="TabDocuments"
+                             IsChecked="{Binding HistoryTab, Converter={StaticResource EqualsTo}, ConverterParameter=Documents}"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2" x:Name="StepsView"
+              Visibility="{Binding DataContext.HistoryTab, ElementName=TabsBar, Converter={StaticResource Match}, ConverterParameter=Steps}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <WrapPanel Margin="0,0,0,8">
+                <Border Style="{StaticResource SearchBox}" Width="300" Margin="0,0,8,4">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.Search}" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
+                        <TextBlock Grid.Column="1" Text="Document number or file name" Foreground="{StaticResource Subtle}" VerticalAlignment="Center" IsHitTestVisible="False"
+                                   Visibility="{Binding Text, ElementName=SearchBox, Converter={StaticResource Match}, ConverterParameter=''}"/>
+                        <TextBox Grid.Column="1" x:Name="SearchBox" Style="{StaticResource BareTextBox}" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
+                                 KeyDown="OnSearchKeyDown" AutomationProperties.Name="Search the document history"
+                                 ToolTip="Any part of the document number or the file name"/>
+                    </Grid>
+                </Border>
+                <Button Content="Find" Command="{Binding RefreshCommand}" Margin="0,0,6,4" AutomationProperties.AutomationId="Find"/>
+                <Button Content="Clear" Style="{StaticResource GhostButton}" Command="{Binding ClearSearchCommand}" Margin="0,0,16,4" AutomationProperties.AutomationId="ClearSearch"/>
+                <CheckBox Content="Needs attention only" IsChecked="{Binding AttentionOnly}" Margin="0,0,0,4" AutomationProperties.AutomationId="AttentionOnly"/>
+            </WrapPanel>
+            <DockPanel Grid.Row="1" Margin="0,0,0,10">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="All steps of this document" Command="{Binding ShowDocumentCommand}" Margin="0,0,8,0" AutomationProperties.AutomationId="ShowDocument"/>
+                    <Button Command="{Binding RetryCommand}" IsEnabled="{Binding CanRetry}" Margin="0,0,8,0" AutomationProperties.AutomationId="Retry" AutomationProperties.Name="Retry"
+                            ToolTip="Put the stopped document's files back into its input folder. It is processed on the next scan; targets that already received it get no second copy.">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.RefreshCw}" Margin="0,0,6,0"/>
+                            <TextBlock Text="Retry"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="RefreshHistory"/>
+                </StackPanel>
+                <TextBlock Text="{Binding StatusMessage}" Tag="{Binding StatusIsError}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0"
+                           AutomationProperties.AutomationId="HistoryStatus">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                            <Setter Property="TextTrimming" Value="None"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StatusIsError}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Danger}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </DockPanel>
+            <Border Grid.Row="2" Style="{StaticResource Panel}">
+                <DataGrid x:Name="StepsGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsReadOnly="True"
+                          MouseDoubleClick="OnRowDoubleClick" PreviewKeyDown="OnStepsKeyDown" AutomationProperties.Name="Steps of the documents">
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource NoticeErrorFill}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsWaiting}" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource NoticeWarnFill}"/>
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource Hover}"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource GoldSoft}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="When" Binding="{Binding At}" Width="160" MinWidth="160" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTemplateColumn Header="Document" Width="170" MinWidth="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Document}" Style="{StaticResource CellStrong}" ToolTip="{Binding Document}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn x:Name="StepsTypeColumn" Header="Type" Binding="{Binding Type}" Width="130" MinWidth="130" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTemplateColumn Header="Step" Width="110" MinWidth="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border>
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource BadgeGreen}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource RoseSoft}"/>
+                                                        <Setter Property="TextElement.Foreground" Value="{StaticResource Rose}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsWaiting}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource AmberSoft}"/>
+                                                        <Setter Property="TextElement.Foreground" Value="{StaticResource Amber}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding Step}"/>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn x:Name="StepsWhereColumn" Header="Where" Binding="{Binding Target}" Width="110" MinWidth="110" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTemplateColumn Header="What happened" Width="*" MinWidth="160">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Message}" Style="{StaticResource CellWrap}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" x:Name="DocumentsView"
+              Visibility="{Binding DataContext.HistoryTab, ElementName=TabsBar, Converter={StaticResource Match}, ConverterParameter=Documents}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,10">
+                <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" VerticalAlignment="Center" AutomationProperties.AutomationId="RefreshDocuments"/>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                    <TextBlock Text="{Binding Summary}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding ByType}" Style="{StaticResource Hint}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </DockPanel>
+            <Border Grid.Row="1" Style="{StaticResource Panel}">
+                <DataGrid x:Name="DocumentsGrid" ItemsSource="{Binding Documents}" IsReadOnly="True"
+                          MouseDoubleClick="OnDocumentDoubleClick" PreviewKeyDown="OnDocumentsKeyDown"
+                          ToolTip="Double-click a row to open its produced file" AutomationProperties.Name="All documents">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Document ID" Binding="{Binding DocumentId}" Width="1.4*" MinWidth="140" ElementStyle="{StaticResource CellStrong}"/>
+                        <DataGridTextColumn Header="Company" Binding="{Binding DataAreaId}" Width="90" MinWidth="90" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="Type" Binding="{Binding DocumentType}" Width="*" MinWidth="110" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn x:Name="DocumentsSourceColumn" Header="Source" Binding="{Binding Source}" Width="80" MinWidth="80" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="Format" Binding="{Binding Format}" Width="100" MinWidth="100" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="Exported" Binding="{Binding ExportedAt}" Width="160" MinWidth="160" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn x:Name="DocumentsSizeColumn" Header="Size" Binding="{Binding Size}" Width="80" MinWidth="80" ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn x:Name="DocumentsSharePointColumn" Header="SharePoint" Binding="{Binding TargetSite}" Width="*" MinWidth="100" ElementStyle="{StaticResource CellText}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
