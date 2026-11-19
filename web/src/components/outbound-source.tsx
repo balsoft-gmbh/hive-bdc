@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Globe, HardDrive, MessagesSquare } from "lucide-react";
 import { useConsole } from "./console-context";
 import { Notice } from "./notice";
 import { change, draft, useDraft } from "./save-bar";
-import { Chip, CommitInput, ConnectionSelect, CopyCode, Field, Segmented, post, useAnswer } from "./outbound-parts";
+import { CommitInput, ConnectionSelect, CopyCode, Facts, Field, ICON, Result, Segmented, post, useAnswer } from "./outbound-parts";
 import * as X from "@/lib/exportlogic";
 
 // Comes from (board W9, the first half of export.js companyScreen): a Blob container, a Service Bus queue or topic, or
@@ -13,10 +14,10 @@ import * as X from "@/lib/exportlogic";
 
 const same = (a: unknown, b: unknown) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
 
-const TILES: [string, string, string][] = [
-  ["blob", "Azure Blob Storage", "F&O writes into a container"],
-  ["servicebus", "Azure Service Bus", "F&O sends a message"],
-  ["https", "Web address (HTTPS)", "Power Automate, Logic App, ERP"],
+const TILES: [string, string, string, typeof Globe][] = [
+  ["blob", "Azure Blob Storage", "F&O writes into a container", HardDrive],
+  ["servicebus", "Azure Service Bus", "F&O sends a message", MessagesSquare],
+  ["https", "Web address (HTTPS)", "Power Automate, Logic App, ERP", Globe],
 ];
 
 export function SourceTab({ type, entry, ro }: { type: any; entry: any; ro: boolean }) {
@@ -72,9 +73,9 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
   const connectionNow = () => current()?.source?.connection || "";
   const hasAny = (k: string) => (state.body?.connections || []).some((c: any) => c.kind === k);
   const noConnection = (what: string) => (
-    <p className="warn-text">
-      There is no {what} connection yet. Add one under <Link href="/connections/">Connections</Link>, then come back.
-    </p>
+    <Notice kind="warn">
+      No {what} connection yet. Add one under <Link href="/connections/">Connections</Link>.
+    </Notice>
   );
   const input = (key: string, id: string, placeholder?: string) => (
     <CommitInput id={id} value={settings[key] || ""} placeholder={placeholder} disabled={ro} onCommit={(v) => apply({ settings: { [key]: v } })} />
@@ -85,8 +86,8 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
         <span className="muted">Checking</span>
       ) : check ? (
         <>
-          <Chip ok={Boolean(check.ok)}>{check.message}</Chip>
-          {!check.ok && check.command && <CopyCode text={check.command} />}
+          <Result ok={Boolean(check.ok)}>{check.message}</Result>
+          {!check.ok && check.command && <CopyCode text={check.command} label="Copy the command" />}
         </>
       ) : null}
     </div>
@@ -107,11 +108,11 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
               onChange={(v) => apply({ connection: v })}
             />
           </Field>
-          <Field label="Container" htmlFor="source-container">
+          <Field label="Container" htmlFor="source-container" hint="F&O writes each export and its PDF here.">
             {input("Container", "source-container", "bdc-export")}
           </Field>
-          <Field label="Folder in the container (optional)" htmlFor="source-prefix">
-            {input("Prefix", "source-prefix", "empty: the whole container")}
+          <Field label="Folder in the container (optional)" htmlFor="source-prefix" hint="Empty reads the whole container.">
+            {input("Prefix", "source-prefix")}
           </Field>
         </div>
         {!ro && (
@@ -132,9 +133,6 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
             {checkLine}
           </div>
         )}
-        <p className="note">
-          F&amp;O writes each export and its PDF into this container. Hive BDC moves both to processed/ or error/ when it is done.
-        </p>
       </>
     );
   } else if (kind === "servicebus") {
@@ -172,7 +170,7 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
               </Field>
             </div>
           ) : (
-            <Field label="Queue" htmlFor="source-queue">
+            <Field label="Queue" htmlFor="source-queue" hint="A message that fails goes to its dead-letter part.">
               {input("Queue", "source-queue", "bdc-export")}
             </Field>
           )}
@@ -188,7 +186,7 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
               onChange={(v) => apply({ settings: { PdfConnection: v } })}
             />
           </Field>
-          <Field label="Container" htmlFor="source-pdf-container">
+          <Field label="Container" htmlFor="source-pdf-container" hint="The message names its PDF in this container.">
             {input("PdfContainer", "source-pdf-container", "bdc-pdf")}
           </Field>
         </div>
@@ -211,10 +209,6 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
             {checkLine}
           </div>
         )}
-        <p className="note">
-          F&amp;O sends each export as a message and names its PDF in the container. A message that cannot be handled goes to the dead-letter part
-          with the reason.
-        </p>
       </>
     );
   } else {
@@ -229,62 +223,47 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
     };
     form = (
       <>
-        <div className="field">
-          <span className="field-label">Address the sender posts to</span>
-          <CopyCode text={address} />
-        </div>
+        <Facts
+          className="wide-first"
+          items={[
+            ["Address the sender posts to", <CopyCode key="address" text={address} label="Copy the address" />],
+            ["Key header", <code key="header">x-api-key</code>],
+            ["Body", 'JSON with the ERP export as "document" and the PDF as Base64 in "pdf"'],
+            ["Answers", "202 taken, 200 already received, 401 wrong key, 413 over 50 MB"],
+          ]}
+        />
         {shown ? (
           <div className="keybox" role="status">
             <strong>New key for {entry.dataAreaId}, shown only now</strong>
-            <CopyCode text={shown} shown={`x-api-key: ${shown}`} />
-            <span>
-              Put it into the sender now. It goes to this instance&apos;s Key Vault when you save and is never shown again. A lost key is replaced,
-              not looked up.
-            </span>
+            <CopyCode text={shown} shown={`x-api-key: ${shown}`} label="Copy the key" />
+            <span>Put it into the sender now. It goes to Key Vault when you save and is never shown again.</span>
           </div>
-        ) : (
-          <p className="muted">
-            {stored
-              ? "A key is stored for this address. It is never shown again."
-              : "No key yet. Create one; the sender sends it in the header x-api-key."}
-          </p>
-        )}
-        {!ro && (
-          <div className="check-row-actions">
+        ) : null}
+        <div className="check-row-actions">
+          {!ro && (
             <button type="button" className="button secondary" onClick={makeKey}>
               {shown || stored ? "Replace the key" : "Create a key"}
             </button>
-            {stored && !shown && <span className="muted small">The old key stops working when you save.</span>}
-          </div>
-        )}
-        <div className="form-row-2 small muted">
-          <div className="stack-tight">
-            <strong>What the sender posts</strong>
-            <span>
-              JSON with the ERP export as &quot;document&quot; and the PDF as Base64 in &quot;pdf&quot;. A repeat of the same document number is
-              answered &quot;already received&quot;.
+          )}
+          {!shown && (
+            <span className="muted">
+              {stored ? (ro ? "A key is stored in Key Vault." : "A key is stored in Key Vault. A new one replaces it when you save.") : "No key yet."}
             </span>
-          </div>
-          <div className="stack-tight">
-            <strong>Answers</strong>
-            <span>202 taken · 200 already received · 401 wrong key · 413 over 50 MB. Nothing is stored on a refusal.</span>
-          </div>
+          )}
         </div>
       </>
     );
   }
 
   return (
-    <section className="panel form-panel" aria-labelledby="from-heading">
+    <section className="panel" aria-labelledby="from-heading">
       <div className="section-heading">
-        <h2 id="from-heading" className="caps">
-          Comes from
-        </h2>
+        <h2 id="from-heading">Comes from</h2>
       </div>
       <div className="form-body">
         <fieldset className="source-tiles" disabled={ro}>
           <legend className="sr-only">Source</legend>
-          {TILES.map(([value, title, note]) => (
+          {TILES.map(([value, title, note, Icon]) => (
             <label key={value} className={`source-tile${value === kind ? " selected" : ""}`}>
               <input
                 type="radio"
@@ -293,6 +272,9 @@ function SourceForm({ type, entry, ro, inputRoot }: { type: any; entry: any; ro:
                 checked={value === kind}
                 onChange={() => setChosen(value)}
               />
+              <span className="setup-tile-icon">
+                <Icon {...ICON} aria-hidden="true" />
+              </span>
               <span className="source-tile-text">
                 <strong>{title}</strong>
                 <span>{note}</span>

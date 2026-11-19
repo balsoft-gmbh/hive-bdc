@@ -46,16 +46,16 @@ export function ConsoleProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
+  // Status and settings are what a page needs to start; the update view follows on its own, so a slow answer there
+  // never holds the page back (measured on a B1 instance: single answers of up to 4 s right after a restart).
   const refresh = useCallback(async () => {
+    api("/service/updates")
+      .then(setUpdates)
+      .catch(() => setUpdates(null));
     try {
-      const [s, c, u] = await Promise.all([
-        api("/status"),
-        api("/config"),
-        api("/service/updates").catch(() => null),
-      ]);
+      const [s, c] = await Promise.all([api("/status"), api("/config")]);
       setStatus(s);
       setConfig(c);
-      setUpdates(u);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -73,9 +73,10 @@ export function ConsoleProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
+  // Who is signed in and the state of the instance are read side by side, not one after the other.
   useEffect(() => {
-    if (me) void refresh();
-  }, [me, pathname, refresh]);
+    void refresh();
+  }, [pathname, refresh]);
 
   // A fresh instance opens on the assistant; once set up, the assistant is gone (failure case 9).
   useEffect(() => {

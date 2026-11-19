@@ -21,10 +21,10 @@ import {
   testRun,
   viewer,
 } from "./fixtures-service";
-import { calls, mock, noSideScroll, opened, watchCsp } from "./helpers";
+import { calls, mock, noRowButtons, noSideScroll, onePrimaryAtMost, opened, watchCsp } from "./helpers";
 
-// The Service page (design 2026-11-19-web-console-nextjs.md part 6; former service.js and updates.js): the tabs
-// Status, Licence, Updates and Technical log, the update notice of the Overview, and failure cases 1, 2, 7, 11, 13.
+// The Service page (design 2026-11-19-web-console-nextjs.md part 6 and version 2): the tabs Status, Licence, Updates
+// and Technical log, the update line of the Overview, failure cases 1, 2, 7, 11, 13 and V1, V2, V5.
 
 const tabs = [
   { path: "/service/", name: "Status", heading: "Taking documents" },
@@ -35,9 +35,17 @@ const tabs = [
 
 const tabBar = (page: Page) => page.getByRole("navigation", { name: "Service sections" });
 const panelHeading = (page: Page, name: string) => page.getByRole("heading", { level: 2, name, exact: true });
+const panel = (page: Page, name: string) => page.getByRole("region", { name, exact: true });
 // Next.js keeps an empty route announcer with role alert on every page.
 const alert = (page: Page) => page.locator("[role='alert']:not(#__next-route-announcer__)");
 const history = (page: Page) => page.getByRole("region", { name: "Version changes" });
+const updateLine = (page: Page) => page.getByRole("region", { name: "Hive BDC 1.9.1 is ready" });
+/** The value of a read-only fact, found by its label (the label is upper case on screen only). */
+const fact = (page: Page, label: string) =>
+  page
+    .locator(".service-facts > div")
+    .filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) })
+    .locator("dd");
 
 test.beforeEach(async ({ request }) => {
   await request.post("/__mock/reset");
@@ -62,13 +70,31 @@ test("every tab loads under the host's content security policy without a violati
   expect(violations).toEqual([]);
 });
 
+test("the page is titled Service with one short line, and the breadcrumb names the tab", async ({ page }) => {
+  await page.goto("/service/?tab=licence");
+  await opened(page);
+  await expect(page.locator("main h1")).toHaveText("Service");
+  const line = (await page.locator(".page-heading p").textContent()) ?? "";
+  expect(line).toBe("Status, licence, updates and the log of this instance.");
+  expect(line.length).toBeLessThanOrEqual(60);
+  const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(crumbs.getByRole("link", { name: "Service" })).toHaveAttribute("href", "/service/");
+  await expect(crumbs.locator("[aria-current='page']")).toHaveText("Licence");
+  await crumbs.getByRole("link", { name: "Service" }).click();
+  await expect(page).toHaveURL(/\/service\/$/);
+  await expect(crumbs.locator("[aria-current='page']")).toHaveText("Status");
+});
+
 test("?tab=licence opens the Licence tab directly and a reload keeps it; the tabs switch by link", async ({ page }) => {
   await page.goto("/service/?tab=licence");
   await opened(page);
   await expect(tabBar(page).getByRole("link", { name: "Licence" })).toHaveAttribute("aria-current", "page");
-  await expect(panelHeading(page, "Licence")).toBeVisible();
-  await expect(page.locator(".service-panel .badge")).toHaveText("Valid until 30.09.2027");
-  await expect(page.getByText("Contoso GmbH · e-invoice, documents · checked against tenant 00000000")).toBeVisible();
+  await expect(panel(page, "Licence").locator(".badge")).toHaveText("Valid");
+  await expect(fact(page, "Licensed to")).toHaveText("Contoso GmbH");
+  await expect(fact(page, "Valid until")).toHaveText("30.09.2027");
+  await expect(fact(page, "Features")).toHaveText("e-invoice, documents");
+  await expect(fact(page, "Tenant")).toHaveText("00000000-0000-0000-0000-000000000002");
+  await expect(panel(page, "Licence").locator(".service-body > p")).toHaveCount(0);
   await page.reload();
   await expect(tabBar(page).getByRole("link", { name: "Licence" })).toHaveAttribute("aria-current", "page");
   await expect(panelHeading(page, "Licence")).toBeVisible();
@@ -82,40 +108,56 @@ test("?tab=licence opens the Licence tab directly and a reload keeps it; the tab
   await expect(panelHeading(page, "Taking documents")).toBeVisible();
 });
 
-test("the Overview's licence tile opens the Licence tab, an unknown tab opens Status", async ({ page }) => {
+test("the Overview's licence card opens the Licence tab, an unknown tab opens Status", async ({ page }) => {
   await page.goto("/");
   await opened(page);
-  await page.getByRole("link", { name: /Licence valid until/ }).click();
+  const card = page.getByRole("link", { name: /^Licence Valid/ });
+  await expect(card).toHaveAttribute("href", "/service/?tab=licence");
+  await card.click();
   await expect(page).toHaveURL(/\/service\/\?tab=licence$/);
   await expect(panelHeading(page, "Licence")).toBeVisible();
   await page.goto("/service/?tab=nonsense");
   await expect(tabBar(page).getByRole("link", { name: "Status" })).toHaveAttribute("aria-current", "page");
 });
 
-test("Status shows version and identity from the installation", async ({ page }) => {
+test("Status shows version and identity as facts, and the icon-only copy button copies the identity", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/service/");
   await opened(page);
-  await expect(page.getByText("Checks every source every 30 seconds.", { exact: false })).toBeVisible();
-  await expect(page.locator(".service-panel .badge")).toHaveText("Running");
-  const facts = page.locator(".service-facts");
-  await expect(facts).toContainText("1.9.0");
-  await expect(facts).toContainText("germanywestcentral");
-  await expect(facts).toContainText("Europe/Berlin (from the installation)");
-  await expect(facts).toContainText("00000000-0000-0000-0000-000000000001");
-  await expect(page.getByRole("button", { name: "Copy", exact: true })).toBeVisible();
+  await expect(panel(page, "Taking documents").locator(".badge")).toHaveText("Running");
+  await expect(fact(page, "Checks every source")).toHaveText("Every 30 seconds");
+  await expect(fact(page, "Version")).toHaveText("1.9.0");
+  await expect(fact(page, "Region")).toHaveText("germanywestcentral");
+  await expect(fact(page, "Time zone")).toHaveText("Europe/Berlin");
+  await expect(fact(page, "Managed identity")).toContainText("00000000-0000-0000-0000-000000000001");
+  await expect(page.locator(".section-heading p")).toHaveCount(0);
+
+  const copy = fact(page, "Managed identity").getByRole("button", { name: "Copy the managed identity" });
+  await expect(copy).toHaveText("");
+  await expect(copy).toHaveAttribute("title", "Copy the managed identity");
+  await copy.click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("00000000-0000-0000-0000-000000000001");
+  await expect(copy).toHaveAttribute("title", "Copied");
+  await expect(fact(page, "Managed identity").locator("[aria-live='polite']")).toHaveText("Copied");
 });
 
 test("Pause sends POST /setup/pause, then the page offers Start, which sends POST /setup/start", async ({ page, request }) => {
   await mock(request, { "POST /setup/pause": { ok: true, paused: true }, "POST /setup/start": { ok: true, paused: false } });
   await page.goto("/service/");
   await opened(page);
+  const pause = page.getByRole("button", { name: "Pause", exact: true });
+  await expect(pause).toHaveClass(/\bsecondary\b/);
+  await expect(pause).toHaveAttribute("title", "New documents wait in their source until you start again");
   await mock(request, { "GET /config": { ...config(), paused: true } });
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Start", exact: true })).toBeVisible();
-  await expect(page.locator(".service-panel .badge").first()).toHaveText("Paused");
+  await pause.click();
+  const start = page.getByRole("button", { name: "Start", exact: true });
+  await expect(start).toBeVisible();
+  await expect(start).toHaveClass(/\bsecondary\b/);
+  await expect(panel(page, "Taking documents").locator(".badge")).toHaveText("Paused");
+  await onePrimaryAtMost(page);
 
   await mock(request, { "GET /config": config() });
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await start.click();
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   expect(await calls(request)).toEqual([
     { method: "POST", path: "/setup/pause", body: {} },
@@ -137,17 +179,20 @@ test("the test run sends the chosen type and company and shows every step", asyn
   await page.goto("/service/");
   await opened(page);
   await expect(page.getByLabel("Company for the test run")).toHaveValue("0");
-  await expect(page.getByLabel("Company for the test run").locator("option")).toHaveText(["sales invoices · company 1000"]);
-  await page.getByRole("button", { name: "Run the test" }).click();
+  await expect(page.getByLabel("Company for the test run").locator("option")).toHaveText(["Sales invoices · Company 1000"]);
+  const run = page.getByRole("button", { name: "Run the test" });
+  await expect(run).toHaveClass(/\bsecondary\b/);
+  await run.click();
   const card = page.getByRole("region", { name: "Steps of the test run" });
-  await expect(card.getByRole("heading", { name: "SI-0043 · sales invoices · company 1000" })).toBeVisible();
+  await expect(card.getByRole("heading", { name: "SI-0043 · Sales invoices · Company 1000" })).toBeVisible();
   await expect(card).toContainText("Done");
   await expect(card).toContainText("One document went all the way through.");
   await expect(card.locator("li")).toHaveText([/09:01:02.*Taken from the Blob container bdc-export\./, /09:01:03.*E-invoice made\./, /09:01:05.*Delivered/]);
   expect(await calls(request)).toEqual([{ method: "POST", path: "/setup/test-run", body: { documentType: "SalesInvoice", company: "1000" } }]);
+  await onePrimaryAtMost(page);
 
   await mock(request, { "POST /setup/test-run": { __status: 409, ok: false, message: "busy" } });
-  await page.getByRole("button", { name: "Run the test" }).click();
+  await run.click();
   await expect(alert(page)).toHaveText("A test run is already going.");
 });
 
@@ -165,9 +210,9 @@ test("a licence file is stored, and a refused one says why", async ({ page, requ
   await mock(request, { "POST /license": licenceStored });
   await page.goto("/service/?tab=licence");
   await opened(page);
-  await expect(page.getByText("Renewal or another file:")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Choose file" })).toBeVisible();
-  const input = page.getByLabel("Renewal or another file");
+  await expect(panel(page, "Licence").getByText("New licence file", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose file" })).toHaveClass(/\bsecondary\b/);
+  const input = page.getByLabel("New licence file");
   await input.setInputFiles({ name: "contoso.lic", mimeType: "text/plain", buffer: Buffer.from("LICENCE-CONTOSO-0001") });
   await expect(page.getByText("The licence for Contoso GmbH is stored. It is valid until 30.09.2028.")).toBeVisible();
 
@@ -180,7 +225,7 @@ test("a licence file is stored, and a refused one says why", async ({ page, requ
   ]);
 });
 
-test("a licence that warns shows its message on the Licence tab", async ({ page, request }) => {
+test("a licence that warns shows its message and state on the Licence tab; without one only the tenant shows", async ({ page, request }) => {
   const status = (await (await request.get("/api/status")).json()) as Record<string, any>;
   await mock(request, {
     "GET /status": { ...status, license: { ...status.license, state: "Grace", message: "The licence ended on 30.09.2026; documents still go through until 30.10.2026." } },
@@ -188,17 +233,29 @@ test("a licence that warns shows its message on the Licence tab", async ({ page,
   await page.goto("/service/?tab=licence");
   await opened(page);
   await expect(page.locator(".notice-warn")).toHaveText("The licence ended on 30.09.2026; documents still go through until 30.10.2026.");
+  await expect(panel(page, "Licence").locator(".badge")).toHaveText("Grace period");
+
+  await mock(request, { "GET /status": { ...status, license: { state: "Missing", message: "" } } });
+  await page.reload();
+  await expect(panel(page, "Licence").locator(".badge")).toHaveText("No licence yet");
+  await expect(page.locator(".service-facts dt")).toHaveText(["Tenant"]);
+  await expect(page.getByLabel("Licence file", { exact: true })).toHaveCount(1);
 });
 
-test("an offered update shows Update now on the Overview, which starts it and opens the Updates tab", async ({ page, request }) => {
+test("an offered update shows one calm line on the Overview, and Update now starts it and opens the Updates tab", async ({ page, request }) => {
   await mock(request, { "GET /service/updates": offer(), "POST /service/updates/run": { ok: true, message: "The update to 1.9.1 started." } });
   await page.goto("/");
   await opened(page);
-  const notice = page.getByRole("region", { name: "Hive BDC 1.9.1 is ready" });
-  await expect(notice).toContainText("DocuWare date fields take German dates. Your settings are kept, and 1.9.0 stays ready to return to.");
-  await expect(notice.getByRole("link", { name: "What's new" })).toHaveAttribute("href", "/service/?tab=updates");
+  const line = updateLine(page);
+  await expect(line).toContainText("Released 18.11.2026");
+  await expect(line.getByRole("link", { name: "What's new" })).toHaveAttribute("href", "/service/?tab=updates");
+  const box = await line.boundingBox();
+  expect(box?.height ?? 0, "one line at 1280 px").toBeLessThan(60);
+  await expect(line.getByRole("button", { name: "Update now" })).toHaveClass(/\bprimary\b/);
+  await expect(line.getByRole("button", { name: "Tonight at 22:00" })).toHaveClass(/\bsecondary\b/);
+  await onePrimaryAtMost(page);
   await expect(page.getByRole("navigation", { name: "Main navigation" }).getByText("update available")).toHaveCount(1);
-  await notice.getByRole("button", { name: "Update now" }).click();
+  await line.getByRole("button", { name: "Update now" }).click();
   await expect(page).toHaveURL(/\/service\/\?tab=updates$/);
   expect(await calls(request)).toEqual([{ method: "POST", path: "/service/updates/run", body: {} }]);
 });
@@ -213,8 +270,9 @@ test("the Overview plans the update for tonight at 22:00, and shows the plan onc
 
   await mock(request, { "GET /service/updates": scheduled() });
   await page.goto("/");
-  await expect(page.getByRole("region", { name: "Hive BDC 1.9.1 is ready" })).toContainText("Planned for 22:00");
+  await expect(updateLine(page)).toContainText("Planned for 22:00");
   await expect(page.getByRole("button", { name: "Tonight at 22:00" })).toHaveCount(0);
+  await onePrimaryAtMost(page);
 });
 
 test("a refused start on the Overview says why and keeps the buttons", async ({ page, request }) => {
@@ -227,20 +285,27 @@ test("a refused start on the Overview says why and keeps the buttons", async ({ 
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/);
 });
 
-test("the Updates tab offers the new version with what happens, and Update now sends the right POST", async ({ page, request }) => {
+test("the Updates tab offers the new version as facts, with Update now as the one primary button", async ({ page, request }) => {
   await mock(request, { "GET /service/updates": offer(), "POST /service/updates/run": { ok: true, message: "The update to 1.9.1 started." } });
   await page.goto("/service/?tab=updates");
   await opened(page);
   await expect(tabBar(page).getByRole("link", { name: "Updates" })).toContainText("1");
   await expect(panelHeading(page, "Hive BDC 1.9.1")).toBeVisible();
-  await expect(page.getByText("Released 18.11.2026 · 23 MB · you have 1.9.0")).toBeVisible();
+  await expect(panel(page, "Hive BDC 1.9.1").locator(".badge")).toHaveText("New version");
+  await expect(fact(page, "Released")).toHaveText("18.11.2026");
+  await expect(fact(page, "Download")).toHaveText("23 MB");
+  await expect(fact(page, "Restart")).toHaveText("2 to 4 minutes");
   await expect(page.locator(".service-notes li")).toHaveText(["DocuWare date fields take German dates.", "The test run names the SharePoint column it could not fill."]);
-  await expect(page.locator(".service-happens li")).toHaveText(["1Download from Balsoft", "2Check Balsoft's signature", "3Back up the settings", "4Switch to 1.9.1", "5Restart, 2 to 4 minutes"]);
-  await expect(page.getByText("Documents wait in their source while it restarts; nothing is lost. 1.9.0 stays ready, so you can return to it with one click.")).toBeVisible();
+  await expect(page.getByText("Documents wait in their source during the restart, and 1.9.0 stays ready to return to.")).toBeVisible();
   await expect(panelHeading(page, "Installed")).toBeVisible();
-  await expect(page.locator(".service-pairs")).toContainText("Last looked19.11.2026 07:01");
+  await expect(fact(page, "Last looked")).toHaveText("19.11.2026 07:01");
   await expect(history(page).getByRole("row")).toHaveCount(2);
   await expect(history(page)).toContainText("Running");
+  await expect(page.getByRole("button", { name: "Update now" })).toHaveClass(/\bprimary\b/);
+  await expect(page.getByRole("button", { name: "Tonight at 22:00" })).toHaveClass(/\bsecondary\b/);
+  await expect(page.getByRole("button", { name: "Look now" })).toHaveCount(1);
+  await onePrimaryAtMost(page);
+  await noRowButtons(page);
 
   await mock(request, { "GET /service/updates": running() });
   await page.getByRole("button", { name: "Update now" }).click();
@@ -260,11 +325,14 @@ test("Tonight at 22:00 plans the update and Cancel the plan takes it back", asyn
   await opened(page);
   await mock(request, { "GET /service/updates": scheduled() });
   await page.getByRole("button", { name: "Tonight at 22:00" }).click();
-  await expect(page.getByText("Planned for 19.11.2026 22:00 by Anna Weber.")).toBeVisible();
+  await expect(fact(page, "Planned")).toHaveText("19.11.2026 22:00 by Anna Weber");
+  await expect(page.getByRole("button", { name: "Cancel the plan" })).toHaveClass(/\bsecondary\b/);
+  await onePrimaryAtMost(page);
   await mock(request, { "GET /service/updates": offer() });
   await page.getByRole("button", { name: "Cancel the plan" }).click();
   await expect(page.getByText("The plan is cancelled.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Tonight at 22:00" })).toBeVisible();
+  await expect(fact(page, "Planned")).toHaveCount(0);
   expect(await calls(request)).toEqual([
     { method: "POST", path: "/service/updates/schedule", body: { at: "22:00" } },
     { method: "POST", path: "/service/updates/cancel", body: {} },
@@ -281,7 +349,7 @@ test("a refusal before the download is only a message, a stop after it shows the
 
   await mock(request, { "GET /service/updates": stopped() });
   await page.getByRole("button", { name: "Update now" }).click();
-  await expect(alert(page)).toContainText("The update to 1.9.1 stopped. Nothing changed.");
+  await expect(alert(page)).toContainText("The update stopped before anything changed.");
   await expect(page.getByText("There is too little space for the download.")).toHaveCount(0);
 });
 
@@ -295,9 +363,13 @@ test("a running update shows its steps and asks again every 5 seconds", async ({
   const steps = page.getByRole("list", { name: "Steps of the update" }).getByRole("listitem");
   await expect(steps.nth(1)).toContainText("Checking the signature");
   await expect(steps.nth(1)).toContainText("now");
-  await expect(panelHeading(page, "While it runs")).toBeVisible();
-  await expect(page.getByText("1.9.0 stays in place. If 1.9.1 does not suit you, return to it with one click afterwards.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "While it runs" }).getByRole("listitem")).toHaveText([
+    "Documents wait in their source and are taken right after the restart.",
+    "You can close this page. The update finishes on its own, and the history shows the result.",
+    "1.9.0 stays in place. If 1.9.1 does not suit you, return to it with one click afterwards.",
+  ]);
   await expect(panelHeading(page, "Update history")).toHaveCount(0);
+  await expect(page.locator("main .button")).toHaveCount(0);
 
   await mock(request, { "GET /service/updates": running() });
   await expect(page.locator(".service-percent")).toHaveText("60 %", { timeout: 9000 });
@@ -324,7 +396,7 @@ test("once another version answers, the running page loads the whole console aga
   await mock(request, { "GET /service/updates": done(), "GET /me": { name: "Anna Weber", roles: ["Administrator"], canRetry: true, canChange: true, version: "1.9.1" } });
   await expect(panelHeading(page, "Checked after the restart")).toBeVisible({ timeout: 12000 });
   expect(loads).toBe(1);
-  await expect(page.locator(".instance-version")).toContainText("1.9.1");
+  await expect(page.locator("main")).toContainText("1.9.1");
 });
 
 test("leaving the Updates tab stops asking", async ({ page, request }) => {
@@ -352,21 +424,25 @@ test("a return shows only its restart", async ({ page, request }) => {
   await expect(page.getByText("1.9.1 is removed once 1.9.0 runs; you can update to it again from the feed.")).toBeVisible();
 });
 
-test("a stopped update shows what happened, copies the details and offers Try again", async ({ page, request, context }) => {
+test("a stopped update shows what happened in a calm panel, copies the details and offers Try again", async ({ page, request, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await mock(request, { "GET /service/updates": stopped(), "POST /service/updates/run": { ok: true, message: "The update to 1.9.1 started." } });
   await page.goto("/service/?tab=updates");
   await opened(page);
-  const banner = alert(page);
-  await expect(banner).toContainText("The update to 1.9.1 stopped. Nothing changed.");
-  await expect(banner).toContainText("1.9.0 runs with your settings, and documents flow as before.");
-  await expect(panelHeading(page, "What happened")).toBeVisible();
-  await expect(page.getByText("19.11.2026 16:31 · Anna Weber")).toBeVisible();
+  await expect(alert(page)).toHaveText("The update stopped before anything changed. 1.9.0 runs with your settings, and documents flow as before.");
+  await expect(page.locator(".service-banner")).toHaveCount(0);
+  await expect(panelHeading(page, "Update to 1.9.1")).toBeVisible();
+  await expect(panel(page, "Update to 1.9.1").locator(".badge")).toHaveText("Stopped");
+  await expect(fact(page, "When")).toHaveText("19.11.2026 16:31");
+  await expect(fact(page, "By")).toHaveText("Anna Weber");
   const steps = page.getByRole("list", { name: "Steps of the update" }).getByRole("listitem");
   await expect(steps.nth(1)).toContainText("Signature does not match");
   await expect(steps.nth(2)).toContainText("not started");
   await expect(history(page)).toContainText("Stopped");
   await expect(page.locator(".service-panel .warn-text")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveClass(/\bsecondary\b/);
+  await onePrimaryAtMost(page);
+  await noRowButtons(page);
 
   await page.getByRole("button", { name: "Copy details for Balsoft support" }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
@@ -386,7 +462,8 @@ test("a return by itself says the new version did not run properly", async ({ pa
   await mock(request, { "GET /service/updates": returnedByItself() });
   await page.goto("/service/?tab=updates");
   await opened(page);
-  await expect(alert(page)).toContainText("1.9.1 did not run properly. Hive BDC is back on 1.9.0.");
+  await expect(alert(page)).toContainText("1.9.1 did not run properly. Hive BDC is back on 1.9.0");
+  await expect(panel(page, "Update to 1.9.1").locator(".badge")).toHaveText("Returned");
   const last = page.getByRole("list", { name: "Steps of the update" }).getByRole("listitem").last();
   await expect(last).toContainText("1.9.1 did not start properly");
   await expect(last).toContainText("Returned to 1.9.0 by itself: 1.9.1 did not start properly 3 times.");
@@ -397,37 +474,60 @@ test("a finished update shows its checks, and Return to the previous version ask
   await mock(request, { "GET /service/updates": done(), "POST /service/updates/return": { ok: true, message: "Hive BDC returns to 1.9.0 and restarts." } });
   await page.goto("/service/?tab=updates");
   await opened(page);
-  await expect(page.getByRole("status").filter({ hasText: "Hive BDC runs 1.9.1 since 16:34" })).toContainText("Updated from 1.9.0.");
+  await expect(panel(page, "Hive BDC 1.9.1").locator(".badge")).toHaveText("Running");
+  await expect(fact(page, "Since")).toHaveText("19.11.2026 16:34");
+  await expect(fact(page, "What happened")).toHaveText("Updated from 1.9.0.");
+  await expect(fact(page, "Kept for return")).toHaveText("1.9.0");
   const checks = page.getByRole("region", { name: "Checks after the restart" });
   await expect(checks.getByRole("row")).toHaveCount(4);
   await expect(checks).toContainText("Sources answer");
   await expect(checks).toContainText("16:34");
-  await expect(page.getByText("1.9.1 checks these itself before it calls the update done.")).toBeVisible();
   await expect(history(page)).toContainText("Kept for return");
+  await onePrimaryAtMost(page);
+  await noRowButtons(page);
 
-  await page.getByRole("button", { name: "Return to 1.9.0" }).click();
-  const confirm = alert(page).filter({ hasText: "Hive BDC restarts" });
-  await expect(confirm).toContainText("Return to 1.9.0? Hive BDC restarts and is away for about 2 minutes.");
-  await confirm.getByRole("button", { name: "Keep" }).click();
+  const back = page.getByRole("button", { name: "Return to 1.9.0" });
+  await expect(back).toHaveClass(/\bsecondary\b/);
+  await back.click();
+  const confirm = page.getByRole("dialog", { name: "Confirm action" });
+  await expect(confirm).toContainText(
+    "Return to 1.9.0? Hive BDC restarts and is away for about 2 minutes. Documents wait in their source, and the settings stay as they are.",
+  );
+  await onePrimaryAtMost(page);
+  await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
   expect(await calls(request)).toEqual([]);
 
-  await page.getByRole("button", { name: "Return to 1.9.0" }).click();
+  await back.click();
   await mock(request, { "GET /service/updates": returning() });
-  await alert(page).filter({ hasText: "Hive BDC restarts" }).getByRole("button", { name: "Return to 1.9.0" }).click();
+  await page.getByRole("dialog", { name: "Confirm action" }).getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Hive BDC returns to 1.9.0 and restarts.")).toBeVisible();
   expect(await calls(request)).toEqual([{ method: "POST", path: "/service/updates/return", body: {} }]);
 });
 
-test("Look now asks the feed and shows its answer", async ({ page, request }) => {
+test("Look now sits in one place, asks the feed and shows its answer", async ({ page, request }) => {
   await mock(request, { "POST /service/updates/check": { ok: true, message: "1.9.0 is the newest version." } });
   await page.goto("/service/?tab=updates");
   await opened(page);
-  await expect(panelHeading(page, "Hive BDC 1.9.0")).toBeVisible();
-  await expect(page.locator(".service-body p.muted").first()).toHaveText("1.9.0 is the newest version.");
-  await page.getByRole("button", { name: "Look now" }).first().click();
+  await expect(panel(page, "Installed").locator(".badge")).toHaveText("Newest version");
+  await expect(fact(page, "Version")).toHaveText("1.9.0");
+  await expect(fact(page, "Looks for updates")).toHaveText("Every day at 06:00");
+  const look = page.getByRole("button", { name: "Look now" });
+  await expect(look).toHaveCount(1);
+  await expect(look).toHaveClass(/\bsecondary\b/);
+  await look.click();
   await expect(page.getByRole("status").filter({ hasText: "1.9.0 is the newest version." }).first()).toBeVisible();
   expect(await calls(request)).toEqual([{ method: "POST", path: "/service/updates/check", body: {} }]);
+});
+
+const lookFailed = () => ({ ...done(), checks: [], lastCheck: { at: "2026-11-19T06:01:00+00:00", ok: false, message: "The feed did not answer: timeout." } });
+
+test("a failed look for updates says why", async ({ page, request }) => {
+  await mock(request, { "GET /service/updates": lookFailed() });
+  await page.goto("/service/?tab=updates");
+  await opened(page);
+  await expect(panel(page, "Installed").locator(".badge")).toHaveText("Last look failed");
+  await expect(panel(page, "Installed").locator(".warn-text")).toHaveText("The feed did not answer: timeout.");
 });
 
 test("an instance that cannot update says why and offers no Update now", async ({ page, request }) => {
@@ -436,6 +536,7 @@ test("an instance that cannot update says why and offers no Update now", async (
   await opened(page);
   await expect(page.getByText("This instance runs from a package that Balsoft does not update; ask the person who installed it.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Update now" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Tonight at 22:00" })).toHaveCount(0);
 });
 
 test("an instance without self-update says how it is updated", async ({ page, request }) => {
@@ -450,6 +551,7 @@ test("the technical log shows only warnings and errors on request and downloads 
   await opened(page);
   const box = page.getByRole("region", { name: "Lines of the technical log" });
   await expect(box).toContainText("[INF] Hive BDC 1.9.0 started");
+  await expect(page.locator(".toggle-pill")).toHaveText("Only warnings and errors");
   await page.getByLabel("Only warnings and errors").check();
   await expect(box).not.toContainText("[INF]");
   await expect(box).toContainText("[WRN] The container answered 403");
@@ -495,9 +597,10 @@ for (const who of [viewer, operator]) {
     await expect(page.getByLabel("Only warnings and errors")).toBeEnabled();
     await page.goto("/service/");
     await expect(page.getByLabel("Company for the test run")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Copy", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Copy the managed identity" })).toBeEnabled();
     await page.goto("/service/?tab=licence");
-    await expect(page.getByLabel("Renewal or another file")).toHaveCount(0);
+    await expect(fact(page, "Licensed to")).toHaveText("Contoso GmbH");
+    await expect(page.getByLabel("New licence file")).toHaveCount(0);
 
     for (const view of [offer(), scheduled(), stopped(), done()]) {
       await mock(request, { "GET /service/updates": view });
@@ -506,7 +609,7 @@ for (const who of [viewer, operator]) {
       await expect(panelHeading(page, "Update history")).toBeVisible();
       await noActions(page);
     }
-    await expect(panelHeading(page, "Return to 1.9.0")).toBeVisible();
+    await expect(fact(page, "Kept for return")).toHaveText("1.9.0");
     await mock(request, { "GET /service/updates": stopped() });
     await page.goto("/service/?tab=updates");
     await expect(page.getByRole("button", { name: "Copy details for Balsoft support" })).toBeEnabled();
@@ -515,17 +618,76 @@ for (const who of [viewer, operator]) {
     await expect(page.locator(".service-notes li").first()).toHaveText("DocuWare date fields take German dates.");
     await page.goto("/");
     await opened(page);
-    await expect(page.getByRole("region", { name: "Hive BDC 1.9.1 is ready" })).toBeVisible();
+    await expect(updateLine(page)).toBeVisible();
+    await expect(updateLine(page).getByRole("link", { name: "What's new" })).toBeVisible();
     await noActions(page);
   });
 }
 
 const states = [
+  { name: "idle", view: undefined },
+  { name: "look failed", view: lookFailed() },
   { name: "offer", view: offer() },
+  { name: "scheduled", view: scheduled() },
+  { name: "cannot update", view: cannotUpdate() },
   { name: "running", view: running() },
+  { name: "returning", view: returning() },
   { name: "stopped", view: stopped() },
+  { name: "returned", view: returnedByItself() },
   { name: "done", view: done() },
 ];
+
+/** Opens the Updates tab with one state of GET /service/updates and waits until it is drawn. */
+async function openUpdates(page: Page, request: Parameters<typeof mock>[0], view: unknown) {
+  if (view) await mock(request, { "GET /service/updates": view });
+  await page.goto("/service/?tab=updates");
+  await opened(page);
+  await expect(page.locator(".service-updates")).toBeVisible();
+}
+
+test("every tab and update state shows one primary button at most, list rows carry no buttons, icons are 16 px", async ({ page, request }) => {
+  const icons = async (where: string) => {
+    const wrong = await page
+      .locator("main .service-panel svg, main .update-line svg")
+      .evaluateAll((nodes) =>
+        nodes
+          .filter((n) => !n.closest(".drop-zone, .data-grid thead"))
+          .filter((n) => n.getAttribute("width") !== "16" || n.getAttribute("stroke-width") !== "1.75")
+          .map((n) => n.getAttribute("class") ?? ""),
+      );
+    expect(wrong, `icons not 16 px at 1.75 on ${where}`).toEqual([]);
+  };
+  await mock(request, { "POST /setup/test-run": testRun });
+  for (const tab of tabs) {
+    await page.goto(tab.path);
+    await opened(page);
+    await expect(panelHeading(page, tab.heading)).toBeVisible();
+    await onePrimaryAtMost(page);
+    await noRowButtons(page);
+    await icons(tab.path);
+    await expect(page.locator("main a:not([href])")).toHaveCount(0);
+  }
+  await page.goto("/service/");
+  await page.getByRole("button", { name: "Run the test" }).click();
+  await expect(page.getByRole("region", { name: "Steps of the test run" })).toBeVisible();
+  await onePrimaryAtMost(page);
+  await icons("the test run");
+  for (const state of states) {
+    await openUpdates(page, request, state.view);
+    await onePrimaryAtMost(page);
+    await noRowButtons(page);
+    await icons(`updates/${state.name}`);
+    await expect(page.locator("main a:not([href])")).toHaveCount(0);
+    const primary = page.locator("main .button.primary");
+    if (state.name === "offer" || state.name === "scheduled") await expect(primary).toHaveText("Update now");
+    else await expect(primary).toHaveCount(0);
+  }
+  await mock(request, { "GET /service/updates": offer() });
+  await page.goto("/");
+  await expect(updateLine(page)).toBeVisible();
+  await onePrimaryAtMost(page);
+  await icons("the overview");
+});
 
 for (const width of [1280, 390]) {
   test(`no horizontal scroll on any tab at ${width} px`, async ({ page, request }) => {
@@ -542,15 +704,12 @@ for (const width of [1280, 390]) {
     await expect(page.getByRole("region", { name: "Steps of the test run" })).toBeVisible();
     await noSideScroll(page);
     for (const state of states) {
-      await mock(request, { "GET /service/updates": state.view });
-      await page.goto("/service/?tab=updates");
-      await opened(page);
-      await expect(page.locator(".service-update-grid")).toBeVisible();
+      await openUpdates(page, request, state.view);
       await noSideScroll(page);
     }
     await mock(request, { "GET /service/updates": offer() });
     await page.goto("/");
-    await expect(page.getByRole("region", { name: "Hive BDC 1.9.1 is ready" })).toBeVisible();
+    await expect(updateLine(page)).toBeVisible();
     await noSideScroll(page);
   });
 }
@@ -563,29 +722,35 @@ async function axe(page: Page) {
     .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
 }
 
-test("every tab and every update state passes the accessibility check", async ({ page, request }) => {
+async function axeEverywhere(page: Page, request: Parameters<typeof mock>[0]) {
   const found: string[] = [];
+  await mock(request, { "POST /setup/test-run": testRun });
   for (const tab of tabs) {
     await page.goto(tab.path);
     await opened(page);
     await expect(panelHeading(page, tab.heading)).toBeVisible();
     found.push(...(await axe(page)).map((f) => `${tab.path} ${f}`));
   }
-  for (const state of [...states, { name: "returned", view: returnedByItself() }]) {
-    await mock(request, { "GET /service/updates": state.view });
-    await page.goto("/service/?tab=updates");
-    await opened(page);
-    await expect(page.locator(".service-update-grid")).toBeVisible();
+  await page.goto("/service/");
+  await page.getByRole("button", { name: "Run the test" }).click();
+  await expect(page.getByRole("region", { name: "Steps of the test run" })).toBeVisible();
+  found.push(...(await axe(page)).map((f) => `test run ${f}`));
+  for (const state of states) {
+    await openUpdates(page, request, state.view);
     found.push(...(await axe(page)).map((f) => `updates/${state.name} ${f}`));
   }
   await mock(request, { "GET /service/updates": offer() });
   await page.goto("/");
-  await expect(page.getByRole("region", { name: "Hive BDC 1.9.1 is ready" })).toBeVisible();
+  await expect(updateLine(page)).toBeVisible();
   found.push(...(await axe(page)).map((f) => `overview ${f}`));
-  expect(found).toEqual([]);
+  return found;
+}
+
+test("every tab and every update state passes the accessibility check", async ({ page, request }) => {
+  expect(await axeEverywhere(page, request)).toEqual([]);
 });
 
-test("the Service page passes the accessibility check in the dark theme", async ({ page, request }) => {
+test("every tab and every update state passes the accessibility check in the dark theme", async ({ page, request }) => {
   await page.addInitScript(() => {
     try {
       localStorage.setItem("hivebdc-theme", "dark");
@@ -593,17 +758,8 @@ test("the Service page passes the accessibility check in the dark theme", async 
       // The test then runs in the light theme and the assertion below says so.
     }
   });
-  const found: string[] = [];
-  for (const state of [offer(), stopped(), done()]) {
-    await mock(request, { "GET /service/updates": state });
-    await page.goto("/service/?tab=updates");
-    await opened(page);
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await expect(page.locator(".service-update-grid")).toBeVisible();
-    found.push(...(await axe(page)));
-  }
   await page.goto("/service/");
   await opened(page);
-  found.push(...(await axe(page)));
-  expect(found).toEqual([]);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await axeEverywhere(page, request)).toEqual([]);
 });

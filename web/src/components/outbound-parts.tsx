@@ -1,14 +1,15 @@
 "use client";
-import Link from "next/link";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronRight, Copy } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AlertCircle, Check, CheckCircle2, Copy, Trash2, X as Close } from "lucide-react";
 import { api } from "@/lib/api";
 import { connectionLabel } from "@/lib/exportlogic";
+import { onDialogCancel } from "./ui/confirm";
+import { Notice } from "./notice";
 import { useDraft } from "./save-bar";
 
-// The small parts the Outbound and Connections pages share (the former draft.js and ui.js helpers): the OUTBOUND
-// badge, switches, segmented choices, the connection dropdown, inputs that commit on change, the Keep or Remove
-// question, result chips, copyable code and the path above a page.
+// The small parts the Outbound and Connections pages share (the former draft.js and ui.js helpers): the ERP record
+// dialog, read-only facts, segmented choices, the connection dropdown, inputs that commit on change, the Keep or
+// Remove question, results, copyable code and the quiet Remove button.
 
 export const ICON = { size: 16, strokeWidth: 1.75 };
 
@@ -16,44 +17,93 @@ export const ICON = { size: 16, strokeWidth: 1.75 };
 export const typePath = (id: string, company?: string, tab?: string, dest?: string) =>
   `/outbound/type/?id=${encodeURIComponent(id)}${company ? `&company=${encodeURIComponent(company)}` : ""}${tab ? `&tab=${tab}` : ""}${dest ? `&dest=${encodeURIComponent(dest)}` : ""}`;
 
-export function OutboundBadge() {
-  return <span className="badge-outbound">OUTBOUND</span>;
-}
-
-/** A switch as in the Windows app: a checkbox with the switch role, named by its label or aria-label. */
-export function Switch({
-  label,
-  checked,
-  onChange,
-  disabled,
-  id,
+/**
+ * The ERP record dialog (hive-erp record-dialog.tsx): title with a quiet meta line, the body, and a footer with a danger
+ * action bottom left and the dialog's buttons right. Escape and the close button call onClose.
+ */
+export function BdcDialog({
+  title,
+  subtitle,
+  onClose,
+  children,
+  leading,
+  footer,
+  wide,
 }: {
-  label?: string;
-  checked: boolean;
-  onChange: (on: boolean) => void;
-  disabled?: boolean;
-  id?: string;
+  title: string;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+  leading?: ReactNode;
+  footer: ReactNode;
+  wide?: boolean;
 }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => dialog?.close();
+  }, []);
   return (
-    <input
-      id={id}
-      type="checkbox"
-      role="switch"
-      className="bdc-switch"
-      aria-label={label}
-      checked={checked}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.checked)}
-    />
+    <dialog
+      ref={ref}
+      className={`record-dialog bdc-dialog${wide ? " wide" : ""}`}
+      aria-labelledby="bdc-dialog-title"
+      onCancel={onDialogCancel(onClose)}
+    >
+      <div className="dialog-heading">
+        <div>
+          <h2 id="bdc-dialog-title">{title}</h2>
+          {subtitle ? <p className="dialog-subtitle">{subtitle}</p> : null}
+        </div>
+        <button type="button" className="icon-button" aria-label="Close dialog" title="Close" onClick={onClose}>
+          <Close size={18} strokeWidth={1.75} />
+        </button>
+      </div>
+      <div className="dialog-body">{children}</div>
+      <div className="dialog-footer">
+        {leading}
+        <div className="spacer" />
+        {footer}
+      </div>
+    </dialog>
   );
 }
 
-/** A switch with its word in front: "Active", "On". */
-export function SwitchField({ text, ...props }: { text: string; checked: boolean; onChange: (on: boolean) => void; disabled?: boolean }) {
+/** Read-only values as the ERP shows them: a small uppercase label over the value. */
+export function Facts({ items, className }: { items: [string, ReactNode][]; className?: string }) {
   return (
-    <label className="switch-field">
-      <span>{text}</span>
-      <Switch {...props} />
+    <dl className={`bdc-facts${className ? ` ${className}` : ""}`}>
+      {items.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** On or off inside a list row: the CRM's small toggle pill, named for the row it belongs to. */
+export function RowToggle({
+  label,
+  name,
+  checked,
+  onChange,
+  disabled,
+  large,
+}: {
+  label: string;
+  name: string;
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  disabled?: boolean;
+  large?: boolean;
+}) {
+  return (
+    <label className={large ? "toggle-pill" : "toggle-pill small"}>
+      <input type="checkbox" aria-label={name} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      {label}
     </label>
   );
 }
@@ -179,7 +229,7 @@ export function ConnectionSelect({
   const known = choices.some((c: any) => c.id === value);
   return (
     <select id={id} value={known ? value : empty ? "" : first} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-      {empty && <option value="">{choices.length ? "(none)" : "No connection yet"}</option>}
+      {empty && <option value="">{choices.length ? "None" : "No connection yet"}</option>}
       {choices.map((c: any) => (
         <option key={c.id} value={c.id}>
           {connectionLabel(c)}
@@ -189,11 +239,11 @@ export function ConnectionSelect({
   );
 }
 
-/** A result in a word or a sentence, green when it worked. */
-export function Chip({ ok, children }: { ok: boolean | null; children: ReactNode }) {
+/** The answer of a check or test in one line: green with a tick when it worked, amber with the reason when not. */
+export function Result({ ok, children }: { ok: boolean; children: ReactNode }) {
   return (
-    <span className={`bdc-chip ${ok === null ? "neutral" : ok ? "ok" : "warn"}`}>
-      <span className="dot" aria-hidden="true" />
+    <span className={`bdc-result ${ok ? "ok" : "warn"}`}>
+      {ok ? <CheckCircle2 {...ICON} aria-hidden="true" /> : <AlertCircle {...ICON} aria-hidden="true" />}
       <span>{children}</span>
     </span>
   );
@@ -201,7 +251,7 @@ export function Chip({ ok, children }: { ok: boolean | null; children: ReactNode
 
 /**
  * "Remove X? ..." with Keep and Remove inside the page (memory: Remove asks inside the card, Keep or Remove), shown
- * where the list is; Keep takes the focus so Enter or Escape keeps the item.
+ * where the item is; Keep takes the focus so Enter or Escape keeps the item.
  */
 export function ConfirmStrip({ text, onRemove, onKeep }: { text: string; onRemove: () => void; onKeep: () => void }) {
   const keep = useRef<HTMLButtonElement>(null);
@@ -211,11 +261,14 @@ export function ConfirmStrip({ text, onRemove, onKeep }: { text: string; onRemov
       className="confirm-strip"
       role="alert"
       onKeyDown={(e) => {
-        if (e.key === "Escape") onKeep();
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onKeep();
+        }
       }}
     >
       <span>{text}</span>
-      <span className="row-actions">
+      <span className="strip-actions">
         <button ref={keep} type="button" className="button secondary" onClick={onKeep}>
           Keep
         </button>
@@ -227,7 +280,51 @@ export function ConfirmStrip({ text, onRemove, onKeep }: { text: string; onRemov
   );
 }
 
-/** A value to copy: an address, a key, a role command. */
+/** The quiet place for removing a record: a danger text button with a bin, bottom left, as the ERP's Archive. */
+export function RemoveButton({ children, onClick, label }: { children: ReactNode; onClick: () => void; label?: string }) {
+  return (
+    <button type="button" className="button ghost danger" aria-label={label} onClick={onClick}>
+      <Trash2 {...ICON} aria-hidden="true" />
+      {children}
+    </button>
+  );
+}
+
+/** The quiet end of a record: Remove with a bin, bottom left; it asks Keep or Remove in place. */
+export function RemoveLine({ what, text, onRemove }: { what: string; text: string; onRemove: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div className="record-end">
+      {error && <Notice kind="error">{error}</Notice>}
+      {asking ? (
+        <ConfirmStrip
+          text={text}
+          onKeep={() => setAsking(false)}
+          onRemove={() => {
+            try {
+              onRemove();
+            } catch (e) {
+              setError((e as Error).message);
+            }
+            setAsking(false);
+          }}
+        />
+      ) : (
+        <RemoveButton
+          onClick={() => {
+            setError("");
+            setAsking(true);
+          }}
+        >
+          Remove {what}
+        </RemoveButton>
+      )}
+    </div>
+  );
+}
+
+/** A value to copy: an address, a key, a role command. The copy button is an icon with its name as tooltip. */
 export function CopyCode({ text, shown, label = "Copy" }: { text: string; shown?: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -235,7 +332,9 @@ export function CopyCode({ text, shown, label = "Copy" }: { text: string; shown?
       <code>{shown ?? text}</code>
       <button
         type="button"
-        className="button secondary"
+        className="icon-button small"
+        aria-label={copied ? "Copied" : label}
+        title={copied ? "Copied" : label}
         onClick={() =>
           navigator.clipboard
             .writeText(text)
@@ -243,28 +342,9 @@ export function CopyCode({ text, shown, label = "Copy" }: { text: string; shown?
             .catch(() => {})
         }
       >
-        <Copy {...ICON} />
-        {copied ? "Copied" : label}
+        {copied ? <Check {...ICON} /> : <Copy {...ICON} />}
       </button>
     </div>
-  );
-}
-
-/** The path above a page below Outbound: Outbound › Sales invoice › Company 1000 › SharePoint library. */
-export function PageTrail({ items }: { items: { text: string; href?: string }[] }) {
-  return (
-    <nav className="page-trail" aria-label="Path">
-      {items.map((item, i) => (
-        <Fragment key={`${i}-${item.text}`}>
-          {i > 0 && <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />}
-          {i === items.length - 1 || !item.href ? (
-            <span aria-current={i === items.length - 1 ? "location" : undefined}>{item.text}</span>
-          ) : (
-            <Link href={item.href}>{item.text}</Link>
-          )}
-        </Fragment>
-      ))}
-    </nav>
   );
 }
 

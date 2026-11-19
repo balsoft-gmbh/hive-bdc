@@ -45,7 +45,7 @@ export function LicenceUpload({ onStored, label = "Licence file" }: { onStored: 
           void send(e.dataTransfer.files[0]);
         }}
       >
-        {busy ? <LoaderCircle className="spin" size={22} /> : <FileKey2 size={22} />}
+        {busy ? <LoaderCircle className="spin" size={18} strokeWidth={1.75} /> : <FileKey2 size={18} strokeWidth={1.75} />}
         <span>{busy ? "Checking the licence" : "Drop the .lic file here or"}</span>
         <button type="button" className="button secondary" disabled={busy} onClick={() => input.current?.click()}>
           Choose file

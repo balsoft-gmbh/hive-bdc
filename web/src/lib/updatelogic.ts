@@ -147,3 +147,14 @@ export function megabytes(bytes: number) {
 export function supportDetails(view: UpdateView, last: UpdateHistoryEntry, rows: StepRow[]) {
   return [`Hive BDC ${view.version}, ${last.version}: ${last.note}`, ...rows.map((r) => `${r.title}: ${r.state}${r.detail ? ` (${r.detail})` : ""}`)].join("\n");
 }
+
+export type StopText = { badge: string; tone: HistoryTone; line: string };
+
+/** The stop of board P6 in one line, with the state pill: a stop before the switch, or a return by itself. */
+export function stopText(view: UpdateView): StopText {
+  const last = (view.history || [])[0];
+  const running = (view.installed && view.installed.version) || view.version;
+  if (last && last.state === "returned")
+    return { badge: "Returned", tone: "amber", line: `${last.version} did not run properly. Hive BDC is back on ${running}, and documents flow as before.` };
+  return { badge: "Stopped", tone: "rose", line: `The update stopped before anything changed. ${running} runs with your settings, and documents flow as before.` };
+}

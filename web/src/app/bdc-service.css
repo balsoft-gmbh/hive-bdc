@@ -1,0 +1,450 @@
+/* ============================================================
+   Service page: the tabs Status, Licence, Updates and Technical log, and the update line of the Overview
+   (former service.js and updates.js, boards P1 to P6 and W13). Calm CRM panels with the read-only facts of the
+   Hive ERP record dialog (design version 2).
+   ============================================================ */
+.service-tab-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 7px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--gold);
+  color: #302615;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Panels: heading with the state pill beside it and the actions on the right. */
+.service-panel {
+  margin-bottom: 12px;
+}
+.service-panel .section-heading {
+  flex-wrap: wrap;
+}
+.service-panel > .section-heading:last-child {
+  border-bottom: 0;
+}
+.service-title {
+  display: flex;
+  flex: 1 1 220px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.service-title h2 {
+  overflow-wrap: anywhere;
+}
+.service-title .badge {
+  max-width: 100%;
+  white-space: normal;
+}
+.service-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.service-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+.service-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.service-body > .notice {
+  margin: 0;
+}
+.service-body p {
+  overflow-wrap: anywhere;
+}
+.service-flush .table-panel {
+  border: 0;
+  border-radius: 0;
+}
+.service-panel .nowrap {
+  white-space: nowrap;
+}
+.service-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--muted);
+}
+
+/* Read-only facts (Hive ERP record dialog): small uppercase label, the value below, on one column grid. */
+.service-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 16px 20px;
+  margin: 0;
+}
+.service-facts > div {
+  min-width: 0;
+}
+.service-facts > div.span-2 {
+  grid-column: span 2;
+}
+.service-facts > div.span-3 {
+  grid-column: span 3;
+}
+.service-facts dt,
+.service-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.service-facts dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-height: 21px;
+  margin: 0;
+}
+.service-fact-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .service-facts > div.span-2,
+  .service-facts > div.span-3 {
+    grid-column: auto;
+  }
+}
+.service-facts + .service-steps {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.icon-button.service-copy {
+  min-width: 28px;
+  min-height: 28px;
+  margin: -4px 0;
+  padding: 5px;
+}
+
+/* Status: the test run beside its label. */
+.service-test-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.service-fact-value:has(> .service-test-run) {
+  flex: 1 1 100%;
+}
+.service-test-run select {
+  flex: 0 1 300px;
+  min-width: 0;
+}
+.service-upload {
+  display: flex;
+  flex-direction: column;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* Updates: panels one below the other. */
+.service-updates {
+  display: flex;
+  flex-direction: column;
+}
+.service-block {
+  display: flex;
+  flex-direction: column;
+}
+.service-notes {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 18px;
+}
+.service-footnote {
+  font-size: 13px;
+  color: var(--muted);
+}
+.service-lead {
+  font-weight: 500;
+}
+.service-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.service-progress {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--hover);
+  overflow: hidden;
+  appearance: none;
+}
+.service-progress::-webkit-progress-bar {
+  border-radius: 3px;
+  background: var(--hover);
+}
+.service-progress::-webkit-progress-value {
+  border-radius: 3px;
+  background: var(--gold);
+}
+.service-progress::-moz-progress-bar {
+  border-radius: 3px;
+  background: var(--gold);
+}
+.service-percent {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.service-while {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 14px 0 0 18px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Steps of an update (P4, P6), checks after the restart (P5) and the test run (W4). */
+.service-steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.service-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.service-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.service-step-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.service-step-text strong {
+  font-weight: 600;
+}
+.service-step-text > span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.service-step.waiting strong,
+.service-step.skipped strong {
+  font-weight: 500;
+  color: var(--muted);
+}
+.service-step.failed strong,
+.service-check.failed {
+  color: #a33a4f;
+}
+.service-step-time {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.service-step-time.now {
+  font-weight: 600;
+  color: var(--brand-text);
+}
+.service-mark {
+  display: grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.service-mark.done {
+  background: #e9f5ef;
+  color: #2f7d61;
+}
+.service-mark.failed {
+  background: #fceef0;
+  color: #a33a4f;
+}
+.service-mark.waiting {
+  border: 1px solid var(--line);
+}
+.service-mark.running {
+  border: 2px solid var(--gold);
+  border-right-color: transparent;
+  animation: spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .service-mark.running {
+    animation: none;
+  }
+}
+.service-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.service-run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.service-panel .service-run {
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+.service-run-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.service-run-head h3 {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.service-run-steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.service-run-steps li {
+  display: grid;
+  grid-template-columns: 64px 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.service-run-steps li:first-child {
+  border-top: 0;
+}
+.service-run-time {
+  font-size: 13px;
+  color: var(--muted);
+}
+.service-run-text {
+  overflow-wrap: anywhere;
+}
+
+/* Technical log: light grey box, the newest line at the bottom. */
+.service-log {
+  max-height: 420px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Overview: an offered update as one line with its two buttons (board P1). */
+.update-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.update-line-icon {
+  display: grid;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--gold-soft);
+  color: var(--brand-text);
+}
+.update-line-text {
+  display: flex;
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  min-width: 0;
+  font-size: 13px;
+}
+.update-line-text strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.update-line-text .inline-link svg {
+  align-self: center;
+}
+.update-line-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+[data-theme="dark"] .service-mark.done {
+  background: #1f3a2d;
+  color: #8fd4b0;
+}
+[data-theme="dark"] .service-mark.failed {
+  background: #4a2a31;
+  color: #ffb3bd;
+}
+[data-theme="dark"] .service-step.failed strong,
+[data-theme="dark"] .service-check.failed {
+  color: #ffb3bd;
+}
+[data-theme="dark"] .service-run .ok-text {
+  color: #8fd4b0;
+}
+[data-theme="dark"] .service-run .warn-text,
+[data-theme="dark"] .service-panel .warn-text {
+  color: #f2b56b;
+}

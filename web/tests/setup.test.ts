@@ -5,7 +5,9 @@ import {
   andList, cleanAccount, cleanPrefix, destinationPicks, destinationProblems, featureWords, hasDestination, licenceNote, postBody,
   roleCommand, runLine, setupNeeded, setupProgress, setupType, typeWords, uniqueId, withBlobSource, withDestinations,
 } from '../src/lib/logic';
-import { ENTRA_PATH, STEP_NAMES, licenceRequest, shownStep, stepHref, typesWord } from '../src/app/setup/steps';
+import {
+  ENTRA_PATH, ROLES, SETUP_LINE, SETUP_TITLE, STEP_NAMES, entryName, licenceRequest, shownStep, stepHref, stepLabel, typesWord, upperFirst,
+} from '../src/app/setup/steps';
 
 const fresh = (): any => ({
   version: 'v1',
@@ -260,6 +262,25 @@ test('the step names and the Entra path read as the Windows app and the design s
   assert.deepEqual(STEP_NAMES, ['Licence', 'Where F&O hands over', 'Where documents go', 'Test run']);
   assert.equal(ENTRA_PATH, 'Microsoft Entra admin center > Enterprise applications > Hive BDC sign-in > Users and groups');
   assert.equal(typesWord({ id: 'SalesInvoice', displayName: 'Sales invoice' }), 'sales invoices');
+});
+
+test('the title has one line of at most 60 characters, and the roles one line each (design version 2, change 5)', () => {
+  assert.equal(SETUP_TITLE, 'Set up Hive BDC');
+  assert.ok(SETUP_LINE.length <= 60, `${SETUP_LINE.length} characters`);
+  assert.doesNotMatch(SETUP_LINE, /welcome|your|just|simply/i);
+  assert.deepEqual(ROLES.map((r) => r.name), ['Viewer', 'Operator', 'Administrator']);
+  for (const role of ROLES) assert.ok(role.text.length <= 60 && !role.text.includes('\n'), role.name);
+});
+
+test('a step in the step bar is named with its number, and done once it is done', () => {
+  assert.equal(stepLabel(0, true), 'Step 1: Licence, done');
+  assert.equal(stepLabel(2, false), 'Step 3: Where documents go');
+});
+
+test('a test-run entry reads in the Windows wording: type, then Company and its id', () => {
+  assert.equal(entryName({ id: 'SalesInvoice', displayName: 'Rechnung' }, 'DEMF'), 'Sales invoices · Company DEMF');
+  assert.equal(entryName({ id: 'Lieferschein', displayName: 'lieferschein' }, '1000'), 'Lieferschein · Company 1000');
+  assert.equal(upperFirst(''), '');
 });
 
 test('no set-up text uses a dash as a pause', async () => {

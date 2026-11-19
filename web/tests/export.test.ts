@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { postBody, withBlobSource } from '../src/lib/logic';
 import * as X from '../src/lib/exportlogic';
 import {
-  addCompany, addDestination, addType, allDestinations, applyDestination, companiesWithoutSource, destinationForm, destinationRows, draftChanges,
+  addCompany, addDestination, addType, applyDestination, companiesWithoutSource, destinationForm, destinationRows, draftChanges,
   folderPreview, httpsConnectionId, removeCompany, removeDestination, removeType, setCompanyActive, setDestinationEnabled, setHttpsKey, setMail,
   setSource, setType, sourceKey, sourceWords, stagingInput, templateChoices, templatePreview, typeRows, words,
 } from '../src/lib/exportlogic';
@@ -96,8 +96,6 @@ test('the Outbound list shows each type, folds away the unused ones and offers c
   assert.deepEqual(rows[0].waiting, []);
   assert.deepEqual(rows[1].waiting, [{ company: '4000', count: 1 }]);
   assert.equal(rows[1].goesTo, 'nowhere yet');
-  assert.equal(allDestinations(rows), 'SharePoint, DocuWare, future-dms');
-  assert.equal(allDestinations([rows[1]]), 'no destination yet');
 });
 
 test('types and companies are added, changed and removed on the draft only', () => {
@@ -133,8 +131,8 @@ test('destinations are listed, switched, removed and added; a kind this version 
   const entry = config().documentTypes[0].companies[0];
   const rows = destinationRows(entry, descriptors);
   assert.deepEqual(rows.map((r) => [r.kind, r.enabled, r.known]), [['sharepoint', true, true], ['docuware', true, true], ['future-dms', true, false]]);
-  assert.equal(rows[0].summary, 'Sales Invoices › {IssueDate:yyyy} · 1 columns');
-  assert.equal(rows[1].summary, 'Outgoing invoices · 1 fields');
+  assert.equal(rows[0].summary, 'Sales Invoices › {IssueDate:yyyy} · 1 column');
+  assert.equal(rows[1].summary, 'Outgoing invoices · 1 field');
   assert.match(rows[2].summary, /newer version/);
   assert.equal(rows[0].name, 'SharePoint');
 
@@ -294,9 +292,6 @@ test('a storage connection names the containers it is used with, and users read 
   body = setSource(body, 'SalesQuotation', '1000', { kind: 'servicebus', connection: 'sb', settings: { Queue: 'q', PdfConnection: 'fo', PdfContainer: 'pdf' } }, root);
   assert.deepEqual(X.connectionContainers(body, 'fo'), [{ container: 'bdc-export', prefix: '' }, { container: 'out', prefix: '' }, { container: 'pdf', prefix: '' }]);
   assert.deepEqual(X.connectionContainers(body, 'sb'), []);
-  assert.equal(X.usesWords([]), 'Not used yet');
-  assert.equal(X.usesWords(['a', 'b']), 'Used by a and b');
-  assert.equal(X.usesWords(['a', 'b', 'c', 'd']), 'Used by a, b and 2 more');
 });
 
 test('a Service Bus destination needs a queue or a topic before Save', () => {
@@ -403,12 +398,41 @@ test('a new connection is named after its kind, numbered when the name is taken'
   assert.equal(X.suggestId([], 'future'), 'future');
 });
 
-test('a test result reads as the chip of the old card, and the field test names what is missing', () => {
-  assert.equal(X.testWords(undefined), 'Not tested yet');
-  assert.equal(X.testWords({ ok: true, at: '10:42' }), 'Works · tested 10:42');
-  assert.equal(X.testWords({ ok: false, at: '10:42' }), 'Sign-in refused');
+test('a test result reads as the state pill of the list, and the field test names what is missing', () => {
+  assert.deepEqual(X.testState(undefined), { tone: 'neutral', text: 'Not tested' });
+  assert.deepEqual(X.testState({ ok: true, at: '10:42' }), { tone: 'green', text: 'Works' });
+  assert.deepEqual(X.testState({ ok: false, at: '10:42' }), { tone: 'rose', text: 'Refused' });
   const found = [{ value: 'Title' }, { value: 'Customer' }];
   assert.deepEqual(X.fieldTestLine(['Title', ''], found), { ok: true, text: 'Signed in. 2 fields found, every mapped one exists.' });
   assert.deepEqual(X.fieldTestLine(['Title', 'Amount'], found), { ok: false, text: 'Signed in, but "Amount" does not exist there yet.' });
   assert.deepEqual(X.fieldTestLine(['A', 'B'], found), { ok: false, text: 'Signed in, but "A", "B" do not exist there yet.' });
+});
+
+test('the Connections list names each kind and how it signs in, short enough for a cell', () => {
+  const kinds = [{ kind: 'azure-storage', name: 'Azure Storage' }, { kind: 'docuware', name: 'DocuWare' }];
+  assert.equal(X.connectionKindName('azure-storage', kinds), 'Azure Storage');
+  assert.equal(X.connectionKindName('https', kinds), 'Web address key');
+  assert.equal(X.connectionKindName('future', kinds), 'future');
+  const storage = { kind: 'azure-storage', settings: { AccountUrl: 'https://stcontosofo.blob.core.windows.net' }, hasSecret: false };
+  assert.equal(X.signInWords(storage), 'stcontosofo as this instance');
+  assert.equal(X.signInWords({ ...storage, hasSecret: true }), 'stcontosofo with a connection string');
+  assert.equal(X.signInWords({ kind: 'azure-storage', settings: {}, secret: 'typed' }), 'With a connection string');
+  assert.equal(X.signInWords({ kind: 'servicebus', settings: { Namespace: 'sb-contoso.servicebus.windows.net' } }), 'sb-contoso as this instance');
+  assert.equal(X.signInWords({ kind: 'docuware', settings: { Url: 'https://contoso.docuware.example/DocuWare', UserName: 'hivebdc' } }), 'contoso.docuware.example as hivebdc');
+  assert.equal(X.signInWords({ kind: 'https', settings: {} }), 'The sender posts with the key');
+  assert.equal(X.signInWords({ kind: 'future', settings: {} }), '');
+});
+
+test('the companies that mail are named with their type, for Used by of document mail', () => {
+  let body = postBody(config());
+  assert.deepEqual(X.mailCompanies(body), []);
+  body = setMail(body, 'SalesInvoice', '1000', true);
+  assert.deepEqual(X.mailCompanies(body), ['Rechnung › 1000']);
+});
+
+test('a connection kind has its name before the kinds list has answered', () => {
+  assert.equal(X.connectionKindName('azure-storage', []), 'Azure Storage');
+  assert.equal(X.connectionKindName('servicebus', undefined), 'Azure Service Bus');
+  assert.equal(X.connectionKindName('docuware', [{ kind: 'docuware', name: 'DocuWare file system' }]), 'DocuWare file system');
+  assert.equal(X.connectionKindName('future-dms', []), 'future-dms');
 });

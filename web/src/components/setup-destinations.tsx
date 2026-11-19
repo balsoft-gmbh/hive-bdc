@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { Dropdown, Option } from "@fluentui/react-components";
-import { Archive, ArrowRight, Container, FolderOpen, LoaderCircle, Mail, PlugZap, Send } from "lucide-react";
+import { Archive, CircleAlert, Container, FolderOpen, LoaderCircle, Mail, PlugZap, Send } from "lucide-react";
 import { api } from "@/lib/api";
 import { andList, destinationPicks, destinationProblems, hasDestination, postBody, sourceEntries, uniqueId, withDestinations } from "@/lib/logic";
-import { companiesWord, stepHref, typesWord } from "@/app/setup/steps";
+import { companiesWord, stepHref, typesWord, upperFirst } from "@/app/setup/steps";
+import { StatusPill } from "./ui/data-grid";
 import { useConsole } from "./console-context";
 import { Notice } from "./notice";
-import { Chip, Hint, ICON, Loading, StepActions, StepFrame, TextField, useConfigSave, type Progress } from "./setup-parts";
+import { TogglePill } from "./toggle-pill";
+import { Hint, ICON, Loading, Panel, Result, StepActions, StepFrame, TextField, useConfigSave, type Progress } from "./setup-parts";
 
 type Setting = { key: string; label: string; required?: boolean; lookup?: string | null; dependsOn?: string | null; hint?: string | null };
 type Descriptor = { kind: string; name: string; description: string; connectionKind: string; connected: boolean; settings: Setting[] };
@@ -22,8 +24,7 @@ const ICON_18 = { size: 18, strokeWidth: 1.75 };
 const KIND_ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = { sharepoint: FolderOpen, blob: Container, docuware: Archive, mail: Mail };
 
 const NOTES: Record<string, string> = {
-  sharepoint: "The file goes into the library with its name. Columns of the library are filled from the document once you map them under Outbound.",
-  mail: "Each document goes to the customer's address from the export.",
+  sharepoint: "Library columns are mapped later under Outbound.",
 };
 
 export function DestinationStep({ progress, readOnly, asked }: { progress: Progress; readOnly: boolean; asked: string }) {
@@ -48,29 +49,20 @@ export function DestinationStep({ progress, readOnly, asked }: { progress: Progr
 
   if (!type) {
     return (
-      <StepFrame step={3} progress={progress} readOnly={readOnly} title="Where documents go">
-        <Notice kind="warn">No document type takes documents from F&O yet. Set up where F&O hands over first.</Notice>
+      <StepFrame step={3} progress={progress} readOnly={readOnly}>
+        <Notice kind="warn">No document type comes from F&O yet. Finish step 2 first.</Notice>
         <StepActions back={2} />
       </StepFrame>
     );
   }
 
-  const intro = [`The exports are ${typesWord(type)} for ${companiesWord(companies)} ${andList(companies)}.`];
-  if (type?.handler === "EInvoice") intro.push("Hive BDC makes the e-invoice each export asks for (XRechnung or ZUGFeRD).");
-  intro.push("Choose one place or several; other document types follow later under Outbound.");
-
   return (
-    <StepFrame step={3} progress={progress} readOnly={readOnly} title={`Where should ${typesWord(type)} go?`} description={intro.join(" ")}>
+    <StepFrame step={3} progress={progress} readOnly={readOnly}>
       {typeIds.length > 1 && (
-        <nav className="setup-tabs" aria-label="Document types of the set-up">
+        <nav className="setup-types" aria-label="Document types of the set-up">
           {typeIds.map((id) => (
-            <Link
-              key={id}
-              href={stepHref(3, id)}
-              className={`setup-tab${id === typeId ? " active" : ""}`}
-              aria-current={id === typeId ? "page" : undefined}
-            >
-              {typesWord(config.documentTypes.find((t: any) => t.id === id))}
+            <Link key={id} href={stepHref(3, id)} className={`setup-type${id === typeId ? " active" : ""}`} aria-current={id === typeId ? "page" : undefined}>
+              {upperFirst(typesWord(config.documentTypes.find((t: any) => t.id === id)))}
             </Link>
           ))}
         </nav>
@@ -163,45 +155,49 @@ function DestinationForm({
     next = (
       <button type="button" className="button primary" disabled={problems.length > 0 || busy} onClick={saveDestinations}>
         {busy && <LoaderCircle className="spin" {...ICON} />}
-        Save and continue
+        Continue
       </button>
     );
   } else if (progress.done[2]) {
     next = (
       <Link className="button primary" href={stepHref(4)}>
-        Next: test run
-        <ArrowRight {...ICON} />
+        Continue
       </Link>
     );
   }
 
   return (
     <>
-      <fieldset className="setup-tiles setup-choose setup-places">
-        <legend className="sr-only">Goes to</legend>
-        {descriptors.map((d) => {
-          const off = d.kind === "mail" && !mailReady;
-          const Icon = KIND_ICONS[d.kind] ?? Send;
-          return (
-            <label key={d.kind} className={`setup-tile${off ? " off" : ""}`}>
-              <input
-                type="checkbox"
-                aria-label={d.name}
-                aria-describedby={`place-${d.kind}`}
-                checked={picks.some((p) => p.kind === d.kind)}
-                disabled={readOnly || off}
-                onChange={(e) => toggle(d, e.target.checked)}
-              />
-              <span className="setup-tile-icon">
-                <Icon {...ICON_18} />
-              </span>
-              <span className="setup-tile-body">
-                <strong>{d.name}</strong>
-                <span id={`place-${d.kind}`}>{d.description}</span>
-              </span>
-            </label>
-          );
-        })}
+      <fieldset className="setup-group">
+        <legend>
+          <h2 className="setup-group-title">{`${upperFirst(typesWord(type))} go to`}</h2>
+        </legend>
+        <p className="setup-group-line">{`${upperFirst(companiesWord(companies))} ${andList(companies)}.${readOnly ? "" : " Choose one place or more."}`}</p>
+        <div className="setup-tiles setup-choose setup-places">
+          {descriptors.map((d) => {
+            const off = d.kind === "mail" && !mailReady;
+            const Icon = KIND_ICONS[d.kind] ?? Send;
+            return (
+              <label key={d.kind} className={`setup-tile${off ? " off" : ""}`}>
+                <input
+                  type="checkbox"
+                  aria-label={d.name}
+                  aria-describedby={`place-${d.kind}`}
+                  checked={picks.some((p) => p.kind === d.kind)}
+                  disabled={readOnly || off}
+                  onChange={(e) => toggle(d, e.target.checked)}
+                />
+                <span className="setup-tile-icon">
+                  <Icon {...ICON_18} />
+                </span>
+                <span className="setup-tile-body">
+                  <strong>{d.name}</strong>
+                  <span id={`place-${d.kind}`}>{d.description}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </fieldset>
 
       {descriptors
@@ -224,7 +220,10 @@ function DestinationForm({
 
       {!readOnly && problems.length > 0 && (
         <div className="setup-problems" role="status">
-          <strong>Before you can save</strong>
+          <strong>
+            <CircleAlert {...ICON} aria-hidden="true" />
+            Before you can continue
+          </strong>
           <ul>
             {problems.map((p) => (
               <li key={p}>{p}</li>
@@ -265,7 +264,6 @@ function DestinationSection({
   const sequence = useRef<Record<string, number>>({});
   const committed = useRef<Record<string, string>>({ ...pick.settings });
   const lookups = d.settings.filter((s) => s.lookup);
-  const headingId = `dest-${d.kind}-heading`;
 
   const setChoice = (key: string, value: Choices) => setChoices((all) => ({ ...all, [key]: value }));
 
@@ -335,100 +333,84 @@ function DestinationSection({
     loadAll(pick, readyNow, draftNow);
   };
 
+  const state = d.kind === "mail" ? undefined : <StatusPill tone={ready ? "green" : "amber"}>{ready ? "Connected" : "Not connected yet"}</StatusPill>;
+
   return (
-    <section className="panel" aria-labelledby={headingId}>
-      <div className="section-heading">
-        <div>
-          <h2 id={headingId}>{d.name}</h2>
-        </div>
-        {d.kind !== "mail" && <Chip ok={ready}>{ready ? "Connected" : "Not connected yet"}</Chip>}
-      </div>
-      <div className="setup-panel-body">
-        {d.kind !== "mail" && !d.connected && !readOnly && <ConnectForm d={d} pick={pick} loaded={loaded} onConnected={connected} />}
-        {pick.mixed && (
-          <p className="setup-note">The companies have different values here and keep them. A value you change applies to every ticked company.</p>
-        )}
-        {d.settings.length > 0 && (
-          <div className="setup-fields">
-            {d.settings.map((setting) => {
-              const id = `dest-${d.kind}-${setting.key}`;
-              const current = pick.settings[setting.key] || "";
-              if (setting.lookup) {
-                const state = choices[setting.key] ?? {};
-                const options = state.options ?? [];
-                const shown = options.find((o) => o.value === current)?.label || current;
-                return (
-                  <div className="field" key={setting.key}>
-                    <label id={`${id}-label`} htmlFor={id}>
-                      {setting.label}
-                    </label>
-                    <Dropdown
-                      id={id}
-                      className="record-select"
-                      aria-labelledby={`${id}-label`}
-                      disabled={readOnly || !state.options}
-                      value={shown}
-                      selectedOptions={current ? [current] : []}
-                      placeholder={setting.required === false ? "(none)" : "Choose"}
-                      onOptionSelect={(_, data) => {
-                        const next = setValue(setting.key, data.optionValue ?? "");
-                        loadDependents(setting.key, next);
-                      }}
-                    >
-                      {[
-                        ...(setting.required === false ? [{ value: "", label: "(none)" }] : []),
-                        ...options,
-                      ].map((o) => (
-                        <Option key={o.value || "none"} value={o.value} text={o.label}>
-                          {o.label}
-                        </Option>
-                      ))}
-                    </Dropdown>
-                    {state.hint && <Hint warn={state.warn}>{state.hint}</Hint>}
-                    {!state.hint && setting.hint && <Hint>{setting.hint}</Hint>}
-                  </div>
-                );
-              }
+    <Panel id={`dest-${d.kind}-heading`} title={d.name} state={state}>
+      {d.kind !== "mail" && !d.connected && !readOnly && <ConnectForm d={d} pick={pick} loaded={loaded} onConnected={connected} />}
+      {pick.mixed && <p className="setup-note">The companies have different values here. A value you change applies to every company ticked below.</p>}
+      {d.settings.length > 0 && (
+        <div className="setup-fields">
+          {d.settings.map((setting) => {
+            const id = `dest-${d.kind}-${setting.key}`;
+            const current = pick.settings[setting.key] || "";
+            if (setting.lookup) {
+              const choice = choices[setting.key] ?? {};
+              const options = choice.options ?? [];
+              const shown = options.find((o) => o.value === current)?.label || current;
               return (
-                <SettingText
-                  key={setting.key}
-                  id={id}
-                  setting={setting}
-                  initial={current}
-                  disabled={readOnly}
-                  onChange={(value) => setValue(setting.key, value)}
-                  onCommit={(value) => {
-                    if (committed.current[setting.key] === value) return;
-                    committed.current[setting.key] = value;
-                    loadDependents(setting.key, { ...pick, settings: { ...pick.settings, [setting.key]: value } });
-                  }}
-                />
+                <div className="field" key={setting.key}>
+                  <label id={`${id}-label`} htmlFor={id}>
+                    {setting.label}
+                  </label>
+                  <Dropdown
+                    id={id}
+                    className="record-select"
+                    aria-labelledby={`${id}-label`}
+                    disabled={readOnly || !choice.options}
+                    value={shown}
+                    selectedOptions={current ? [current] : []}
+                    placeholder={setting.required === false ? "(none)" : "Choose"}
+                    onOptionSelect={(_, data) => {
+                      const next = setValue(setting.key, data.optionValue ?? "");
+                      loadDependents(setting.key, next);
+                    }}
+                  >
+                    {[...(setting.required === false ? [{ value: "", label: "(none)" }] : []), ...options].map((o) => (
+                      <Option key={o.value || "none"} value={o.value} text={o.label}>
+                        {o.label}
+                      </Option>
+                    ))}
+                  </Dropdown>
+                  {choice.hint && <Hint warn={choice.warn}>{choice.hint}</Hint>}
+                  {!choice.hint && setting.hint && <Hint>{setting.hint}</Hint>}
+                </div>
               );
-            })}
-          </div>
-        )}
-        <fieldset className="setup-companies">
-          <legend>For companies</legend>
-          {companies.map((company) => (
-            <label key={company} className="toggle-pill">
-              <input
-                type="checkbox"
-                checked={pick.companies.includes(company)}
+            }
+            return (
+              <SettingText
+                key={setting.key}
+                id={id}
+                setting={setting}
+                initial={current}
                 disabled={readOnly}
-                onChange={(e) =>
-                  onPick({
-                    ...pick,
-                    companies: e.target.checked ? [...pick.companies, company] : pick.companies.filter((c) => c !== company),
-                  })
-                }
+                onChange={(value) => setValue(setting.key, value)}
+                onCommit={(value) => {
+                  if (committed.current[setting.key] === value) return;
+                  committed.current[setting.key] = value;
+                  loadDependents(setting.key, { ...pick, settings: { ...pick.settings, [setting.key]: value } });
+                }}
               />
-              {company}
-            </label>
+            );
+          })}
+        </div>
+      )}
+      <fieldset className="setup-companies">
+        <legend>Companies</legend>
+        <div className="setup-company-pills">
+          {companies.map((company) => (
+            <TogglePill
+              key={company}
+              label={company}
+              checked={pick.companies.includes(company)}
+              disabled={readOnly}
+              onChange={(on) => onPick({ ...pick, companies: on ? [...pick.companies, company] : pick.companies.filter((c) => c !== company) })}
+            />
           ))}
-        </fieldset>
-        {NOTES[d.kind] && <p className="setup-note">{NOTES[d.kind]}</p>}
-      </div>
-    </section>
+        </div>
+      </fieldset>
+      {NOTES[d.kind] && <Hint>{NOTES[d.kind]}</Hint>}
+    </Panel>
   );
 }
 
@@ -492,22 +474,17 @@ function ConnectForm({
   if (d.kind === "sharepoint") {
     return (
       <div className="setup-connect">
-        <p className="muted">The SharePoint app your IT created with the Balsoft script. Its secret is kept in this instance&apos;s Key Vault.</p>
+        <h3 className="setup-sublabel">SharePoint app</h3>
         <div className="setup-fields">
           <TextField id={`${prefix}-tenant`} label="Tenant ID" value={tenant} onChange={setTenant} />
-          <TextField
-            id={`${prefix}-client`}
-            label="Client ID"
-            value={client}
-            placeholder="00000000-0000-0000-0000-000000000000"
-            onChange={setClient}
-          />
+          <TextField id={`${prefix}-client`} label="Client ID" value={client} placeholder="00000000-0000-0000-0000-000000000000" onChange={setClient} />
           <TextField
             id={`${prefix}-secret`}
             label="Client secret"
             type="password"
             value={secret}
             placeholder={auth.secretSet ? "(stored, leave empty to keep)" : ""}
+            hint="Kept in this instance's Key Vault."
             onChange={setSecret}
           />
         </div>
@@ -516,7 +493,7 @@ function ConnectForm({
             type="button"
             className="button secondary"
             onClick={() => {
-              setResult({ text: "Enter the site address below; the libraries load when the app can sign in." });
+              setResult({ text: "Enter the site address below. The libraries load once the app can sign in." });
               onConnected({ tenantId: tenant.trim(), clientId: client.trim(), secret }, false);
             }}
           >
@@ -529,7 +506,7 @@ function ConnectForm({
     );
   }
 
-  if (!kind) return <p className="warn-text">{`This version cannot connect ${d.name} here yet.`}</p>;
+  if (!kind) return <p className="setup-problem-line">{`This version cannot connect ${d.name} here yet.`}</p>;
 
   const test = async () => {
     setBusy(true);
@@ -553,7 +530,7 @@ function ConnectForm({
 
   return (
     <div className="setup-connect">
-      <p className="muted">{kind.description}</p>
+      <h3 className="setup-sublabel">Connection</h3>
       <div className="setup-fields">
         {(kind.settings || []).map((s: any) => (
           <TextField
@@ -571,7 +548,7 @@ function ConnectForm({
           type="password"
           value={secret}
           placeholder={stored && stored.hasSecret ? "(stored, leave empty to keep)" : ""}
-          hint="Kept in this instance's Key Vault, never shown again."
+          hint="Kept in this instance's Key Vault."
           onChange={setSecret}
         />
       </div>
@@ -581,7 +558,7 @@ function ConnectForm({
           Test the connection
         </button>
         <span aria-live="polite" className="setup-check-line">
-          {result && result.ok !== undefined && <Chip ok={result.ok}>{result.text}</Chip>}
+          {result && result.ok !== undefined && <Result ok={result.ok}>{result.text}</Result>}
         </span>
       </div>
     </div>

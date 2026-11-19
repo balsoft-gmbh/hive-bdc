@@ -4,9 +4,20 @@ import { typeWords } from "@/lib/logic";
 
 export const STEP_NAMES = ["Licence", "Where F&O hands over", "Where documents go", "Test run"];
 
+export const SETUP_TITLE = "Set up Hive BDC";
+
+/** The one line under the title (design version 2, change 5: at most 60 characters). */
+export const SETUP_LINE = "Hive BDC stays paused until you start it in step 4.";
+
 export const SUPPORT_MAIL = "support@balsoft.de";
 
 export const ENTRA_PATH = "Microsoft Entra admin center > Enterprise applications > Hive BDC sign-in > Users and groups";
+
+export const ROLES = [
+  { name: "Viewer", text: "Sees status, documents and logs." },
+  { name: "Operator", text: "Also retries documents that need attention." },
+  { name: "Administrator", text: "Also changes settings, connections and the licence." },
+];
 
 /**
  * The step on screen: the one the address asks for while it is reached, else the step reached. Progress comes from
@@ -19,6 +30,11 @@ export function shownStep(asked: string | null | undefined, open: number) {
 
 export function stepHref(step: number, type?: string) {
   return `/setup/?step=${step}${type ? `&type=${encodeURIComponent(type)}` : ""}`;
+}
+
+/** The accessible name of the step at this index of the step bar: "Step 1: Licence, done". */
+export function stepLabel(index: number, done: boolean) {
+  return `Step ${index + 1}: ${STEP_NAMES[index]}${done ? ", done" : ""}`;
 }
 
 /** The mail to Balsoft that asks for the licence, with the two values it is issued for. */
@@ -40,4 +56,14 @@ export function typesWord(type: any) {
 /** The word before the company list: "company 1000", "companies 1000 and DEMF". */
 export function companiesWord(companies: string[]) {
   return companies.length === 1 ? "company" : "companies";
+}
+
+/** "sales invoices" as a heading or list start: "Sales invoices". */
+export function upperFirst(text: string) {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
+/** A source entry in the test-run list, in the Windows wording: "Sales invoices · Company 1000". */
+export function entryName(type: any, company: string) {
+  return `${upperFirst(typesWord(type))} · Company ${company}`;
 }

@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { saveConfig } from "@/lib/api";
 import { postBody } from "@/lib/logic";
 import { draftChanges, keptTests, saveProblems } from "@/lib/exportlogic";
@@ -158,8 +159,11 @@ function useUnsavedGuard(active: boolean) {
 
 type Result = { conflict: unknown; body: any } | { error: string } | null;
 
-/** The Save bar: the changes of the draft, Discard, and Save once nothing blocks it. Hidden for a Viewer. */
-export function SaveBar() {
+/**
+ * The Save bar: the changes of the draft, Discard, and Save once nothing blocks it. Hidden for a Viewer, and while a
+ * dialog of the page is open (its own buttons act then; one primary button per screen).
+ */
+export function SaveBar({ hidden = false }: { hidden?: boolean }) {
   const { me, config, refresh } = useConsole();
   const state = useDraft();
   const [busy, setBusy] = useState(false);
@@ -170,7 +174,7 @@ export function SaveBar() {
   useEffect(() => {
     if (result) resultRef.current?.scrollIntoView({ block: "nearest" });
   }, [result]);
-  if (!canChange) return null;
+  if (!canChange || hidden) return null;
 
   const lines = draftChanges(state.original, state.body);
   const problems = lines.length ? saveProblems(state.body, config, state.targets) : [];
@@ -220,9 +224,9 @@ export function SaveBar() {
         {panel && <div ref={resultRef}>{panel}</div>}
         {state.savedAt && (
           <div className="save-bar save-bar-quiet" aria-live="polite">
-            <span className="bdc-chip ok">
-              <span className="dot" aria-hidden="true" />
-              Saved {state.savedAt}
+            <span className="bdc-result ok">
+              <CheckCircle2 size={16} strokeWidth={1.75} aria-hidden="true" />
+              <span>Saved {state.savedAt}</span>
             </span>
           </div>
         )}
@@ -252,7 +256,7 @@ export function SaveBar() {
             </ul>
           )}
         </div>
-        <span className="row-actions">
+        <span className="strip-actions">
           <button type="button" className="button secondary" disabled={busy} onClick={discard}>
             Discard
           </button>

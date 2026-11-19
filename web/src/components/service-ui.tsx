@@ -1,15 +1,14 @@
 "use client";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Check, X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { api } from "@/lib/api";
 import type { StepRow } from "@/lib/updatelogic";
 
-// The parts the four tabs of the Service page share: the tab bar, the POST of every action, the step marks and
-// lists of boards P4 to P6, the banners and the fact lists.
+// The parts the four tabs of the Service page share: the tab bar, the panel, the read-only facts of the Hive ERP
+// record dialog, the icon-only copy button, the POST of every action and the step marks of boards P4 to P6.
 
-export const ICON = { size: 18, strokeWidth: 1.75 } as const;
-export const SMALL_ICON = { size: 16, strokeWidth: 1.75 } as const;
+export const ICON = { size: 16, strokeWidth: 1.75 } as const;
 
 export const SERVICE_TABS = [
   { id: "status", title: "Status" },
@@ -52,6 +51,81 @@ export function ServiceTabs({ current, count }: { current: ServiceTab; count: nu
   );
 }
 
+/** A CRM panel: the heading with an optional state pill next to it and the actions on the right, then the body. */
+export function Panel({
+  id,
+  title,
+  pill,
+  actions,
+  children,
+  live,
+  flush,
+}: {
+  id: string;
+  title: ReactNode;
+  pill?: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+  live?: boolean;
+  flush?: boolean;
+}) {
+  return (
+    <section className="panel service-panel" aria-labelledby={`${id}-heading`} aria-live={live ? "polite" : undefined}>
+      <div className="section-heading">
+        <div className="service-title">
+          <h2 id={`${id}-heading`}>{title}</h2>
+          {pill}
+        </div>
+        {actions && <div className="service-heading-actions">{actions}</div>}
+      </div>
+      {children && <div className={flush ? "service-flush" : "service-body"}>{children}</div>}
+    </section>
+  );
+}
+
+export type Fact = { label: string; value: ReactNode; extra?: ReactNode; span?: 2 | 3 };
+
+/** Read-only facts as the Hive ERP record dialog shows them: small uppercase label, the value below; a long value spans columns. */
+export function Facts({ items }: { items: Fact[] }) {
+  return (
+    <dl className="service-facts">
+      {items.map((f) => (
+        <div key={f.label} className={f.span ? `span-${f.span}` : undefined}>
+          <dt>{f.label}</dt>
+          <dd>
+            {f.value ? <span className="service-fact-value">{f.value}</span> : <span className="cell-muted">Not set</span>}
+            {f.extra}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** An icon-only copy button with a tooltip; screen readers hear its name and "Copied" once it worked. */
+export function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  };
+  return (
+    <>
+      <button type="button" className="icon-button service-copy" aria-label={label} title={copied ? "Copied" : label} onClick={copy}>
+        {copied ? <Check {...ICON} /> : <Copy {...ICON} />}
+      </button>
+      <span className="sr-only" aria-live="polite">
+        {copied ? "Copied" : ""}
+      </span>
+    </>
+  );
+}
+
 /** Every action of the page is a POST with a JSON body, {} when it has none. */
 export function postAction<T = any>(path: string, body?: unknown) {
   return api<T>(path, { method: "POST", body: JSON.stringify(body || {}) });
@@ -64,13 +138,13 @@ export function Mark({ state }: { state: MarkState }) {
   if (state === "done")
     return (
       <span className="service-mark done" aria-hidden="true">
-        <Check {...SMALL_ICON} />
+        <Check {...ICON} />
       </span>
     );
   if (state === "failed")
     return (
       <span className="service-mark failed" aria-hidden="true">
-        <X {...SMALL_ICON} />
+        <X {...ICON} />
       </span>
     );
   if (state === "problem")
@@ -97,52 +171,5 @@ export function StepList({ rows, label }: { rows: StepRow[]; label: string }) {
         </li>
       ))}
     </ol>
-  );
-}
-
-/** A banner over the page: gold for an offered update, ok for a finished one, bad for a stop. */
-export function ServiceBanner({
-  tone,
-  icon,
-  title,
-  titleId,
-  role,
-  children,
-  actions,
-}: {
-  tone: "gold" | "ok" | "bad";
-  icon: ReactNode;
-  title: ReactNode;
-  titleId?: string;
-  role?: "alert" | "status";
-  children?: ReactNode;
-  actions?: ReactNode;
-}) {
-  return (
-    <section className={`service-banner ${tone}`} role={role} aria-labelledby={titleId}>
-      <span className="service-banner-icon">{icon}</span>
-      <span className="service-banner-text">
-        <strong id={titleId}>{title}</strong>
-        {children}
-      </span>
-      {actions}
-    </section>
-  );
-}
-
-/** Label and value pairs; an empty value reads "unknown", as on the former Service page. */
-export function Facts({ items, columns }: { items: { label: string; value: ReactNode; extra?: ReactNode }[]; columns?: boolean }) {
-  return (
-    <dl className={columns ? "service-facts columns" : "service-facts"}>
-      {items.map((f) => (
-        <div key={f.label}>
-          <dt>{f.label}</dt>
-          <dd>
-            <span className="service-fact-value">{f.value || "unknown"}</span>
-            {f.extra}
-          </dd>
-        </div>
-      ))}
-    </dl>
   );
 }

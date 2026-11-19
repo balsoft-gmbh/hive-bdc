@@ -2,26 +2,28 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, FileOutput, Plus, Search } from "lucide-react";
-import { DataGrid, localQuery, type ColumnFilter, type ColumnFilters, type GridColumn } from "./ui/data-grid";
+import { FileOutput, Plus, Search, X as Clear } from "lucide-react";
+import { DataGrid, StatusPill, localQuery, type ColumnFilter, type ColumnFilters, type GridColumn } from "./ui/data-grid";
 import { PageHeading } from "./page-heading";
 import { Notice } from "./notice";
 import { useConsole } from "./console-context";
 import { SaveBar, change, setTargets, useDraft } from "./save-bar";
-import { ConfirmStrip, Field, ICON, OutboundBadge, Switch, typePath, useAnswer } from "./outbound-parts";
+import { BdcDialog, Field, ICON, typePath, useAnswer } from "./outbound-parts";
 import * as X from "@/lib/exportlogic";
-import { typeWords } from "@/lib/logic";
 
-// The Outbound list (board W7, export.js listScreen): every document type with its companies, where they go and its
-// Active switch; companies that wait get an offer to add them, types that are off and have no company fold away.
+// The Outbound list (board W7, export.js listScreen) as an ERP list: search and state in the toolbar, every document
+// type with its companies, where they go and its state; the name opens the type. Companies that wait get an offer to
+// add them; types that are off and have no company are left out unless "Include unused" is on.
 
 type Row = X.TypeRow;
 
-/** Save and Discard start the list afresh: no open form, question or folded types shown (the former state.ui = {}). */
+/** Save and Discard start the list afresh: no open dialog or folded types shown (the former state.ui = {}). */
 export function OutboundList() {
   const { generation } = useDraft();
   return <List key={generation} />;
 }
+
+const DESCRIPTION = "Documents your ERP posts, and where Hive BDC delivers them.";
 
 function List() {
   const router = useRouter();
@@ -32,9 +34,8 @@ function List() {
   const attention = useAnswer<{ events: any[] }>("/history/attention?limit=200");
   const [adding, setAdding] = useState(false);
   const [showFolded, setShowFolded] = useState(false);
-  const [confirm, setConfirm] = useState<Row | null>(null);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
   const [sort, setSort] = useState<string>();
   const [direction, setDirection] = useState<string>();
   const [filters, setFilters] = useState<ColumnFilters>({});
@@ -47,7 +48,8 @@ function List() {
   const descriptors = targets.data?.targets || [];
   const events = attention.data?.events || [];
   const body = state.body;
-  if (!body) return <Heading ro adding={false} onAdd={() => {}} />;
+  if (!body) return <PageHeading title="Outbound" description={DESCRIPTION} />;
+  const dirty = X.draftChanges(state.original, body).length > 0;
 
   // A type switched off on this page stays in the list until it is saved; only types folded when read fold away.
   const now = X.typeRows(body, events, descriptors);
@@ -57,7 +59,11 @@ function List() {
   const folded = now.folded.filter((r) => before.has(r.id));
   const listed = showFolded ? [...visible, ...folded] : visible;
   const term = search.trim().toLowerCase();
-  const matching = term ? listed.filter((r) => r.name.toLowerCase().includes(term) || r.id.toLowerCase().includes(term)) : listed;
+  const matching = listed.filter(
+    (r) =>
+      (!term || r.name.toLowerCase().includes(term) || r.id.toLowerCase().includes(term)) &&
+      (!stateFilter || (stateFilter === "active") === r.enabled),
+  );
 
   const columns: GridColumn<Row>[] = [
     {
@@ -65,17 +71,12 @@ function List() {
       label: "Document type",
       sortKey: "name",
       filter: "text",
-      width: 300,
+      width: 260,
       value: (r) => r.name,
       render: (r) => (
-        <span className="cell-stack">
-          <Link href={typePath(r.id)} className="cell-link">
-            {r.name}
-          </Link>
-          <span className="cell-secondary">
-            {[r.id, r.handler === "EInvoice" ? "e-invoice" : "PDF", r.party === "Vendor" ? "to vendors" : "to customers"].filter(Boolean).join(" · ")}
-          </span>
-        </span>
+        <Link href={typePath(r.id)} className="cell-link" title={r.id}>
+          {r.name}
+        </Link>
       ),
     },
     {
@@ -85,7 +86,7 @@ function List() {
       filter: "text",
       width: 200,
       value: (r) => r.companies.join(", "),
-      render: (r) => <span className="wrap-cell">{r.companies.length ? r.companies.join(", ") : "none"}</span>,
+      render: (r) => (r.companies.length ? <span className="wrap-cell">{r.companies.join(", ")}</span> : <span className="cell-muted">None</span>),
     },
     {
       key: "goes",
@@ -93,15 +94,16 @@ function List() {
       sortKey: "goes",
       filter: "text",
       value: (r) => r.goesTo,
-      render: (r) => <span className="wrap-cell">{r.goesTo}</span>,
+      render: (r) =>
+        r.goesTo === "nowhere yet" ? <span className="cell-muted">Nowhere yet</span> : <span className="wrap-cell">{r.goesTo}</span>,
     },
     {
-      key: "active",
-      label: "Active",
-      width: 90,
-      render: (r) => (
-        <Switch label={`${r.name} active`} checked={r.enabled} disabled={ro} onChange={(on) => change((d) => X.setType(d, r.id, { enabled: on }))} />
-      ),
+      key: "state",
+      label: "State",
+      sortKey: "state",
+      width: 110,
+      value: (r) => (r.enabled ? "Active" : "Off"),
+      render: (r) => <StatusPill tone={r.enabled ? "green" : "neutral"}>{r.enabled ? "Active" : "Off"}</StatusPill>,
     },
   ];
   const rows = localQuery(matching, columns, sort, direction, filters);
@@ -113,45 +115,28 @@ function List() {
       return next;
     });
 
-  const remove = (row: Row) => {
-    try {
-      change((d) => X.removeType(d, row.id));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-    setConfirm(null);
-  };
-
   const waiting = listed.flatMap((row) => row.waiting.map((w) => ({ row, ...w })));
+  const filtered = Boolean(term || stateFilter);
 
   return (
     <>
-      <Heading ro={ro} adding={adding} onAdd={() => setAdding(true)} />
-      <div className="dir-strip" aria-label="Direction">
-        <span className="dir-box dark">ERP</span>
-        <ArrowRight {...ICON} aria-hidden="true" />
-        <span className="dir-box">Hive BDC</span>
-        <ArrowRight {...ICON} aria-hidden="true" />
-        <span className="dir-box">{X.allDestinations(now.rows)}</span>
-        <OutboundBadge />
-      </div>
+      <PageHeading
+        title="Outbound"
+        description={DESCRIPTION}
+        actions={
+          ro ? undefined : (
+            <button type="button" className={`button ${dirty || adding ? "secondary" : "primary"}`} onClick={() => setAdding(true)}>
+              <Plus {...ICON} aria-hidden="true" />
+              New document type
+            </button>
+          )
+        }
+      />
       {loadError && <Notice kind="error">{loadError}</Notice>}
-      {error && <Notice kind="error">{error}</Notice>}
-      {adding && !ro && (
-        <NewTypeForm
-          onCancel={() => setAdding(false)}
-          onAdded={(id) => {
-            setAdding(false);
-            router.push(typePath(id));
-          }}
-        />
-      )}
       {waiting.map((w) => (
         <div className="waiting-strip" role="status" key={`${w.row.id}|${w.company}`}>
           <span>
-            {w.count} {w.count === 1 ? "document" : "documents"} of company {w.company} {w.count === 1 ? "is" : "are"} waiting. Add the company and
-            choose where {typeWords({ id: w.row.id, displayName: w.row.displayName }, undefined)} go, then Hive BDC takes{" "}
-            {w.count === 1 ? "it" : "them"}.
+            {w.count} {w.count === 1 ? "document" : "documents"} of company {w.company} {w.count === 1 ? "is" : "are"} waiting for {w.row.name}.
           </span>
           {!ro && (
             <button
@@ -162,35 +147,46 @@ function List() {
                 router.push(typePath(w.row.id, w.company, "from"));
               }}
             >
-              <Plus {...ICON} />
+              <Plus {...ICON} aria-hidden="true" />
               Add company {w.company}
             </button>
           )}
         </div>
       ))}
-      {confirm && (
-        <ConfirmStrip
-          text={`Remove ${confirm.name} with its companies and destinations? Nothing changes until you save.`}
-          onKeep={() => setConfirm(null)}
-          onRemove={() => remove(confirm)}
-        />
-      )}
       <div className="list-toolbar">
         <div className="field search">
           <label htmlFor="outbound-search">Search</label>
           <div className="search-box">
-            <Search size={17} strokeWidth={1.75} />
+            <Search {...ICON} aria-hidden="true" />
             <input
               id="outbound-search"
-              type="search"
               autoComplete="off"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name or ID of a document type"
+              placeholder="Name or ID"
             />
+            {search && (
+              <button type="button" className="icon-button small" aria-label="Clear search" title="Clear search" onClick={() => setSearch("")}>
+                <Clear size={15} strokeWidth={1.75} />
+              </button>
+            )}
           </div>
         </div>
+        <label className="field compact">
+          State
+          <select aria-label="Filter state" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
         <div className="list-toolbar-right">
+          {folded.length > 0 && (
+            <label className="toggle-pill" title={`${folded.map((r) => r.name).join(", ")}: off and no company`}>
+              <input type="checkbox" checked={showFolded} onChange={(e) => setShowFolded(e.target.checked)} />
+              Include unused
+            </label>
+          )}
           <span className="record-count">
             {rows.length} {rows.length === 1 ? "document type" : "document types"}
           </span>
@@ -209,69 +205,29 @@ function List() {
         }}
         filters={filters}
         onFilter={onFilter}
-        rowClassName={(r) => (confirm?.id === r.id ? "bdc-row-removing" : r.waiting.length ? "bdc-row-warn" : undefined)}
-        actionsWidth="110px"
-        actions={
-          ro
-            ? undefined
-            : (r) => (
-                <button
-                  type="button"
-                  className="text-button quiet-link"
-                  onClick={() => {
-                    setError("");
-                    setConfirm(r);
-                  }}
-                  aria-label={`Remove ${r.name}`}
-                >
-                  Remove
-                </button>
-              )
-        }
         empty={
           <div className="empty-state compact">
             <FileOutput size={22} strokeWidth={1.75} aria-hidden="true" />
-            <h2>{term ? `No document type matches "${search.trim()}".` : "No document type yet."}</h2>
-            {!term && (
-              <p>{ro ? "An administrator adds the document types your ERP posts." : "New document type adds the first one your ERP posts."}</p>
-            )}
+            <h2>{filtered ? "No document type matches." : "No document type yet."}</h2>
+            {!filtered && <p>{ro ? "An administrator sets them up." : "New document type sets one up."}</p>}
           </div>
         }
       />
-      {folded.length > 0 && (
-        <p className="muted small folded-line">
-          {folded.map((r) => r.name).join(", ")} {folded.length === 1 ? "is" : "are"} off and {folded.length === 1 ? "has" : "have"} no company.{" "}
-          {!showFolded && (
-            <button type="button" className="text-button quiet-link" onClick={() => setShowFolded(true)}>
-              Show them
-            </button>
-          )}
-        </p>
+      <SaveBar hidden={adding} />
+      {adding && !ro && (
+        <NewTypeDialog
+          onClose={() => setAdding(false)}
+          onAdded={(id) => {
+            setAdding(false);
+            router.push(typePath(id));
+          }}
+        />
       )}
-      <SaveBar />
     </>
   );
 }
 
-function Heading({ ro, adding, onAdd }: { ro: boolean; adding: boolean; onAdd: () => void }) {
-  return (
-    <PageHeading
-      eyebrow="SET UP"
-      title="Outbound"
-      description="Documents your ERP posts, and where Hive BDC delivers them. Open a document type to set it up."
-      actions={
-        ro || adding ? undefined : (
-          <button type="button" className="button primary" onClick={onAdd}>
-            <Plus {...ICON} />
-            New document type
-          </button>
-        )
-      }
-    />
-  );
-}
-
-function NewTypeForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: (id: string) => void }) {
+function NewTypeDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (id: string) => void }) {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [handler, setHandler] = useState("Pdf");
@@ -286,56 +242,57 @@ function NewTypeForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: (id
     }
   };
   return (
-    <section className="panel form-panel" aria-labelledby="new-type-heading">
-      <div className="section-heading">
-        <h2 id="new-type-heading">New document type</h2>
-      </div>
-      <div className="form-body">
-        <div className="form-row-4">
-          <Field label="ID the ERP writes as documentType" htmlFor="new-type-id">
-            <input
-              id="new-type-id"
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="DeliveryNote"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-            />
-          </Field>
-          <Field label="Name" htmlFor="new-type-name">
-            <input
-              id="new-type-name"
-              type="text"
-              autoComplete="off"
-              placeholder="Lieferschein"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-          <Field label="Hive BDC makes" htmlFor="new-type-handler">
-            <select id="new-type-handler" value={handler} onChange={(e) => setHandler(e.target.value)}>
-              <option value="Pdf">PDF as it is</option>
-              <option value="EInvoice">E-invoice</option>
-            </select>
-          </Field>
-          <Field label="Sent to" htmlFor="new-type-party">
-            <select id="new-type-party" value={party} onChange={(e) => setParty(e.target.value)}>
-              <option value="Customer">Customers</option>
-              <option value="Vendor">Vendors</option>
-            </select>
-          </Field>
-        </div>
-        {message && <Notice kind="error">{message}</Notice>}
-        <div className="row-actions">
-          <button type="button" className="button secondary" onClick={onCancel}>
+    <BdcDialog
+      title="New document type"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="button primary" onClick={add}>
+          <button type="submit" form="new-type-form" className="button primary">
             Add
           </button>
-        </div>
-      </div>
-    </section>
+        </>
+      }
+    >
+      <form
+        id="new-type-form"
+        className="form-grid-plain"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add();
+        }}
+      >
+        <Field label="ID the ERP writes as documentType" htmlFor="new-type-id" hint={'Letters, digits, "-" and "_".'}>
+          <input
+            id="new-type-id"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="DeliveryNote"
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field label="Name" htmlFor="new-type-name">
+          <input id="new-type-name" type="text" autoComplete="off" placeholder="Lieferschein" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Hive BDC makes" htmlFor="new-type-handler">
+          <select id="new-type-handler" value={handler} onChange={(e) => setHandler(e.target.value)}>
+            <option value="Pdf">PDF as it is</option>
+            <option value="EInvoice">E-invoice</option>
+          </select>
+        </Field>
+        <Field label="Sent to" htmlFor="new-type-party">
+          <select id="new-type-party" value={party} onChange={(e) => setParty(e.target.value)}>
+            <option value="Customer">Customers</option>
+            <option value="Vendor">Vendors</option>
+          </select>
+        </Field>
+      </form>
+      {message && <Notice kind="error">{message}</Notice>}
+    </BdcDialog>
   );
 }

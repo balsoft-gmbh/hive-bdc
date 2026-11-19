@@ -3,27 +3,32 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { Building2, Plus } from "lucide-react";
-import { DataGrid, type GridColumn } from "./ui/data-grid";
+import { DataGrid, StatusPill, type GridColumn } from "./ui/data-grid";
 import { PageHeading } from "./page-heading";
 import { Notice } from "./notice";
+import { TogglePill } from "./toggle-pill";
+import { useCrumbs, type Crumb } from "./crumbs";
 import { useConsole } from "./console-context";
 import { SaveBar, change, setTargets, useDraft } from "./save-bar";
-import { CommitInput, ConfirmStrip, Field, ICON, OutboundBadge, PageTrail, Segmented, SwitchField, typePath, useAnswer } from "./outbound-parts";
+import { BdcDialog, CommitInput, Field, ICON, RemoveLine, RowToggle, Segmented, typePath, useAnswer } from "./outbound-parts";
 import { SourceTab } from "./outbound-source";
-import { DestinationForm, DestinationsTab } from "./outbound-destinations";
+import { AddDestinationDialog, DestinationForm, DestinationsTab } from "./outbound-destinations";
 import * as X from "@/lib/exportlogic";
 import { typeLabel } from "@/lib/logic";
 
-// One document type (boards W8 to W11, export.js typeScreen, companyScreen and destinationScreen) on the CRM tab bar:
-// Companies holds the type's own settings and its companies, Comes from and Goes to the chosen company's source and
-// destinations, and a destination opens its form inside Goes to. The address carries everything, so a reload or a
-// shared link opens the same place: /outbound/type/?id=SalesInvoice&company=1000&tab=to&dest=sharepoint.
+// One document type (boards W8 to W11, export.js typeScreen, companyScreen and destinationScreen) as an ERP record on
+// the CRM tab bar: Companies holds the type's own settings and its companies, Comes from and Goes to the chosen
+// company's source and destinations, and a destination opens its form inside Goes to. The shell's breadcrumb shows
+// Outbound > type > Company > destination; the address carries everything, so a reload or a shared link opens the
+// same place: /outbound/type/?id=SalesInvoice&company=1000&tab=to&dest=sharepoint.
 
 type Tab = "companies" | "from" | "to";
+type Dialog = "company" | "destination" | null;
 
 const same = (a: unknown, b: unknown) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
 
 export function OutboundType() {
+  const router = useRouter();
   const params = useSearchParams();
   const id = params.get("id") ?? "";
   const companyParam = params.get("company") ?? "";
@@ -34,35 +39,41 @@ export function OutboundType() {
   const state = useDraft();
   const ro = !me?.canChange;
   const targets = useAnswer<{ targets: any[] }>("/targets");
+  const [dialog, setDialog] = useState<Dialog>(null);
   useEffect(() => {
     if (targets.data) setTargets(targets.data.targets || []);
   }, [targets.data]);
 
   const body = state.body;
-  if (!body) return <PageHeading eyebrow="OUTBOUND" title="Outbound" />;
-  const type = body.documentTypes.find((t: any) => same(t.id, id));
+  const type = body?.documentTypes.find((t: any) => same(t.id, id)) ?? null;
+  const name = type ? typeLabel(type) : id || "Document type";
+  const company = type ? companyParam || type.companies[0]?.dataAreaId || "" : "";
+  const entry = type?.companies.find((c: any) => same(c.dataAreaId, company)) ?? null;
+  const descriptors = targets.data?.targets;
+  const destName = dest ? (descriptors || []).find((d: any) => d.kind === dest)?.name || dest : "";
+
+  const crumbs: Crumb[] = [{ label: name, href: type ? typePath(type.id) : undefined }];
+  if (type && tab !== "companies" && entry) crumbs.push({ label: `Company ${entry.dataAreaId}`, href: typePath(type.id, entry.dataAreaId, tab) });
+  if (type && tab === "to" && dest && entry) crumbs.push({ label: destName });
+  useCrumbs(body ? crumbs : []);
+
+  if (!body) return <PageHeading title="Outbound" />;
   if (!type) {
     return (
       <>
-        <PageTrail items={[{ text: "Outbound", href: "/outbound/" }, { text: id || "Document type" }]} />
-        <PageHeading eyebrow="OUTBOUND" title="Outbound" />
+        <PageHeading title={name} />
         <Notice kind="error">There is no document type {id}.</Notice>
         <SaveBar />
       </>
     );
   }
-  const name = typeLabel(type);
-  const company = companyParam || type.companies[0]?.dataAreaId || "";
-  const entry = type.companies.find((c: any) => same(c.dataAreaId, company)) ?? null;
-  const descriptors = targets.data?.targets;
-  const destName = dest ? (descriptors || []).find((d: any) => d.kind === dest)?.name || dest : "";
-
-  const trail: { text: string; href?: string }[] = [
-    { text: "Outbound", href: "/outbound/" },
-    { text: name, href: typePath(type.id) },
-  ];
-  if (tab !== "companies" && entry) trail.push({ text: `Company ${entry.dataAreaId}`, href: typePath(type.id, entry.dataAreaId, tab) });
-  if (tab === "to" && dest && entry) trail.push({ text: destName });
+  const setType = (changes: any) => change((d) => X.setType(d, type.id, changes));
+  const meta = [
+    type.id,
+    type.handler === "EInvoice" ? "E-invoice" : "PDF as it is",
+    type.party === "Vendor" ? "Sent to vendors" : "Sent to customers",
+    ...(type.enabled === false ? ["Off, its exports wait in their source"] : []),
+  ].join(" · ");
 
   const tabs: [Tab, string, string][] = [
     ["companies", "Companies", typePath(type.id)],
@@ -72,15 +83,10 @@ export function OutboundType() {
 
   return (
     <>
-      <PageTrail items={trail} />
       <PageHeading
-        eyebrow="DOCUMENT TYPE"
-        title={
-          <span className="title-with-badge">
-            {name} <OutboundBadge />
-          </span>
-        }
-        description="Its settings, the companies in your ERP that post it, and where their documents come from and go."
+        title={name}
+        description={meta}
+        actions={<TogglePill label="Active" checked={type.enabled !== false} disabled={ro} onChange={(on) => setType({ enabled: on })} />}
       />
       <nav className="setup-tabs" aria-label="Document type sections">
         {tabs.map(([key, text, href]) => (
@@ -94,14 +100,24 @@ export function OutboundType() {
         {tab === "companies" ? (
           <>
             <TypePanel type={type} ro={ro} />
-            <CompaniesPanel type={type} name={name} descriptors={descriptors || []} ro={ro} />
+            <CompaniesPanel type={type} name={name} descriptors={descriptors || []} ro={ro} onAdd={() => setDialog("company")} />
+            {!ro && (
+              <RemoveLine
+                what={name}
+                text={`Remove ${name} with its companies and destinations? Nothing changes until you save.`}
+                onRemove={() => {
+                  change((d) => X.removeType(d, type.id));
+                  router.push("/outbound/");
+                }}
+              />
+            )}
           </>
         ) : type.companies.length === 0 ? (
           <section className="panel">
             <div className="empty-state compact">
               <Building2 size={22} strokeWidth={1.75} aria-hidden="true" />
               <h2>No company yet.</h2>
-              <p>Add a company under Companies, then choose where its documents come from and where they go.</p>
+              <p>Add one under Companies first.</p>
               <Link className="button secondary" href={typePath(type.id)}>
                 Companies
               </Link>
@@ -113,7 +129,7 @@ export function OutboundType() {
           </Notice>
         ) : (
           <>
-            <CompanyBar type={type} entry={entry} name={name} tab={tab} ro={ro} />
+            <CompanyBar type={type} entry={entry} tab={tab} descriptors={descriptors || []} ro={ro} />
             {tab === "from" ? (
               <SourceTab key={`${state.generation}|${entry.dataAreaId}`} type={type} entry={entry} ro={ro} />
             ) : !descriptors ? (
@@ -128,28 +144,50 @@ export function OutboundType() {
                 ro={ro}
               />
             ) : (
-              <DestinationsTab type={type} entry={entry} descriptors={descriptors} ro={ro} />
+              <DestinationsTab type={type} entry={entry} descriptors={descriptors} ro={ro} onAdd={() => setDialog("destination")} />
+            )}
+            {!ro && !(tab === "to" && dest) && (
+              <RemoveLine
+                what={`Company ${entry.dataAreaId}`}
+                text={`Remove Company ${entry.dataAreaId} with its destinations? Nothing changes until you save.`}
+                onRemove={() => {
+                  change((d) => X.removeCompany(d, type.id, entry.dataAreaId));
+                  router.push(typePath(type.id));
+                }}
+              />
             )}
           </>
         )}
       </Fragment>
-      <SaveBar />
+      <SaveBar hidden={dialog !== null} />
+      {dialog === "company" && !ro && (
+        <AddCompanyDialog
+          typeId={type.id}
+          name={name}
+          onClose={() => setDialog(null)}
+          onAdded={(code) => {
+            setDialog(null);
+            router.push(typePath(type.id, code, "from"));
+          }}
+        />
+      )}
+      {dialog === "destination" && !ro && entry && descriptors && (
+        <AddDestinationDialog type={type} entry={entry} descriptors={descriptors} onClose={() => setDialog(null)} />
+      )}
     </>
   );
 }
 
-/** The type's own settings: name, what Hive BDC makes, who receives it, Active. */
+/** The type's own settings: name, what Hive BDC makes, who receives it (Active sits in the heading). */
 function TypePanel({ type, ro }: { type: any; ro: boolean }) {
   const set = (changes: any) => change((d) => X.setType(d, type.id, changes));
   return (
-    <section className="panel form-panel" aria-labelledby="type-heading">
+    <section className="panel" aria-labelledby="type-heading">
       <div className="section-heading">
-        <h2 id="type-heading" className="caps">
-          Document type
-        </h2>
+        <h2 id="type-heading">Document type</h2>
       </div>
       <div className="form-body">
-        <div className="form-row-4">
+        <div className="form-row-3">
           <Field label="Name" htmlFor="type-name">
             <CommitInput id="type-name" value={type.displayName || ""} disabled={ro} onCommit={(v) => set({ displayName: v })} />
           </Field>
@@ -165,6 +203,9 @@ function TypePanel({ type, ro }: { type: any; ro: boolean }) {
               disabled={ro}
               onChange={(v) => set({ handler: v })}
             />
+            <span className="field-hint">
+              {type.handler === "EInvoice" ? "XRechnung or ZUGFeRD, as each export says." : "The PDF goes out as F&O made it."}
+            </span>
           </div>
           <div className="field">
             <span className="field-label">Sent to</span>
@@ -179,18 +220,7 @@ function TypePanel({ type, ro }: { type: any; ro: boolean }) {
               onChange={(v) => set({ party: v })}
             />
           </div>
-          <div className="field">
-            <span className="field-label" aria-hidden="true">
-              &nbsp;
-            </span>
-            <SwitchField text="Active" checked={type.enabled !== false} disabled={ro} onChange={(on) => set({ enabled: on })} />
-          </div>
         </div>
-        <p className="muted small">
-          {type.handler === "EInvoice"
-            ? "Hive BDC makes XRechnung or ZUGFeRD, as each export says. Off: exports of this type wait in their source."
-            : "The PDF goes out as F&O made it. Off: exports of this type wait in their source."}
-        </p>
       </div>
     </section>
   );
@@ -198,11 +228,9 @@ function TypePanel({ type, ro }: { type: any; ro: boolean }) {
 
 type CompanyRow = { id: string; entry: any; fresh: boolean };
 
-/** The companies that post this type, with where their documents come from and go to. */
-function CompaniesPanel({ type, name, descriptors, ro }: { type: any; name: string; descriptors: any[]; ro: boolean }) {
+/** The companies that post this type, with where their documents come from and go to; a company opens its tabs. */
+function CompaniesPanel({ type, name, descriptors, ro, onAdd }: { type: any; name: string; descriptors: any[]; ro: boolean; onAdd: () => void }) {
   const state = useDraft();
-  const [adding, setAdding] = useState(false);
-  const [confirm, setConfirm] = useState<string | null>(null);
   const rows: CompanyRow[] = type.companies.map((c: any) => ({ id: c.dataAreaId, entry: c, fresh: !c.source && !c.input }));
   const columns: GridColumn<CompanyRow>[] = [
     {
@@ -218,75 +246,39 @@ function CompaniesPanel({ type, name, descriptors, ro }: { type: any; name: stri
     {
       key: "from",
       label: "Comes from",
-      width: 300,
-      render: (r) =>
-        r.fresh ? (
-          <span className="warn-text wrap-cell">Added just now. Choose where its documents come from and where they go.</span>
-        ) : (
-          <span className="wrap-cell">{X.sourceWords(r.entry.source)}</span>
-        ),
+      width: 280,
+      render: (r) => (r.fresh ? <span className="warn-text">Not set up yet</span> : <span className="wrap-cell">{X.sourceWords(r.entry.source)}</span>),
     },
     {
       key: "to",
       label: "Goes to",
-      render: (r) =>
-        r.fresh ? (
-          <Link className="button primary" href={typePath(type.id, r.id, "from")}>
-            Set it up
-          </Link>
-        ) : (
-          <span className="wrap-cell">{X.destinationWords(r.entry, state.body, descriptors)}</span>
-        ),
+      render: (r) => {
+        const words = X.destinationWords(r.entry, state.body, descriptors);
+        return words === "nowhere yet" ? <span className="cell-muted">Nowhere yet</span> : <span className="wrap-cell">{words}</span>;
+      },
     },
     {
-      key: "mail",
-      label: "Mail",
-      width: 100,
-      render: (r) => (r.entry.mail ? <span className="ok-text">Mail on</span> : <span className="muted">Mail off</span>),
+      key: "state",
+      label: "State",
+      width: 110,
+      render: (r) => <StatusPill tone={r.entry.enabled !== false ? "green" : "neutral"}>{r.entry.enabled !== false ? "Active" : "Off"}</StatusPill>,
     },
   ];
   return (
     <section className="panel" aria-labelledby="companies-heading">
       <div className="section-heading">
-        <div>
-          <h2 id="companies-heading">Companies</h2>
-          <p>Each company in your ERP that posts this document type. Open one to set where its documents come from and where they go.</p>
-        </div>
-        {!ro && !adding && (
-          <button type="button" className="button secondary" onClick={() => setAdding(true)}>
-            <Plus {...ICON} />
+        <h2 id="companies-heading">Companies</h2>
+        {!ro && (
+          <button type="button" className="button secondary" onClick={onAdd}>
+            <Plus {...ICON} aria-hidden="true" />
             Add company
           </button>
         )}
       </div>
-      {adding && !ro && <AddCompany typeId={type.id} onDone={() => setAdding(false)} />}
-      {confirm && (
-        <div className="panel-inset">
-          <ConfirmStrip
-            text={`Remove Company ${confirm} with its destinations? Nothing changes until you save.`}
-            onKeep={() => setConfirm(null)}
-            onRemove={() => {
-              change((d) => X.removeCompany(d, type.id, confirm));
-              setConfirm(null);
-            }}
-          />
-        </div>
-      )}
       <DataGrid
         label={`Companies of ${name}`}
         columns={columns}
         rows={rows}
-        rowClassName={(r) => (confirm === r.id ? "bdc-row-removing" : undefined)}
-        actionsWidth="110px"
-        actions={
-          ro
-            ? undefined
-            : (r) => (
-                <button type="button" className="text-button quiet-link" aria-label={`Remove Company ${r.id}`} onClick={() => setConfirm(r.id)}>
-                  Remove
-                </button>
-              )
-        }
         empty={
           <div className="empty-state compact">
             <Building2 size={22} strokeWidth={1.75} aria-hidden="true" />
@@ -299,74 +291,97 @@ function CompaniesPanel({ type, name, descriptors, ro }: { type: any; name: stri
   );
 }
 
-function AddCompany({ typeId, onDone }: { typeId: string; onDone: () => void }) {
+function AddCompanyDialog({ typeId, name, onClose, onAdded }: { typeId: string; name: string; onClose: () => void; onAdded: (code: string) => void }) {
   const [value, setValue] = useState("");
   const [message, setMessage] = useState("");
   const add = () => {
     try {
       change((d) => X.addCompany(d, typeId, value));
-      onDone();
+      onAdded(value.trim());
     } catch (e) {
       setMessage((e as Error).message);
     }
   };
   return (
-    <div className="panel-inset">
+    <BdcDialog
+      title="Add company"
+      subtitle={name}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form="add-company-form" className="button primary">
+            Add
+          </button>
+        </>
+      }
+    >
       <form
-        className="inline-form"
+        id="add-company-form"
+        className="form-grid-plain one"
         onSubmit={(e) => {
           e.preventDefault();
           add();
         }}
       >
-        <input
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-          aria-label="Company (dataAreaId)"
-          placeholder="dataAreaId, for example 2000"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          autoFocus
-        />
-        <button type="submit" className="button primary">
-          Add
-        </button>
-        <button type="button" className="button secondary" onClick={onDone}>
-          Cancel
-        </button>
+        <Field label="Company (dataAreaId)" htmlFor="add-company">
+          <input
+            id="add-company"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="2000"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+          />
+        </Field>
       </form>
       {message && <Notice kind="error">{message}</Notice>}
-    </div>
+    </BdcDialog>
   );
 }
 
-/** The company the Comes from and Goes to tabs show: which one, and its Active switch. */
-function CompanyBar({ type, entry, name, tab, ro }: { type: any; entry: any; name: string; tab: Tab; ro: boolean }) {
+/** The company the Comes from and Goes to tabs show: where it reads from, where it delivers, its switcher and Active. */
+function CompanyBar({ type, entry, tab, descriptors, ro }: { type: any; entry: any; tab: Tab; descriptors: any[]; ro: boolean }) {
   const router = useRouter();
+  const state = useDraft();
+  const goes = X.destinationWords(entry, state.body, descriptors);
   return (
     <section className="panel company-bar" aria-labelledby="company-heading">
-      <div className="company-bar-text">
-        <h2 id="company-heading">Company {entry.dataAreaId}</h2>
-        <p className="muted small">Where this company&apos;s documents of the type {name} come from, and where they go.</p>
-      </div>
+      <h2 id="company-heading">Company {entry.dataAreaId}</h2>
+      <dl className="bdc-facts inline">
+        <div>
+          <dt>Comes from</dt>
+          <dd>{entry.source ? X.sourceWords(entry.source) : <span className="warn-text">Not set up yet</span>}</dd>
+        </div>
+        <div>
+          <dt>Goes to</dt>
+          <dd>{goes === "nowhere yet" ? <span className="cell-muted">Nowhere yet</span> : goes}</dd>
+        </div>
+      </dl>
       <div className="company-bar-actions">
         {type.companies.length > 1 && (
-          <label className="field inline">
-            <span>Company</span>
-            <select value={entry.dataAreaId} onChange={(e) => router.push(typePath(type.id, e.target.value, tab))}>
-              {type.companies.map((c: any) => (
-                <option key={c.dataAreaId} value={c.dataAreaId}>
-                  Company {c.dataAreaId}
-                </option>
-              ))}
-            </select>
-          </label>
+          <select
+            aria-label="Show another company"
+            value={entry.dataAreaId}
+            onChange={(e) => router.push(typePath(type.id, e.target.value, tab))}
+          >
+            {type.companies.map((c: any) => (
+              <option key={c.dataAreaId} value={c.dataAreaId}>
+                Company {c.dataAreaId}
+              </option>
+            ))}
+          </select>
         )}
-        <SwitchField
-          text="Active"
+        <RowToggle
+          label="Active"
+          name={`Company ${entry.dataAreaId} active`}
           checked={entry.enabled !== false}
           disabled={ro}
+          large
           onChange={(on) => change((d) => X.setCompanyActive(d, type.id, entry.dataAreaId, on))}
         />
       </div>

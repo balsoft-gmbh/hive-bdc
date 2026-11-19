@@ -1,0 +1,595 @@
+/* Outbound and Connections (outbound-*.tsx, connections-*.tsx, save-bar.tsx), on the ERP's list, record dialog and
+   facts. Scoped to .bdc-edit, the wrapper of both pages, so nothing here reaches another page. */
+
+.bdc-edit {
+  --ok-fg: #1f7a55;
+  --warn-fg: #9a5b06;
+  --danger: #b4232f;
+  --danger-soft: #fff5f6;
+  --danger-line: #f1cfd4;
+  min-width: 0;
+}
+:root[data-theme="dark"] .bdc-edit {
+  --ok-fg: #8fd4b0;
+  --warn-fg: #f2c566;
+  --danger: #f08a92;
+  --danger-soft: #2e1d20;
+  --danger-line: #5a3036;
+}
+:root[data-theme="dark"] .bdc-edit .warn-text {
+  color: var(--warn-fg);
+}
+/* Page rhythm: panels and grids one gap apart. */
+.bdc-edit .panel + .panel,
+.bdc-edit .panel + .notice,
+.bdc-edit .notice + .panel,
+.bdc-edit .company-bar + .panel {
+  margin-top: 12px;
+}
+.bdc-edit .panel > .table-panel {
+  border: 0;
+  border-radius: 0;
+}
+.bdc-edit .page-heading p {
+  overflow-wrap: anywhere;
+}
+.bdc-edit .heading-actions .toggle-pill {
+  white-space: nowrap;
+}
+.bdc-edit .small {
+  font-size: 12px;
+}
+.bdc-edit .stack-tight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.bdc-edit .wrap-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.bdc-edit .cell-link {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.bdc-edit .cell-link:hover {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bdc-edit .cell-strong {
+  font-weight: 600;
+}
+.bdc-edit .data-grid td a:not(.cell-link) {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bdc-edit .data-grid td.row-actions {
+  display: table-cell;
+}
+.bdc-edit .list-heading {
+  margin: 22px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.bdc-edit .list-toolbar .field.compact select {
+  width: 100%;
+}
+
+/* The danger button in its quiet place (the ERP's Archive), and its Keep or Remove question. */
+.bdc-edit .button.danger,
+.bdc-dialog .button.danger {
+  color: var(--danger, #b4232f);
+}
+.bdc-edit .button.ghost.danger:hover,
+.bdc-dialog .button.ghost.danger:hover {
+  background: var(--danger-soft, #fff5f6);
+}
+.bdc-edit .icon-button.danger:hover {
+  color: var(--danger);
+}
+.bdc-edit .record-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+}
+.bdc-edit .record-end > .confirm-strip {
+  align-self: stretch;
+  margin: 0;
+}
+.bdc-edit .confirm-strip,
+.bdc-edit .waiting-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 8px 8px 8px 14px;
+  margin: 0 0 12px;
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  font-size: 13px;
+}
+.bdc-edit .waiting-strip {
+  border-color: #f3d39b;
+  background: #fff8ea;
+}
+:root[data-theme="dark"] .bdc-edit .waiting-strip {
+  border-color: #5a4720;
+  background: var(--surface);
+}
+.bdc-edit .confirm-strip > span:first-child,
+.bdc-edit .waiting-strip > span:first-child {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.bdc-edit .strip-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bdc-edit .button.danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+:root[data-theme="dark"] .bdc-edit .button.danger-solid {
+  color: #1d222b;
+}
+
+/* Read-only values as the ERP's record facts: a small uppercase label over the value. */
+.bdc-edit .bdc-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+.bdc-edit .bdc-facts > div {
+  min-width: 0;
+}
+.bdc-edit .bdc-facts dt {
+  margin-bottom: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.bdc-edit .bdc-facts dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.bdc-edit .bdc-facts.wide-first > div:first-child {
+  grid-column: 1 / -1;
+}
+.bdc-edit .bdc-facts code {
+  font-size: 13px;
+}
+
+/* Results of a check or test: an icon and the words, no box. */
+.bdc-edit .bdc-result {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.bdc-edit .bdc-result svg {
+  flex: 0 0 16px;
+  margin-top: 1px;
+}
+.bdc-edit .bdc-result.ok {
+  color: var(--ok-fg);
+}
+.bdc-edit .bdc-result.warn {
+  color: var(--warn-fg);
+}
+
+/* Forms inside panels. */
+.bdc-edit .form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  min-width: 0;
+}
+.bdc-edit .form-body > .notice {
+  margin: 0;
+}
+.bdc-edit .form-row-2,
+.bdc-edit .form-row-3 {
+  display: grid;
+  gap: 14px 16px;
+  align-items: start;
+  min-width: 0;
+}
+.bdc-edit .form-row-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.bdc-edit .form-row-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .bdc-edit .form-row-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .bdc-edit .form-row-2,
+  .bdc-edit .form-row-3,
+  .bdc-edit .form-grid-plain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.bdc-edit .field-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bdc-edit .field-hint {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.bdc-edit .field-hint:empty {
+  display: none;
+}
+.bdc-edit .field-hint.warn-text {
+  color: var(--warn-fg);
+}
+.bdc-edit select.input-bad {
+  border-color: #c2410c;
+}
+.bdc-edit .segmented {
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+  padding: 2px;
+}
+.bdc-edit .segmented button {
+  min-height: 26px;
+  padding: 3px 10px;
+  color: var(--muted);
+}
+.bdc-edit .segmented button[aria-pressed="true"] {
+  color: var(--brand-text);
+}
+.bdc-edit .segmented button:disabled {
+  cursor: default;
+}
+.bdc-edit .heading-tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.bdc-edit .panel-line {
+  margin: 0;
+  padding: 10px 14px 0;
+}
+.bdc-edit .panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.bdc-edit .check-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.bdc-edit .check-line {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.bdc-edit .copy-code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 720px;
+  padding: 2px 2px 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--hover);
+}
+.bdc-edit .copy-code code {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.bdc-edit .keybox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #f3d39b;
+  border-radius: var(--radius);
+  background: #fff8ea;
+  font-size: 13px;
+}
+:root[data-theme="dark"] .bdc-edit .keybox {
+  border-color: #5a4720;
+  background: var(--surface);
+}
+.bdc-edit .template-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.bdc-edit .template-arrow {
+  flex: 0 0 14px;
+  color: var(--muted);
+}
+.bdc-edit .template-cell select,
+.bdc-edit .template-cell input,
+.bdc-edit .data-grid select {
+  width: 100%;
+}
+.bdc-edit .grid-empty {
+  padding: 14px;
+}
+
+/* Comes from: three tiles, one chosen; the radio itself is hidden, the tile shows the choice and the focus. */
+.bdc-edit .source-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+@media (max-width: 860px) {
+  .bdc-edit .source-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.bdc-edit .source-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.bdc-edit .source-tile:hover {
+  background: var(--hover);
+}
+.bdc-edit .source-tile.selected {
+  border-color: #d9a51c;
+  background: var(--gold-soft);
+}
+.bdc-edit .source-tile:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.bdc-edit .source-tile input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.bdc-edit .source-tile .setup-tile-icon {
+  width: 32px;
+  height: 32px;
+}
+.bdc-edit .source-tiles:disabled .source-tile {
+  cursor: default;
+}
+.bdc-edit .source-tile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.bdc-edit .source-tile-text strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.bdc-edit .source-tile-text span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The company the Comes from and Goes to tabs show: its name, two facts, the switcher and Active. */
+.bdc-edit .company-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 28px;
+  padding: 12px 14px;
+}
+.bdc-edit .company-bar h2 {
+  font-size: 15px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.bdc-edit .company-bar .bdc-facts.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.bdc-edit .company-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Tiles that are buttons (kind choice, destination choice). */
+.bdc-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+}
+.tile-button {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The ERP record dialog: title and meta line, body, footer with the danger action left. */
+.bdc-dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+.bdc-dialog.wide {
+  width: min(960px, calc(100vw - 32px));
+}
+.bdc-dialog .dialog-heading {
+  align-items: flex-start;
+  padding: 18px 22px;
+}
+.bdc-dialog .dialog-heading h2 {
+  font-size: 19px;
+  letter-spacing: -0.3px;
+  line-height: 1.35;
+}
+.bdc-dialog .dialog-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.bdc-dialog .dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 22px 22px;
+}
+.bdc-dialog .dialog-body > .bdc-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.bdc-dialog .dialog-body > .notice,
+.bdc-dialog .dialog-body > .confirm-strip {
+  margin: 0;
+}
+.bdc-dialog .dialog-footer {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 22px;
+}
+.bdc-dialog .form-grid-plain {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+  min-width: 0;
+}
+.bdc-dialog .form-grid-plain.one {
+  grid-template-columns: minmax(0, 320px);
+}
+.bdc-dialog .dialog-result:empty {
+  display: none;
+}
+.bdc-dialog .dialog-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bdc-dialog .dialog-check {
+  font-size: 13px;
+  color: var(--text);
+}
+.bdc-dialog .problems {
+  margin: 0;
+  padding-left: 18px;
+}
+.bdc-dialog .setup-tile {
+  padding: 12px;
+}
+.bdc-dialog .setup-tile-body strong {
+  font-size: 14px;
+}
+@media (max-width: 640px) {
+  .bdc-dialog .form-grid-plain,
+  .bdc-dialog .dialog-body > .bdc-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bdc-dialog .dialog-heading,
+  .bdc-dialog .dialog-body,
+  .bdc-dialog .dialog-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* The floating Save bar: the changes not saved, what blocks Save, Discard and Save. */
+.bdc-edit .save-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 16px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid #edca74;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 8px 28px #20263a24;
+}
+:root[data-theme="dark"] .bdc-edit .save-bar {
+  border-color: #5a4720;
+  box-shadow: 0 8px 28px #0006;
+}
+.bdc-edit .save-bar-quiet {
+  justify-content: flex-start;
+  border-color: var(--line);
+  box-shadow: none;
+}
+.bdc-edit .save-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 320px;
+  font-size: 13px;
+}
+.bdc-edit .save-bar-text strong {
+  font-weight: 600;
+}
+.bdc-edit .save-bar-text ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.bdc-edit .save-bar-problems {
+  font-weight: 500;
+}
+.bdc-edit .save-bar ul.save-bar-problems {
+  color: var(--warn-fg);
+}
+.bdc-edit .conflict {
+  margin-top: 16px;
+  padding: 14px;
+}

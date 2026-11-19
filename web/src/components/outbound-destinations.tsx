@@ -1,34 +1,42 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Send } from "lucide-react";
-import { DataGrid, type GridColumn } from "./ui/data-grid";
+import Link from "next/link";
+import { ArrowLeft, Plus, Send, Trash2 } from "lucide-react";
+import { DataGrid, StatusPill, type GridColumn } from "./ui/data-grid";
 import { Notice } from "./notice";
 import { change, draft, useDraft } from "./save-bar";
-import { Chip, CommitInput, ConfirmStrip, ConnectionSelect, Field, ICON, Switch, SwitchField, typePath, useAnswer } from "./outbound-parts";
+import { BdcDialog, CommitInput, ConnectionSelect, Field, ICON, RemoveLine, Result, RowToggle, typePath, useAnswer } from "./outbound-parts";
 import { api } from "@/lib/api";
 import * as X from "@/lib/exportlogic";
 
 // Goes to (board W10, the second half of export.js companyScreen) and one destination's form (board W11, export.js
 // destinationScreen): where the file goes, the columns or index fields filled from the document with the value of the
-// last document beside each, and Test, which signs in and checks that every mapped field exists.
+// last document beside each, and Test, which signs in and checks that every mapped field exists. A destination is
+// added from the kind tiles of a dialog and removed at the end of its own form.
 
 const same = (a: unknown, b: unknown) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
 
 type DestRow = { id: string; kind: string; name: string; enabled: boolean; known: boolean; summary: string; mail?: boolean };
 
-export function DestinationsTab({ type, entry, descriptors, ro }: { type: any; entry: any; descriptors: any[]; ro: boolean }) {
-  const router = useRouter();
+export function DestinationsTab({
+  type,
+  entry,
+  descriptors,
+  ro,
+  onAdd,
+}: {
+  type: any;
+  entry: any;
+  descriptors: any[];
+  ro: boolean;
+  onAdd: () => void;
+}) {
   const state = useDraft();
-  const [picking, setPicking] = useState(false);
-  const [confirm, setConfirm] = useState<DestRow | null>(null);
   const company = entry.dataAreaId;
   const rows = X.destinationRows(entry, descriptors);
   const mail = state.body.mail;
   const mailReady = Boolean(mail && mail.enabled && mail.from);
-  const present = new Set(rows.map((r) => r.kind));
-  const offered = descriptors.filter((d) => !present.has(d.kind));
   const gridRows: DestRow[] = [
     ...rows.map((r) => ({ ...r, id: r.kind })),
     { id: "#mail", kind: "mail", name: "Mail", enabled: entry.mail === true, known: true, summary: "", mail: true },
@@ -37,42 +45,51 @@ export function DestinationsTab({ type, entry, descriptors, ro }: { type: any; e
     {
       key: "destination",
       label: "Destination",
-      render: (r) => (
-        <span className="cell-stack">
-          {r.mail ? (
-            <strong>Mail</strong>
-          ) : r.known ? (
-            <Link className="cell-link" href={typePath(type.id, company, "to", r.kind)}>
-              {r.name}
-            </Link>
+      width: 240,
+      render: (r) =>
+        r.mail || !r.known ? (
+          <span className="cell-strong">{r.name}</span>
+        ) : (
+          <Link className="cell-link" href={typePath(type.id, company, "to", r.kind)}>
+            {r.name}
+          </Link>
+        ),
+    },
+    {
+      key: "where",
+      label: "Where",
+      render: (r) =>
+        r.mail ? (
+          mailReady ? (
+            <span className="wrap-cell">To the recipient in the document, from {mail.from}</span>
           ) : (
-            <strong>{r.name}</strong>
-          )}
-          <span className="cell-secondary wrap-cell">
-            {r.mail
-              ? mailReady
-                ? `To the recipient the ERP names in the document, from ${mail.from}.`
-                : "Document mail is not connected yet. Set it up under Connections."
-              : r.summary || "Not set up yet"}
-          </span>
-        </span>
-      ),
+            <span className="cell-muted wrap-cell">
+              Document mail is not connected yet. <Link href="/connections/">Connections</Link>
+            </span>
+          )
+        ) : r.summary ? (
+          <span className="wrap-cell">{r.summary}</span>
+        ) : (
+          <span className="cell-muted">Not set up yet</span>
+        ),
     },
     {
       key: "on",
-      label: "On",
-      width: 80,
+      label: "State",
+      width: 110,
       render: (r) =>
         r.mail ? (
-          <Switch
-            label="Mail on"
+          <RowToggle
+            label="On"
+            name="Mail on"
             checked={entry.mail === true}
             disabled={ro || (!mailReady && entry.mail !== true)}
             onChange={(on) => change((d) => X.setMail(d, type.id, company, on))}
           />
         ) : r.known ? (
-          <Switch
-            label={`${r.name} on`}
+          <RowToggle
+            label="On"
+            name={`${r.name} on`}
             checked={r.enabled}
             disabled={ro}
             onChange={(on) => change((d) => X.setDestinationEnabled(d, type.id, company, r.kind, on))}
@@ -83,83 +100,65 @@ export function DestinationsTab({ type, entry, descriptors, ro }: { type: any; e
   return (
     <section className="panel" aria-labelledby="to-heading">
       <div className="section-heading">
-        <h2 id="to-heading" className="caps">
-          Goes to
-        </h2>
+        <h2 id="to-heading">Goes to</h2>
         {!ro && (
-          <button type="button" className="button secondary" aria-expanded={picking} onClick={() => setPicking(!picking)}>
-            {picking ? (
-              "Close"
-            ) : (
-              <>
-                <Plus {...ICON} />
-                Add a destination
-              </>
-            )}
+          <button type="button" className="button secondary" onClick={onAdd}>
+            <Plus {...ICON} aria-hidden="true" />
+            Add a destination
           </button>
         )}
       </div>
-      {picking && !ro && (
-        <div className="panel-inset">
-          {offered.length ? (
-            <div className="setup-tiles">
-              {offered.map((d) => (
-                <button
-                  key={d.kind}
-                  type="button"
-                  className="setup-tile tile-button"
-                  onClick={() => {
-                    const connection = state.body.connections.find((c: any) => c.kind === d.connectionKind);
-                    change((dr) => X.addDestination(dr, type.id, company, d.kind, connection ? connection.id : ""));
-                    setPicking(false);
-                    router.push(typePath(type.id, company, "to", d.kind));
-                  }}
-                >
-                  <span className="setup-tile-icon">
-                    <Send {...ICON} aria-hidden="true" />
-                  </span>
-                  <span className="setup-tile-body">
-                    <strong>{d.name}</strong>
-                    <span>{d.description || ""}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="muted small">Every destination of this version is set up for this company already.</p>
-          )}
-        </div>
-      )}
-      {confirm && (
-        <div className="panel-inset">
-          <ConfirmStrip
-            text={`Remove ${confirm.name}? Documents already delivered stay there.`}
-            onKeep={() => setConfirm(null)}
-            onRemove={() => {
-              change((d) => X.removeDestination(d, type.id, company, confirm.kind));
-              setConfirm(null);
-            }}
-          />
-        </div>
-      )}
-      <DataGrid
-        label={`Destinations of Company ${company}`}
-        columns={columns}
-        rows={gridRows}
-        rowClassName={(r) => (confirm?.id === r.id ? "bdc-row-removing" : undefined)}
-        actionsWidth="110px"
-        actions={
-          ro
-            ? undefined
-            : (r) =>
-                r.mail ? null : (
-                  <button type="button" className="text-button quiet-link" aria-label={`Remove ${r.name}`} onClick={() => setConfirm(r)}>
-                    Remove
-                  </button>
-                )
-        }
-      />
+      <DataGrid label={`Destinations of Company ${company}`} columns={columns} rows={gridRows} />
     </section>
+  );
+}
+
+/** The destination kinds this version offers and the company does not have yet, as tiles; one click adds it. */
+export function AddDestinationDialog({ type, entry, descriptors, onClose }: { type: any; entry: any; descriptors: any[]; onClose: () => void }) {
+  const router = useRouter();
+  const state = useDraft();
+  const company = entry.dataAreaId;
+  const present = new Set(X.destinationRows(entry, descriptors).map((r) => r.kind));
+  const offered = descriptors.filter((d) => !present.has(d.kind));
+  return (
+    <BdcDialog
+      title="Add a destination"
+      subtitle={`Company ${company}`}
+      onClose={onClose}
+      footer={
+        <button type="button" className="button secondary" onClick={onClose}>
+          Cancel
+        </button>
+      }
+    >
+      {offered.length ? (
+        <div className="setup-tiles bdc-tiles">
+          {offered.map((d) => (
+            <button
+              key={d.kind}
+              type="button"
+              className="setup-tile tile-button"
+              onClick={() => {
+                const connection = state.body.connections.find((c: any) => c.kind === d.connectionKind);
+                change((dr) => X.addDestination(dr, type.id, company, d.kind, connection ? connection.id : ""));
+                onClose();
+                router.push(typePath(type.id, company, "to", d.kind));
+              }}
+            >
+              <span className="setup-tile-icon">
+                <Send {...ICON} aria-hidden="true" />
+              </span>
+              <span className="setup-tile-body">
+                <strong>{d.name}</strong>
+                <span>{d.description || ""}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">Every destination of this version is set up for this company.</p>
+      )}
+    </BdcDialog>
   );
 }
 
@@ -212,7 +211,6 @@ function DestinationEditor({ type, entry, d, sample, back, ro }: { type: any; en
   const [fieldChoices, setFieldChoices] = useState<Choice[]>([]);
   const [own, setOwn] = useState<Record<number, boolean>>({});
   const [test, setTest] = useState<"busy" | { ok: boolean; text: string } | null>(null);
-  const [removing, setRemoving] = useState(false);
 
   const current = () => {
     const t = draft.body?.documentTypes.find((x: any) => same(x.id, type.id));
@@ -238,7 +236,8 @@ function DestinationEditor({ type, entry, d, sample, back, ro }: { type: any; en
     if (!s.lookup) return;
     const f = current() || form;
     if (s.dependsOn && !String(f.settings[s.dependsOn] || "").trim()) {
-      hint(s.key, { text: "Fill in the field before first." });
+      const before = d.settings.find((x: any) => x.key === s.dependsOn);
+      hint(s.key, { text: `Fill in ${before ? before.label : s.dependsOn} first.` });
       return;
     }
     hint(s.key, { text: "Loading" });
@@ -408,9 +407,7 @@ function DestinationEditor({ type, entry, d, sample, back, ro }: { type: any; en
         const n = rows.findIndex((r) => r.uid === row.uid) + 1;
         return (
           <span className="template-cell">
-            <span className="muted" aria-hidden="true">
-              ←
-            </span>
+            <ArrowLeft size={14} strokeWidth={1.75} className="template-arrow" aria-hidden="true" />
             <span className="stack-tight">
               <select
                 aria-label={`Filled from the document ${n}`}
@@ -454,11 +451,11 @@ function DestinationEditor({ type, entry, d, sample, back, ro }: { type: any; en
       render: (row) => {
         const known = fieldChoices.some((c) => c.value === row.field);
         return row.field && !known && fieldChoices.length ? (
-          <span className="warn-text small">
+          <span className="warn-text">
             {kind === "sharepoint" ? "The library" : d.name} has no field &quot;{row.field}&quot; yet
           </span>
         ) : (
-          <span className="wrap-cell">{hasFields ? X.templatePreview(row.template, fields) || "(empty)" : ""}</span>
+          <span className="wrap-cell">{hasFields ? X.templatePreview(row.template, fields) || <span className="cell-muted">Empty</span> : ""}</span>
         );
       },
     },
@@ -479,34 +476,42 @@ function DestinationEditor({ type, entry, d, sample, back, ro }: { type: any; en
     );
   };
 
+  const removeRow = (uid: number) => {
+    const next = rowsRef.current.filter((r) => r.uid !== uid);
+    setRows(next);
+    rowsRef.current = next;
+    apply({}, next);
+  };
+
   return (
     <>
-      <section className="panel form-panel" aria-labelledby="dest-heading">
+      <section className="panel" aria-labelledby="dest-heading">
         <div className="section-heading">
           <h2 id="dest-heading">{d.name}</h2>
-          <span className="row-actions">
-            <Chip ok={Boolean(d.connected)}>{d.connected ? "Connected" : "Not connected yet: set it up under Connections"}</Chip>
-            <SwitchField text="On" checked={form.enabled} disabled={ro} onChange={(on) => apply({ enabled: on })} />
+          <span className="heading-tools">
+            <StatusPill tone={d.connected ? "green" : "amber"}>{d.connected ? "Connected" : "Not connected"}</StatusPill>
+            <RowToggle label="On" name={`${d.name} on`} checked={form.enabled} disabled={ro} large onChange={(on) => apply({ enabled: on })} />
           </span>
         </div>
-        {(d.settings.length > 0 || connectionField) && (
-          <div className="form-body">
-            <h3 className="subheading">{kind === "sharepoint" ? "Where the file goes" : "Settings"}</h3>
+        <div className="form-body">
+          {!d.connected && (
+            <Notice kind="warn">
+              Set up its connection under <Link href="/connections/">Connections</Link> first.
+            </Notice>
+          )}
+          {(d.settings.length > 0 || connectionField) && (
             <div className="form-row-3">
               {connectionField}
               {d.settings.map(settingControl)}
             </div>
-            {folderLine && <span className="muted small">{folderLine}</span>}
-          </div>
-        )}
+          )}
+          {folderLine && <span className="muted small">{folderLine}</span>}
+        </div>
       </section>
       {d.fieldsLookup && (
         <section className="panel" aria-labelledby="columns-heading">
           <div className="section-heading">
-            <div>
-              <h2 id="columns-heading">{kind === "sharepoint" ? "Columns of the library" : `Fields of ${d.name}`}</h2>
-              <p>{hasFields ? "Pick a field and what fills it. The right side shows the value from the last document." : sample.message}</p>
-            </div>
+            <h2 id="columns-heading">{kind === "sharepoint" ? "Columns of the library" : `Fields of ${d.name}`}</h2>
             {!ro && (
               <button
                 type="button"
@@ -517,69 +522,63 @@ function DestinationEditor({ type, entry, d, sample, back, ro }: { type: any; en
                   rowsRef.current = next;
                 }}
               >
-                <Plus {...ICON} />
-                Add a column
+                <Plus {...ICON} aria-hidden="true" />
+                {kind === "sharepoint" ? "Add a column" : "Add a field"}
               </button>
             )}
           </div>
+          {!hasFields && sample.message && <p className="panel-line muted small">{sample.message}</p>}
           <DataGrid
             label={kind === "sharepoint" ? "Columns of the library" : `Fields of ${d.name}`}
             columns={mapColumns}
             rows={rows.map((r) => ({ ...r, id: String(r.uid) }))}
-            actionsWidth="110px"
+            actionsWidth="56px"
             actions={
               ro
                 ? undefined
-                : (row) => (
-                    <button
-                      type="button"
-                      className="text-button quiet-link"
-                      aria-label={`Remove ${head.toLowerCase()} ${rows.findIndex((r) => r.uid === row.uid) + 1}`}
-                      onClick={() => {
-                        const next = rowsRef.current.filter((r) => r.uid !== row.uid);
-                        setRows(next);
-                        rowsRef.current = next;
-                        apply({}, next);
-                      }}
-                    >
-                      Remove
-                    </button>
-                  )
+                : (row) => {
+                    const n = rows.findIndex((r) => r.uid === row.uid) + 1;
+                    return (
+                      <button
+                        type="button"
+                        className="icon-button small danger"
+                        aria-label={`Remove ${head.toLowerCase()} ${n}`}
+                        title="Remove"
+                        onClick={() => removeRow(row.uid)}
+                      >
+                        <Trash2 {...ICON} />
+                      </button>
+                    );
+                  }
             }
-            empty={<p className="empty-note grid-empty">Nothing mapped yet. Add a column fills one from the document.</p>}
+            empty={<p className="empty-note grid-empty">Nothing mapped yet.</p>}
           />
           {!ro && (
-            <div className="form-body">
-              <div className="check-row-actions">
-                <button type="button" className="button secondary" onClick={() => void runTest()}>
-                  Test
-                </button>
-                <span className="muted small">Signs in, reads the fields and checks that every mapped one exists. Nothing is sent.</span>
-              </div>
-              <div aria-live="polite">
-                {test === "busy" ? <span className="muted">Signing in</span> : test ? <Chip ok={test.ok}>{test.text}</Chip> : null}
-              </div>
+            <div className="panel-foot">
+              <button
+                type="button"
+                className="button secondary"
+                title="Signs in, reads the fields and checks every mapped one. Sends nothing."
+                onClick={() => void runTest()}
+              >
+                Test
+              </button>
+              <span aria-live="polite">
+                {test === "busy" ? <span className="muted">Signing in</span> : test ? <Result ok={test.ok}>{test.text}</Result> : null}
+              </span>
             </div>
           )}
         </section>
       )}
       {!ro && (
-        <div className="remove-line">
-          {removing ? (
-            <ConfirmStrip
-              text={`Remove ${d.name} for company ${company}? Documents already delivered stay there.`}
-              onKeep={() => setRemoving(false)}
-              onRemove={() => {
-                change((dr) => X.removeDestination(dr, type.id, company, kind));
-                router.push(back);
-              }}
-            />
-          ) : (
-            <button type="button" className="text-button quiet-link" onClick={() => setRemoving(true)}>
-              Remove this destination
-            </button>
-          )}
-        </div>
+        <RemoveLine
+          what={d.name}
+          text={`Remove ${d.name} for company ${company}? Documents already delivered stay there.`}
+          onRemove={() => {
+            change((dr) => X.removeDestination(dr, type.id, company, kind));
+            router.push(back);
+          }}
+        />
       )}
     </>
   );

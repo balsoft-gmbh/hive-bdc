@@ -1,10 +1,10 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { ArrowLeft, Check, Copy } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Check, CircleAlert, CircleCheck, Copy } from "lucide-react";
 import { saveConfig } from "@/lib/api";
-import { STEP_NAMES, stepHref } from "@/app/setup/steps";
+import { SETUP_LINE, SETUP_TITLE, STEP_NAMES, stepHref, stepLabel } from "@/app/setup/steps";
 import { ConflictPanel } from "./conflict-panel";
 import { Notice } from "./notice";
 import { PageHeading } from "./page-heading";
@@ -13,28 +13,38 @@ export const ICON = { size: 16, strokeWidth: 1.75 };
 
 export type Progress = { done: boolean[]; open: number };
 
+/** The steps as the CRM tab bar: number and name, a check once done; every step reached is a link. */
 export function StepBar({ step, progress }: { step: number; progress: Progress }) {
   return (
     <nav className="setup-steps-nav" aria-label="Set-up steps">
-      <ol className="setup-steps">
+      <ol className="setup-tabs setup-steps">
         {STEP_NAMES.map((name, i) => {
           const n = i + 1;
           const now = n === step;
           const done = progress.done[i] && !now;
+          const state = now ? "active" : done ? "done" : n <= progress.open ? "open" : "later";
           const inner = (
             <>
               <span className="setup-step-mark" aria-hidden="true">
-                {done ? <Check size={16} strokeWidth={2} /> : n}
+                {done ? <Check size={12} strokeWidth={2.5} /> : n}
               </span>
-              <span className="setup-step-text">
-                <small>{done ? `STEP ${n} · DONE` : `STEP ${n}`}</small>
-                <strong>{name}</strong>
+              <span className="setup-step-name" aria-hidden="true">
+                {name}
               </span>
+              <span className="sr-only">{stepLabel(i, done)}</span>
             </>
           );
           return (
-            <li key={n} className={`setup-step ${now ? "current" : done ? "done" : "next"}`} aria-current={now ? "step" : undefined}>
-              {!now && n <= progress.open ? <Link href={stepHref(n)}>{inner}</Link> : <span>{inner}</span>}
+            <li key={n}>
+              {!now && n <= progress.open ? (
+                <Link className={`setup-tab ${state}`} href={stepHref(n)}>
+                  {inner}
+                </Link>
+              ) : (
+                <span className={`setup-tab ${state}`} aria-current={now ? "step" : undefined}>
+                  {inner}
+                </span>
+              )}
             </li>
           );
         })}
@@ -43,31 +53,13 @@ export function StepBar({ step, progress }: { step: number; progress: Progress }
   );
 }
 
-/** Heading, step bar and, for everyone but an Administrator, the note that the steps are read-only. */
-export function StepFrame({
-  step,
-  progress,
-  title,
-  description,
-  readOnly,
-  children,
-}: {
-  step: number;
-  progress: Progress;
-  title: ReactNode;
-  description?: ReactNode;
-  readOnly: boolean;
-  children: ReactNode;
-}) {
+/** Title, step bar and, for everyone but an Administrator, the note that the steps are read-only. */
+export function StepFrame({ step, progress, readOnly, children }: { step: number; progress: Progress; readOnly: boolean; children: ReactNode }) {
   return (
     <div className="setup-flow">
-      <PageHeading eyebrow="HIVE BDC SET-UP" title={title} description={description} />
+      <PageHeading title={SETUP_TITLE} description={SETUP_LINE} />
       <StepBar step={step} progress={progress} />
-      {readOnly && (
-        <Notice kind="info">
-          An administrator is setting Hive BDC up. You can follow the steps here, and the other pages open once it is started.
-        </Notice>
-      )}
+      {readOnly && <Notice kind="info">An administrator is setting Hive BDC up. The other pages open once it is started.</Notice>}
       {children}
     </div>
   );
@@ -89,18 +81,34 @@ export function StepActions({ back, next }: { back?: number; next?: ReactNode })
   );
 }
 
-/** A result in words with a dot: green when it worked, amber when not. Long messages wrap. */
-export function Chip({ ok, children }: { ok: boolean; children: ReactNode }) {
+/** A panel with the ERP section heading: title, an optional line when the user has to act, a state on the right. */
+export function Panel({ id, title, line, state, children }: { id: string; title: ReactNode; line?: ReactNode; state?: ReactNode; children: ReactNode }) {
   return (
-    <span className={`setup-chip ${ok ? "ok" : "warn"}`}>
-      <span className="dot" aria-hidden="true" />
+    <section className="panel setup-panel" aria-labelledby={id}>
+      <div className="section-heading">
+        <div>
+          <h2 id={id}>{title}</h2>
+          {line && <p>{line}</p>}
+        </div>
+        {state}
+      </div>
+      <div className="setup-panel-body">{children}</div>
+    </section>
+  );
+}
+
+/** The outcome of a check in one line: a green or amber mark and the service's own words. */
+export function Result({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <span className={`setup-result ${ok ? "ok" : "warn"}`}>
+      {ok ? <CircleCheck {...ICON} aria-hidden="true" /> : <CircleAlert {...ICON} aria-hidden="true" />}
       <span>{children}</span>
     </span>
   );
 }
 
 export function Hint({ children, warn }: { children: ReactNode; warn?: boolean }) {
-  return <small className={`setup-hint${warn ? " warn-text" : ""}`}>{children}</small>;
+  return <small className={`setup-hint${warn ? " warn" : ""}`}>{children}</small>;
 }
 
 export function TextField({
@@ -143,26 +151,47 @@ export function TextField({
   );
 }
 
+/** An icon-only copy button: the label is its accessible name and tooltip; a check shows for a moment once copied. */
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const [said, setSaid] = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setSaid("Copied.");
+      setSaid("Copied");
     } catch {
-      setSaid("Select the text and copy it.");
+      setSaid("Select the text and copy it");
     }
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setSaid(""), 2000);
   };
   return (
-    <span className="setup-copy">
-      <button type="button" className="button secondary" aria-label={label} title={label} onClick={() => void copy()}>
-        <Copy {...ICON} />
-        Copy
+    <>
+      <button type="button" className="icon-button small setup-copy" aria-label={label} title={label} onClick={() => void copy()}>
+        {said === "Copied" ? <Check {...ICON} /> : <Copy {...ICON} />}
       </button>
-      <span className="muted" aria-live="polite">
+      <span className={said && said !== "Copied" ? "setup-hint" : "sr-only"} aria-live="polite">
         {said}
       </span>
-    </span>
+    </>
+  );
+}
+
+/** Read-only values as the ERP record dialog shows them: small uppercase label above the value. */
+export function Facts({ items }: { items: { label: string; value: ReactNode; copy?: { text: string; label: string } }[] }) {
+  return (
+    <dl className="spotlight-facts record-facts setup-facts">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>
+            <span className="setup-fact-value">{item.value}</span>
+            {item.copy && <CopyButton text={item.copy.text} label={item.copy.label} />}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { config } from "./fixtures";
-import { calls, mock, noSideScroll, opened, watchCsp } from "./helpers";
+import { calls, mock, noRowButtons, noSideScroll, onePrimaryAtMost, opened, watchCsp } from "./helpers";
 
 // The shell, the Overview and the Document history (design 2026-11-19-web-console-nextjs.md, failure cases 1, 2, 6,
 // 7, 9, 10, 11, 13).
@@ -132,4 +132,19 @@ test("overview and document history pass the accessibility check", async ({ page
     const serious = result.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
     expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
   }
+});
+
+test("overview and document history follow the CRM: one primary button at most, no buttons in rows but Retry", async ({ page }) => {
+  for (const path of ["/", "/history/"]) {
+    await page.goto(path);
+    await opened(page);
+    await onePrimaryAtMost(page);
+    await noRowButtons(page);
+  }
+  await page.goto("/");
+  await opened(page);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Overview");
+  await expect(page.locator(".stats-grid .stat-card")).toHaveCount(3);
+  await page.getByRole("link", { name: "SI-0041" }).click();
+  await expect(page).toHaveURL(/\/history\/\?search=SI-0041$/);
 });

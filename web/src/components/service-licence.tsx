@@ -4,50 +4,50 @@ import { useConsole } from "./console-context";
 import { LicenceUpload } from "./licence-upload";
 import { Notice } from "./notice";
 import { featureWords, germanDate, licenceNote, licenceWorks } from "@/lib/logic";
+import { Facts, Panel } from "./service-ui";
 import type { Identity } from "./service-status";
 
-// The Licence tab: the licence of GET /status, the tenant it was checked against, its warning, and the upload of a
-// renewal or another file (POST /license through LicenceUpload). Viewers and Operators see the licence only.
+// The Licence tab: the licence of GET /status as read-only facts, the tenant it was checked against, its warning, and
+// the drop zone for a renewal or another file (POST /license through LicenceUpload). Viewers and Operators see the
+// licence only.
 
 export function ServiceLicence({ identity }: { identity: Identity | null }) {
   const { me, status, refresh } = useConsole();
   const licence = status?.license ?? {};
   const works = licenceWorks(licence);
-  const state = works
-    ? `Valid until ${germanDate(licence.expires)}`
-    : licence.state === "Missing"
-      ? "No licence yet"
-      : `Licence ${String(licence.state || "unknown").toLowerCase()}`;
-  const line = [
-    licence.customer,
-    featureWords(licence.features),
-    identity?.tenantId ? `checked against tenant ${identity.tenantId.slice(0, 8)}` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const missing = !licence.state || licence.state === "Missing";
+  const state = licence.state === "Grace" ? "Grace period" : works ? "Valid" : missing ? "No licence yet" : String(licence.state);
   const warning = licenceNote(licence) || (!works && licence.message) || "";
   const canChange = Boolean(me?.canChange);
+  const tenant = identity?.tenantId || "";
 
   return (
-    <section className="panel service-panel" aria-labelledby="licence-heading">
-      <div className="section-heading">
-        <div>
-          <h2 id="licence-heading">Licence</h2>
-          {line && <p>{line}</p>}
-        </div>
-        <StatusPill tone={works ? "green" : "amber"}>{state}</StatusPill>
-      </div>
-      {(warning || canChange) && (
-        <div className="service-body">
-          {warning && <Notice kind="warn">{warning}</Notice>}
-          {canChange && (
-            <div className="service-upload">
-              <span className="service-label">Renewal or another file:</span>
-              <LicenceUpload label="Renewal or another file" onStored={() => void refresh()} />
-            </div>
-          )}
+    <Panel
+      id="licence"
+      title="Licence"
+      pill={<StatusPill tone={works && licence.state === "Valid" ? "green" : works ? "amber" : "rose"}>{state}</StatusPill>}
+    >
+      {warning && <Notice kind="warn">{warning}</Notice>}
+      <Facts
+        items={
+          missing
+            ? [{ label: "Tenant", value: tenant, span: 2 as const }]
+            : [
+                { label: "Licensed to", value: licence.customer },
+                { label: "Valid until", value: germanDate(licence.expires) },
+                { label: "Features", value: featureWords(licence.features) },
+                { label: "Tenant", value: tenant, span: 2 as const },
+              ]
+        }
+      />
+      {canChange && (
+        <div className="service-upload">
+          <span className="service-label">
+            {missing ? "Licence file" : "New licence file"}
+          </span>
+          <LicenceUpload label={missing ? "Licence file" : "New licence file"} onStored={() => void refresh()} />
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

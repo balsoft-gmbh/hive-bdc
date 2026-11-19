@@ -3,25 +3,20 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { PageHeading } from "@/components/page-heading";
 import { useConsole } from "@/components/console-context";
+import { useCrumbs } from "@/components/crumbs";
 import { ServiceLicence } from "@/components/service-licence";
 import { ServiceLog } from "@/components/service-log";
 import { ServiceStatus, type Identity } from "@/components/service-status";
-import { ServiceTabs, tabOf } from "@/components/service-ui";
+import { SERVICE_TABS, ServiceTabs, tabOf } from "@/components/service-ui";
 import { ServiceUpdates } from "@/components/service-updates";
 import { api } from "@/lib/api";
 import { updateBadge, type UpdateView } from "@/lib/updatelogic";
 
-// The Service page (design part 6): one page with the tabs Status, Licence, Updates and Technical log, chosen by
-// ?tab= so a reload or a link (the Overview's licence tile) opens the same tab.
+// The Service page (design part 6, version 2): one page with the tabs Status, Licence, Updates and Technical log,
+// chosen by ?tab= so a reload or a link (the Overview's licence card) opens the same tab.
 
 function Heading() {
-  return (
-    <PageHeading
-      eyebrow="SERVICE"
-      title="This instance"
-      description="Whether it takes documents, its licence, its version and what it writes into its log."
-    />
-  );
+  return <PageHeading title="Service" description="Status, licence, updates and the log of this instance." />;
 }
 
 function ServicePage() {
@@ -33,6 +28,7 @@ function ServicePage() {
   const [identityAsked, setIdentityAsked] = useState(false);
   const [updateView, setUpdateView] = useState<UpdateView | null>(null);
   const needsIdentity = tab === "status" || tab === "licence";
+  useCrumbs([{ label: SERVICE_TABS.find((t) => t.id === tab)?.title ?? "Status" }]);
 
   useEffect(() => {
     if (!needsIdentity || identityAsked) return;

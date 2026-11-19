@@ -21,6 +21,7 @@ import { initials, licenceLine, topRole } from "@/lib/logic";
 import { updateBadge } from "@/lib/updatelogic";
 import { BrandLogo } from "./brand-logo";
 import { isSetupPath, useConsole } from "./console-context";
+import { useCrumbLevels } from "./crumbs";
 
 // The CRM shell (balsoft-crm crm-workspace.tsx, as the Hive ERP copies it): sidebar with the brand, the instance card,
 // the navigation and the account control; top bar with breadcrumb, the instance state and the theme switch. The
@@ -126,16 +127,34 @@ function InstanceState() {
     <span className={`instance-state${running && !paused ? "" : " off"}`} title={licence.text}>
       <span className="dot" aria-hidden="true" />
       {text}
-      <span className={`instance-licence${licence.ok ? "" : " warn"}`}>{licence.text}</span>
     </span>
   );
 }
 
-function Breadcrumb({ title }: { title: string }) {
+/** Hive BDC > the page > the levels the page sets; every level but the last is a link (design version 2, V4). */
+function Breadcrumb({ page }: { page: Page | undefined }) {
+  const levels = useCrumbLevels();
+  const title = page?.title ?? "Page not found";
   return (
     <nav className="breadcrumb" aria-label="Breadcrumb">
       <Link href="/">Hive BDC</Link> <ChevronRight size={14} />
-      <strong aria-current="page">{title}</strong>
+      {levels.length === 0 || !page ? (
+        <strong aria-current="page">{title}</strong>
+      ) : (
+        <>
+          <Link href={page.href}>{title}</Link>
+          {levels.map((level, i) => (
+            <span key={`${level.label}-${i}`} className="crumb-level">
+              <ChevronRight size={14} />
+              {i < levels.length - 1 && level.href ? (
+                <Link href={level.href}>{level.label}</Link>
+              ) : (
+                <strong aria-current="page">{level.label}</strong>
+              )}
+            </span>
+          ))}
+        </>
+      )}
     </nav>
   );
 }
@@ -262,14 +281,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <button className="icon-button mobile-toggle" aria-label="Open navigation" onClick={() => setMobileMenu(true)}>
             <Menu size={20} />
           </button>
-          <Breadcrumb title={page?.title ?? "Page not found"} />
+          <Breadcrumb page={page} />
           <div className="topbar-right">
             <InstanceState />
-            <span className="instance-version" title="Instance and version">
-              {instance}
-              {me ? ` · ${me.version}` : ""}
-            </span>
             {themeButton}
+            <AccountMenu placement="topbar" />
           </div>
         </header>
         <main id="main-content" tabIndex={-1}>

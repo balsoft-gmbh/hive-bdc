@@ -3,30 +3,31 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Container, Globe, LoaderCircle, MessagesSquare, ShieldCheck } from "lucide-react";
+import { Container, Globe, LoaderCircle, MessagesSquare, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { andList, cleanPrefix, postBody, roleCommand, setupType, sourceEntries, typeWords, withBlobSource } from "@/lib/logic";
 import { companiesWord, stepHref, typesWord } from "@/app/setup/steps";
 import { useConsole } from "./console-context";
 import { Notice } from "./notice";
-import { Chip, CopyButton, ICON, Loading, StepActions, StepFrame, TextField, useConfigSave, type Progress } from "./setup-parts";
+import { CopyButton, Hint, ICON, Loading, Panel, Result, StepActions, StepFrame, TextField, useConfigSave, type Progress } from "./setup-parts";
 
 const ICON_18 = { size: 18, strokeWidth: 1.75 };
 
 const SOURCES = [
-  { value: "blob", title: "Azure Blob Storage", text: "Standard for F&O. F&O writes each export and its PDF into a container.", icon: Container },
+  { value: "blob", title: "Azure Blob Storage", text: "F&O writes each export with its PDF to a container.", icon: Container },
   { value: "servicebus", title: "Azure Service Bus", text: "F&O sends each export as a message to a queue or topic.", icon: MessagesSquare },
   { value: "https", title: "Web address (HTTPS)", text: "Power Automate, a Logic App or another ERP posts to Hive BDC.", icon: Globe },
 ];
 
+const ACCESS = [
+  { value: "identity", label: "Managed identity" },
+  { value: "key", label: "Connection string" },
+] as const;
+
 function PlanNote({ check, config }: { check: any; config: any }) {
   const plan = setupType(check.byType, config.documentTypes);
   if (!plan.type) {
-    return (
-      <Notice kind="warn">
-        No export of a document type Hive BDC knows is waiting. Send one document from F&O into this container, then check again.
-      </Notice>
-    );
+    return <Notice kind="warn">No export of a document type Hive BDC knows is waiting. Send one document from F&O into this container, then check again.</Notice>;
   }
   const type = config.documentTypes.find((t: any) => t.id === plan.type);
   const later = plan.later.map((l) => {
@@ -34,7 +35,7 @@ function PlanNote({ check, config }: { check: any; config: any }) {
     return l.documentType === "unknown" ? `${l.count} without a document type` : `${l.count} ${typeWords(known || { id: l.documentType }, l.count)}`;
   });
   return (
-    <p className="setup-note setup-plan">
+    <p className="setup-plan">
       {`Hive BDC sets up ${typesWord(type)} for ${companiesWord(plan.companies)} ${andList(plan.companies)}.`}
       {later.length ? ` Also waiting: ${later.join(", ")}. They stay in the container until you add them under Outbound.` : ""}
     </p>
@@ -112,153 +113,127 @@ export function SourceStep({ progress, readOnly }: { progress: Progress; readOnl
   };
 
   const plan = check?.ok ? setupType(check.byType, config.documentTypes) : null;
-  const command = check?.command || roleCommand(identity?.objectId, account) || "Enter the storage account address above.";
+  const command: string = check?.command || roleCommand(identity?.objectId, account);
   const blob = kind === "blob";
 
   let next = null;
   if (blob && !dirty) {
     next = (
       <Link className="button primary" href={stepHref(3)}>
-        Next: where documents go
-        <ArrowRight {...ICON} />
+        Continue
       </Link>
     );
   } else if (blob && !readOnly) {
     next = (
       <button type="button" className="button primary" disabled={!plan?.type || busy || !identity} onClick={saveSource}>
         {busy && <LoaderCircle className="spin" {...ICON} />}
-        Save and continue
+        Continue
       </button>
     );
   }
 
   return (
-    <StepFrame
-      step={2}
-      progress={progress}
-      readOnly={readOnly}
-      title="How does F&O hand over its documents?"
-      description="Pick what your F&O already uses. The Balsoft model in F&O writes each export as JSON with its PDF."
-    >
-      <fieldset className="setup-tiles setup-choose">
-        <legend className="sr-only">Comes from</legend>
-        {SOURCES.map((s) => (
-          <label key={s.value} className="setup-tile">
-            <input
-              type="radio"
-              name="source"
-              value={s.value}
-              checked={kind === s.value}
-              disabled={readOnly}
-              onChange={() => setKind(s.value)}
-            />
-            <span className="setup-tile-icon">
-              <s.icon {...ICON_18} />
-            </span>
-            <span className="setup-tile-body">
-              <strong>{s.title}</strong>
-              <span>{s.text}</span>
-            </span>
-          </label>
-        ))}
+    <StepFrame step={2} progress={progress} readOnly={readOnly}>
+      <fieldset className="setup-group">
+        <legend>
+          <h2 className="setup-group-title">Comes from</h2>
+        </legend>
+        <div className="setup-tiles setup-choose">
+          {SOURCES.map((s) => (
+            <label key={s.value} className="setup-tile">
+              <input type="radio" name="source" value={s.value} checked={kind === s.value} disabled={readOnly} onChange={() => setKind(s.value)} />
+              <span className="setup-tile-icon">
+                <s.icon {...ICON_18} />
+              </span>
+              <span className="setup-tile-body">
+                <strong>{s.title}</strong>
+                <span>{s.text}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       {blob ? (
-        <section className="panel" aria-labelledby="blob-heading">
-          <div className="section-heading">
-            <div>
-              <h2 id="blob-heading">The container F&O writes to</h2>
-              <p>
-                F&O keeps writing to this container as it does today. Hive BDC takes each export with the PDF named in it and moves both to
-                processed/ or error/ when it is done.
-              </p>
-            </div>
+        <Panel id="blob-heading" title="Blob container">
+          <div className="setup-fields">
+            <TextField
+              id="src-account"
+              label="Storage account address"
+              type="url"
+              value={account}
+              placeholder="https://<account>.blob.core.windows.net"
+              disabled={readOnly}
+              onChange={edit(setAccount)}
+            />
+            <TextField
+              id="src-container"
+              label="Container"
+              value={container}
+              placeholder="bdc-export"
+              hint="Done exports move to processed/ or error/."
+              disabled={readOnly}
+              onChange={edit(setContainer)}
+            />
+            <TextField id="src-prefix" label="Folder in the container (optional)" value={prefix} disabled={readOnly} onChange={edit(setPrefix)} />
           </div>
-          <div className="setup-panel-body">
-            <div className="setup-fields">
-              <TextField
-                id="src-account"
-                label="Storage account address"
-                type="url"
-                value={account}
-                placeholder="https://youraccount.blob.core.windows.net"
-                disabled={readOnly}
-                onChange={edit(setAccount)}
-              />
-              <TextField id="src-container" label="Container" value={container} placeholder="bdc-export" disabled={readOnly} onChange={edit(setContainer)} />
-              <TextField
-                id="src-prefix"
-                label="Folder in the container (optional)"
-                value={prefix}
-                placeholder="empty: the whole container"
-                disabled={readOnly}
-                onChange={edit(setPrefix)}
-              />
-            </div>
 
-            <fieldset className="setup-access">
-              <legend>How Hive BDC gets in</legend>
-              <label className="setup-option">
-                <input
-                  type="radio"
-                  name="access"
-                  value="identity"
-                  checked={access === "identity"}
-                  disabled={readOnly}
-                  onChange={() => edit(setAccess)("identity")}
-                />
-                <span>
-                  <strong>Give Hive BDC access</strong> (recommended, no key to store or renew). Your IT runs this once in Azure Cloud Shell:
-                </span>
-              </label>
-              {access === "identity" && (
-                <div className="setup-indent">
-                  <div className="setup-code">
-                    <code>{command}</code>
-                    {!readOnly && <CopyButton text={command} label="Copy the command" />}
-                  </div>
-                </div>
-              )}
-              <label className="setup-option">
-                <input type="radio" name="access" value="key" checked={access === "key"} disabled={readOnly} onChange={() => edit(setAccess)("key")} />
-                <span>
-                  <strong>Use a connection string</strong>. It is kept in this instance&apos;s Key Vault and never shown again.
-                </span>
-              </label>
-              {access === "key" && (
-                <div className="setup-indent">
-                  <TextField
-                    id="src-key"
-                    label="Connection string"
-                    type="password"
-                    value={key}
-                    placeholder="DefaultEndpointsProtocol=https;AccountName=..."
-                    hint="From the storage account, Access keys. It is kept in this instance's Key Vault and never shown again."
+          <fieldset className="setup-access">
+            <legend>Access</legend>
+            <div className="setup-segments">
+              {ACCESS.map((a) => (
+                <label key={a.value} className="setup-segment">
+                  <input
+                    type="radio"
+                    name="access"
+                    value={a.value}
+                    checked={access === a.value}
                     disabled={readOnly}
-                    onChange={edit(setKey)}
+                    onChange={() => edit(setAccess)(a.value)}
                   />
+                  {a.label}
+                </label>
+              ))}
+            </div>
+            {access === "identity" ? (
+              <div className="setup-command">
+                <div className="setup-code">
+                  {command ? <code>{command}</code> : <span className="setup-code-empty">Enter the storage account address above.</span>}
+                  {!readOnly && command && <CopyButton text={command} label="Copy the command" />}
                 </div>
-              )}
-            </fieldset>
-
-            {!readOnly && (
-              <div className="setup-inline">
-                <button type="button" className="button secondary" disabled={checking} onClick={() => void runCheck()}>
-                  {checking ? <LoaderCircle className="spin" {...ICON} /> : <ShieldCheck {...ICON} />}
-                  Check access
-                </button>
-                <span aria-live="polite" className="setup-check-line">
-                  {checking ? <span className="muted">Checking</span> : checkLine && <Chip ok={checkLine.ok}>{checkLine.text}</Chip>}
-                </span>
+                <Hint>IT runs this once in Azure Cloud Shell. No key to store or renew.</Hint>
+              </div>
+            ) : (
+              <div className="setup-fields one">
+                <TextField
+                  id="src-key"
+                  label="Connection string"
+                  type="password"
+                  value={key}
+                  placeholder="DefaultEndpointsProtocol=https;AccountName=..."
+                  hint="From the storage account, Access keys. Kept in this instance's Key Vault."
+                  disabled={readOnly}
+                  onChange={edit(setKey)}
+                />
               </div>
             )}
-            {dirty && check?.ok && <PlanNote check={check} config={config} />}
-          </div>
-        </section>
+          </fieldset>
+
+          {!readOnly && (
+            <div className="setup-inline">
+              <button type="button" className="button secondary" disabled={checking} onClick={() => void runCheck()}>
+                {checking ? <LoaderCircle className="spin" {...ICON} /> : <ShieldCheck {...ICON} />}
+                Check access
+              </button>
+              <span aria-live="polite" className="setup-check-line">
+                {checking ? <span className="muted">Checking</span> : checkLine && <Result ok={checkLine.ok}>{checkLine.text}</Result>}
+              </span>
+            </div>
+          )}
+          {dirty && check?.ok && <PlanNote check={check} config={config} />}
+        </Panel>
       ) : (
-        <p className="setup-note">
-          The assistant checks and tests a Blob container. For Service Bus or a web address, add the companies on the Outbound page.
-        </p>
+        <p className="setup-note">The assistant checks and tests a Blob container. For Service Bus or HTTPS, add the companies under Outbound.</p>
       )}
 
       {identityError && <Notice kind="error">{identityError}</Notice>}

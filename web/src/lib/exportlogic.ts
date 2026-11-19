@@ -54,6 +54,8 @@ export function kindName(kind: any, descriptors?: any) {
   return d ? d.name : kind;
 }
 
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+
 /** The destinations of one company entry, as rows (failure case 74: a kind this version does not offer is kept as it is). */
 export function destinationRows(entry: any, descriptors: any) {
   const rows: { kind: string; name: string; enabled: boolean; known: boolean; summary: string }[] = [];
@@ -61,7 +63,7 @@ export function destinationRows(entry: any, descriptors: any) {
   if (sp.enabled || sp.siteUrl || sp.library) {
     rows.push({
       kind: 'sharepoint', name: 'SharePoint', enabled: Boolean(sp.enabled), known: true,
-      summary: [sp.library, sp.folder].filter(Boolean).join(' › ') + (Object.keys(sp.fields || {}).length ? ` · ${Object.keys(sp.fields).length} columns` : ''),
+      summary: [sp.library, sp.folder].filter(Boolean).join(' › ') + (Object.keys(sp.fields || {}).length ? ` · ${count(Object.keys(sp.fields).length, 'column')}` : ''),
     });
   }
   for (const t of entry.targets || []) {
@@ -71,7 +73,7 @@ export function destinationRows(entry: any, descriptors: any) {
     const main = Object.entries(settings).filter(([k, v]) => v && !/Name$/.test(k)).map(([k, v]) => settings[`${k}Name`] || v);
     rows.push({
       kind: t.kind, name: d ? d.name : t.kind, enabled: t.enabled !== false, known: Boolean(d),
-      summary: d ? [main.join(' › '), fields ? `${fields} fields` : ''].filter(Boolean).join(' · ') : 'Set up with a newer version of Hive BDC, kept as it is.',
+      summary: d ? [main.join(' › '), fields ? count(fields, 'field') : ''].filter(Boolean).join(' · ') : 'Set up with a newer version of Hive BDC, kept as it is.',
     });
   }
   return rows;
@@ -341,16 +343,6 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 export function words(name: any) {
   const text = String(name || '').replace(/_/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
   return capital(text);
-}
-
-/** Every destination of the listed types, once each, for the ERP to Hive BDC strip: "SharePoint, DocuWare". */
-export function allDestinations(rows: any) {
-  const names: string[] = [];
-  for (const row of rows || []) {
-    if (!row.goesTo || row.goesTo === 'nowhere yet') continue;
-    for (const name of row.goesTo.split(', ')) if (!names.includes(name)) names.push(name);
-  }
-  return names.length ? names.join(', ') : 'no destination yet';
 }
 
 /** The draft's changes against what was read, one plain line each, for the Save bar. */
@@ -637,11 +629,53 @@ export function connectionContainers(draft: any, id: any) {
   return found;
 }
 
-/** Who uses something, short enough for a list: "Used by a, b and 2 more". */
-export function usesWords(uses: string[]) {
-  if (!uses.length) return 'Not used yet';
-  if (uses.length <= 2) return `Used by ${uses.join(' and ')}`;
-  return `Used by ${uses.slice(0, 2).join(', ')} and ${uses.length - 2} more`;
+/** The kind of a connection in a list: the name the service reports, "Web address key" for a sender's key. */
+// The names of the kinds this version knows, shown until GET /connections/kinds has answered (a raw ID never shows).
+const knownKindNames: Record<string, string> = {
+  'azure-storage': 'Azure Storage',
+  servicebus: 'Azure Service Bus',
+  docuware: 'DocuWare',
+};
+
+export function connectionKindName(kind: any, kinds?: any) {
+  if (kind === 'https') return 'Web address key';
+  const k = (kinds || []).find((x: any) => x.kind === kind);
+  return k ? k.name : knownKindNames[String(kind)] || String(kind || '');
+}
+
+/** How a connection signs in, short enough for a list cell: "stcontosofo as this instance", "contoso.docuware.example as hivebdc". */
+export function signInWords(c: any) {
+  const s = (c && c.settings) || {};
+  const stored = Boolean(c && (c.hasSecret || c.secret));
+  const host = (url: any) => { try { return new URL(url).host; } catch { return String(url || ''); } };
+  switch (c && c.kind) {
+    case 'azure-storage': {
+      const account = host(s.AccountUrl || '').split('.')[0];
+      if (stored) return account ? `${account} with a connection string` : 'With a connection string';
+      return `${account || 'The account'} as this instance`;
+    }
+    case 'servicebus': {
+      const namespace = String(s.Namespace || '').split('.')[0];
+      if (stored) return namespace ? `${namespace} with a connection string` : 'With a connection string';
+      return `${namespace || 'The namespace'} as this instance`;
+    }
+    case 'docuware': return `${host(s.Url || '') || 'DocuWare'} as ${s.UserName || 'a user'}`;
+    case 'https': return 'The sender posts with the key';
+    default: return '';
+  }
+}
+
+/** The state pill of a tested connection: Works, Refused or Not tested. */
+export function testState(test: { ok: boolean; at: string } | undefined): { tone: 'green' | 'rose' | 'neutral'; text: string } {
+  if (!test) return { tone: 'neutral', text: 'Not tested' };
+  return test.ok ? { tone: 'green', text: 'Works' } : { tone: 'rose', text: 'Refused' };
+}
+
+/** The companies that mail their documents: "Sales invoice › 2000". */
+export function mailCompanies(draft: any) {
+  return ((draft && draft.documentTypes) || []).flatMap((t: any) =>
+    (t.companies || []).filter((c: any) => c.mail === true).map((c: any) => `${typeLabel(t)} › ${c.dataAreaId}`),
+  );
 }
 
 // From draft.js, connections.js and export.js: the pure parts the pages share.
@@ -666,12 +700,6 @@ export function suggestId(connections: any, kind: any) {
   let id = base;
   for (let n = 2; (connections || []).some((c: any) => c.id.toLowerCase() === id.toLowerCase()); n++) id = `${base}-${n}`;
   return id;
-}
-
-/** The test chip of a connection: "Not tested yet", "Works · tested 10:42" or "Sign-in refused". */
-export function testWords(test: { ok: boolean; at: string } | undefined) {
-  if (!test) return 'Not tested yet';
-  return test.ok ? `Works · tested ${test.at}` : 'Sign-in refused';
 }
 
 /** The answer of the destination Test: every mapped field must exist in the fields the service read. */

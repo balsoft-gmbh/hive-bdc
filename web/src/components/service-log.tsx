@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { api } from "@/lib/api";
 import { Notice } from "./notice";
-import { SMALL_ICON } from "./service-ui";
+import { TogglePill } from "./toggle-pill";
+import { ICON, Panel } from "./service-ui";
 
 // The Technical log tab: the last 200 lines of today's log (GET /logs?tail=200), only warnings and errors on request,
 // and the whole day as a download that the browser builds from a Blob, so no inline script is needed (failure case 1).
@@ -51,39 +52,34 @@ export function ServiceLog() {
   };
 
   return (
-    <section className="panel service-panel" aria-labelledby="log-heading">
-      <div className="section-heading">
-        <div>
-          <h2 id="log-heading">Technical log</h2>
-        </div>
-        <span className="row-actions service-log-actions">
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={onlyWarnings}
-              onChange={(e) => {
-                rememberedOnlyWarnings = e.target.checked;
-                setOnlyWarnings(e.target.checked);
-              }}
-            />
-            Only warnings and errors
-          </label>
+    <Panel
+      id="log"
+      title="Technical log"
+      actions={
+        <>
+          <TogglePill
+            label="Only warnings and errors"
+            checked={onlyWarnings}
+            onChange={(checked) => {
+              rememberedOnlyWarnings = checked;
+              setOnlyWarnings(checked);
+            }}
+          />
           <button type="button" className="button secondary" onClick={() => void download()}>
-            <Download {...SMALL_ICON} />
+            <Download {...ICON} />
             Download today&apos;s log
           </button>
-        </span>
-      </div>
-      <div className="service-body">
-        {error && <Notice kind="error">{error}</Notice>}
-        {downloadError && <Notice kind="error">{downloadError}</Notice>}
-        {logs && (
-          <pre ref={box} className="service-log" tabIndex={0} role="region" aria-label="Lines of the technical log">
-            {text}
-          </pre>
-        )}
-        <p className="muted">The last 200 lines; secrets never appear in the log. Azure keeps the full log under the app&apos;s Log stream.</p>
-      </div>
-    </section>
+        </>
+      }
+    >
+      {error && <Notice kind="error">{error}</Notice>}
+      {downloadError && <Notice kind="error">{downloadError}</Notice>}
+      {logs && (
+        <pre ref={box} className="service-log" tabIndex={0} role="region" aria-label="Lines of the technical log">
+          {text}
+        </pre>
+      )}
+      <p className="service-footnote">The last 200 lines of today. Azure keeps the full log under the app&apos;s Log stream.</p>
+    </Panel>
   );
 }

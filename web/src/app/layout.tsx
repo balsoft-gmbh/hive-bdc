@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./bdc.css";
+import "./bdc-outbound.css";
+import "./bdc-service.css";
+import "./bdc-setup.css";
 import { UiProvider } from "@/components/ui/provider";
 import { ConsoleProvider } from "@/components/console-context";
+import { CrumbProvider } from "@/components/crumbs";
 import { Shell } from "@/components/shell";
 
 export const metadata: Metadata = {
@@ -34,7 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <UiProvider>
           <ConsoleProvider>
-            <Shell>{children}</Shell>
+            <CrumbProvider>
+              <Shell>{children}</Shell>
+            </CrumbProvider>
           </ConsoleProvider>
         </UiProvider>
       </body>

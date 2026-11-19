@@ -1,7 +1,7 @@
 // npm test (tsx --test tests/*.test.ts); port of tests/console/updates.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { historyRows, megabytes, progress, screenOf, stepRows, supportDetails, updateBadge, whenText, type UpdateView } from "../src/lib/updatelogic";
+import { historyRows, megabytes, progress, screenOf, stepRows, stopText, supportDetails, updateBadge, whenText, type UpdateView } from "../src/lib/updatelogic";
 
 const base = (): UpdateView => ({
   version: "1.8.0",
@@ -213,4 +213,22 @@ test("the size reads in whole megabytes and the support details name every step"
     "Switch and restart: skipped (not started)",
     "Running 1.8.1: skipped (not started)",
   ]);
+});
+
+test("a stop says in one line that nothing changed, a return by itself names the version that did not run", () => {
+  const stopped = { ...base(), history: [{ version: "1.8.1", at: "2026-11-18T15:31:05+00:00", by: "Anna", state: "stopped", note: "The signature does not match." }] };
+  assert.equal(screenOf(stopped), "stopped");
+  assert.deepEqual(stopText(stopped), {
+    badge: "Stopped",
+    tone: "rose",
+    line: "The update stopped before anything changed. 1.8.0 runs with your settings, and documents flow as before.",
+  });
+  const returned = { ...base(), history: [{ version: "1.8.1", at: "2026-11-18T15:57:00+00:00", by: "Anna", state: "returned", note: "Returned to 1.8.0 by itself." }] };
+  assert.equal(screenOf(returned), "stopped");
+  assert.deepEqual(stopText(returned), {
+    badge: "Returned",
+    tone: "amber",
+    line: "1.8.1 did not run properly. Hive BDC is back on 1.8.0, and documents flow as before.",
+  });
+  assert.match(stopText({ ...returned, installed: null }).line, /back on 1\.8\.0,/);
 });

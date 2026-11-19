@@ -2,14 +2,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 import { useConsole } from "./console-context";
 import { Notice } from "./notice";
+import { germanDate } from "@/lib/logic";
 import { updateBadge, whenText, type UpdateView } from "@/lib/updatelogic";
-import { ICON, ServiceBanner, postAction } from "./service-ui";
+import { ICON, postAction } from "./service-ui";
 
 /**
- * The notice of an offered update on the Overview (board P1); nothing when no update is offered or one runs.
+ * The line of an offered update on the Overview (board P1); nothing when no update is offered or one runs.
  * Update now and Tonight at 22:00 lead to the Updates tab of the Service page once the instance took them.
  */
 export function UpdateNotice({ view }: { view: UpdateView | null | undefined }) {
@@ -32,31 +33,34 @@ export function UpdateNotice({ view }: { view: UpdateView | null | undefined }) 
     }
   };
 
-  const lead = (offer.notes || [])[0];
-  const actions =
-    view.canUpdate && me?.canChange ? (
-      <span className="row-actions service-banner-actions">
-        {view.schedule ? (
-          <span className="service-planned">Planned for {whenText(view.schedule.at, view.timeZone).slice(11)}</span>
-        ) : (
-          <button type="button" className="button secondary" disabled={busy} onClick={() => void go("/service/updates/schedule", { at: "22:00" })}>
-            Tonight at 22:00
-          </button>
-        )}
-        <button type="button" className="button primary" disabled={busy} onClick={() => void go("/service/updates/run")}>
-          Update now
-        </button>
-      </span>
-    ) : null;
-
   return (
     <>
-      <ServiceBanner tone="gold" icon={<Download {...ICON} />} title={`Hive BDC ${offer.version} is ready`} titleId="update-notice-heading" actions={actions}>
-        <span>
-          {[lead, `Your settings are kept, and ${view.version} stays ready to return to.`].filter(Boolean).join(" ")}{" "}
-          <Link href="/service/?tab=updates">What&apos;s new</Link>
+      <section className="update-line" aria-labelledby="update-notice-heading">
+        <span className="update-line-icon" aria-hidden="true">
+          <Download {...ICON} />
         </span>
-      </ServiceBanner>
+        <span className="update-line-text">
+          <strong id="update-notice-heading">Hive BDC {offer.version} is ready</strong>
+          {offer.releaseDate && <span className="muted">Released {germanDate(offer.releaseDate)}</span>}
+          <Link className="inline-link" href="/service/?tab=updates">
+            What&apos;s new <ArrowRight {...ICON} />
+          </Link>
+        </span>
+        {view.canUpdate && me?.canChange && (
+          <span className="update-line-actions">
+            {view.schedule ? (
+              <span className="muted">Planned for {whenText(view.schedule.at, view.timeZone).slice(11)}</span>
+            ) : (
+              <button type="button" className="button secondary" disabled={busy} onClick={() => void go("/service/updates/schedule", { at: "22:00" })}>
+                Tonight at 22:00
+              </button>
+            )}
+            <button type="button" className="button primary" disabled={busy} onClick={() => void go("/service/updates/run")}>
+              Update now
+            </button>
+          </span>
+        )}
+      </section>
       {error && <Notice kind="error">{error}</Notice>}
     </>
   );

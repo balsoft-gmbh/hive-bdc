@@ -8,12 +8,14 @@ import { Mark } from "./service-ui";
 
 const timeZone = "Europe/Berlin";
 
+const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 export type TestRunEntry = { type: any; company: any };
 export type TestRunAnswer = { ok?: boolean; message?: string; documentId?: string; events?: any[] };
 
 export function TestRunCard({ entry, answer }: { entry: TestRunEntry; answer: TestRunAnswer }) {
   const lines = (answer.events || []).map((e) => runLine(e, timeZone));
-  const title = `${answer.documentId ? `${answer.documentId} · ` : ""}${typeWords(entry.type, undefined)} · company ${entry.company.dataAreaId}`;
+  const title = `${answer.documentId ? `${answer.documentId} · ` : ""}${capitalised(typeWords(entry.type, undefined))} · Company ${entry.company.dataAreaId}`;
   return (
     <section className="service-run" aria-label="Steps of the test run">
       <div className="service-run-head">

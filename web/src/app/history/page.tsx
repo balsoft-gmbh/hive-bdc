@@ -74,7 +74,7 @@ function History() {
 
   return (
     <>
-      <PageHeading eyebrow="WORK" title="Document history" description="Every step of every document, newest first." />
+      <PageHeading eyebrow="WORK" title="Document history" description="Every step of every document." />
       <form
         className="list-toolbar"
         role="search"
@@ -98,12 +98,7 @@ function History() {
             />
           </div>
         </div>
-        <div className="list-toolbar-right">
-          <button type="submit" className="button">
-            Search
-          </button>
-          {events && <span className="record-count">{rows.length} steps</span>}
-        </div>
+        <div className="list-toolbar-right">{events && <span className="record-count">{rows.length} steps</span>}</div>
       </form>
       {error && (
         <div className="error-banner" role="alert">
