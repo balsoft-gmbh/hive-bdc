@@ -1,0 +1,287 @@
+# Every command, handler, list, input, named control and automation id of the seven windows of the Windows app before the
+# one-window rework (design 2026-11-19, failure case W1), taken from MainWindow, SettingsWindow, HistoryWindow, DocumentsWindow,
+# LogsWindow, WordCheckWindow and ChangelogWindow at 22aa12b. WindowsAppTests checks that each one has a place in the new window.
+## MainWindow
+command	CheckForUpdatesCommand	param=	MenuItem	Check for updates…
+command	RefreshCommand	param=	Button	Refresh
+command	StartServiceCommand	param=	Button	Start
+command	StopServiceCommand	param=	Button	Stop
+command	RenewLicenseCommand	param=	Button	Renew license…
+handler	SettingsMenuItem_Click	Click	MenuItem	_Settings…
+handler	LogsMenuItem_Click	Click	MenuItem	All _logs…
+handler	DocumentsMenuItem_Click	Click	MenuItem	All _documents…
+handler	HistoryMenuItem_Click	Click	MenuItem	Document _history…
+handler	ChangelogMenuItem_Click	Click	MenuItem	_Release notes…
+handler	AboutMenuItem_Click	Click	MenuItem	About Hive BDC…
+handler	SettingsMenuItem_Click	Click	Button	Settings
+handler	DocumentsMenuItem_Click	Click	Button	View all →
+handler	RecentExport_DoubleClick	MouseDoubleClick	DataGrid	
+handler	LogsMenuItem_Click	Click	Button	View all →
+named	LogList
+list	Recent	DataGrid
+list	LogLines	ListBox
+codebehind	OnLoaded
+codebehind	OnStatusTick
+codebehind	OnLogTick
+codebehind	OnClosed
+codebehind	SettingsMenuItem_Click
+codebehind	RecentExport_DoubleClick
+codebehind	LogsMenuItem_Click
+codebehind	DocumentsMenuItem_Click
+codebehind	HistoryMenuItem_Click
+codebehind	ChangelogMenuItem_Click
+codebehind	AboutMenuItem_Click
+
+## SettingsWindow
+command	ShowPageCommand	param=Outbound	Button	
+command	ShowPageCommand	param=Inbound	Button	
+command	ShowPageCommand	param=Connections	Button	
+command	ShowPageCommand	param=Service	Button	
+command	ShowPageCommand	param={Binding Page}	Button	
+command	OpenCommand	param=type	Button	
+command	OpenCommand	param=company	Button	
+command	NewDocumentTypeCommand	param=	Button	+ New document type
+command	BrowseInputCommand	param=	Button	Browse…
+command	SaveWordTemplateCommand	param=	Button	Word template…
+command	BrowseOutputCommand	param=	Button	Browse…
+command	OpenCommand	param=sharepoint	Button	Edit
+command	AddDestinationCommand	param=	Button	
+command	AddColumnCommand	param=	Button	Add row
+command	RemoveColumnCommand	param=	Button	Remove
+command	ImportFieldTemplatesCommand	param={Binding}	Button	Import columns…
+command	SaveFieldTemplateSampleCommand	param={Binding}	Button	Sample JSON…
+command	NewInboundTypeCommand	param=	Button	+ New document type
+command	AddInboundCompanyCommand	param=	Button	+ Add company
+command	BrowseFolderCommand	param=	Button	Browse…
+command	FillFromFieldsCommand	param=	Button	One column per field
+command	ColumnsFromCsvCommand	param=	Button	Columns from a CSV the ERP reads…
+command	PreviewCommand	param=	Button	Preview with a ready document
+command	AddColumnCommand	param=	Button	Add row
+command	RemoveColumnCommand	param=	Button	Remove
+command	OpenCommand	param=sharepoint-app	Button	Edit
+command	OpenCommand	param=docuware	Button	Edit
+command	OpenCommand	param=mail	Button	Edit
+command	BrowseLogDirCommand	param=	Button	Browse…
+handler	OnOpenType	Click	Button	
+handler	OnAskRemove	Click	Button	Remove
+handler	OnKeepItem	Click	Button	Keep
+handler	OnRemoveType	Click	Button	Remove
+handler	OnAddCompany	Click	Button	+ Add company
+handler	OnOpenCompany	Click	Button	
+handler	OnAskRemove	Click	Button	Remove
+handler	OnKeepItem	Click	Button	Keep
+handler	OnRemoveCompany	Click	Button	Remove
+handler	OnCheckWordFile	Click	Button	Check a Word file…
+handler	OnEditTargetCard	Click	Button	Edit
+handler	OnAskRemove	Click	Button	Remove
+handler	OnKeepItem	Click	Button	Keep
+handler	OnRemoveTargetCard	Click	Button	Remove
+handler	OnConnectMail	Click	Button	Connect mail
+handler	OnTestSharePoint	Click	Button	Test this library
+handler	OnPickDestination	Click	Button	
+handler	OnTestConnection	Click	Button	Test connection
+handler	OnOpenInboundType	Click	Button	
+handler	OnAskRemove	Click	Button	Remove
+handler	OnKeepItem	Click	Button	Keep
+handler	OnRemoveInboundType	Click	Button	Remove
+handler	OnOpenInboundCompany	Click	Button	
+handler	OnAskRemove	Click	Button	Remove
+handler	OnKeepItem	Click	Button	Keep
+handler	OnRemoveInboundCompany	Click	Button	Remove
+handler	OnPickSource	Click	Button	
+handler	OnChangeSource	Click	Button	Change
+handler	OnEditConnectionKind	Click	Button	Edit
+handler	OnTestMail	Click	Button	Test mail
+handler	OnTestDocuWare	Click	Button	Test connection
+handler	OnClose	Click	Button	Close
+handler	OnSave	Click	Button	Save changes
+handler	OnKeepEditing	Click	Button	Keep editing
+handler	OnCloseWithoutSaving	Click	Button	Close without saving
+input	Value	ComboBox.SelectedValue
+input	Value	TextBox.Text
+input	Enabled	CheckBox.IsChecked
+input	DisplayName	TextBox.Text
+input	Id	TextBox.Text
+input	IsCustomer	RadioButton.IsChecked
+input	IsVendor	RadioButton.IsChecked
+input	MakesEInvoice	RadioButton.IsChecked
+input	MakesPdf	RadioButton.IsChecked
+input	Enabled	CheckBox.IsChecked
+input	IsJson	RadioButton.IsChecked
+input	IsWord	RadioButton.IsChecked
+input	DataAreaId	TextBox.Text
+input	Input	TextBox.Text
+input	Output	TextBox.Text
+input	SharePointEnabled	CheckBox.IsChecked
+input	Enabled	CheckBox.IsChecked
+input	Mail	CheckBox.IsChecked
+input	SharePointEnabled	CheckBox.IsChecked
+input	SiteUrl	TextBox.Text
+input	Library	TextBox.Text
+input	Folder	TextBox.Text
+input	Enabled	CheckBox.IsChecked
+input	Name	TextBox.Text
+input	Enabled	CheckBox.IsChecked
+input	DataAreaId	TextBox.Text
+input	Folder	TextBox.Text
+input	SaveFile	CheckBox.IsChecked
+input	FileName	TextBox.Text
+input	Delimiter	TextBox.Text
+input	NumberFormat	ComboBox.SelectedItem
+input	RowsFrom	ComboBox.SelectedItem
+input	TenantId	TextBox.Text
+input	ClientId	TextBox.Text
+input	MailEnabled	CheckBox.IsChecked
+input	MailFrom	TextBox.Text
+input	MailClientId	TextBox.Text
+input	MailTenantId	TextBox.Text
+input	MailRedirectTo	TextBox.Text
+input	MailSaveToSentItems	CheckBox.IsChecked
+input	DocuWareUrl	TextBox.Text
+input	DocuWareUserName	TextBox.Text
+input	PollSeconds	TextBox.Text
+input	LogDir	TextBox.Text
+named	b
+named	track
+named	thumb
+named	seg
+named	b
+named	t
+named	Bd
+named	Bd
+named	CompanyPage
+named	ConnectionSecretBox
+named	SecretBox
+named	MailSecretBox
+named	DocuWareSecretBox
+list	ValidationErrors	ItemsControl
+list	ImportNotes	ItemsControl
+list	DocumentTypes	ItemsControl
+list	Companies	ItemsControl
+list	Targets	ItemsControl
+list	Columns	DataGrid
+list	Destinations	ItemsControl
+list	Settings	ItemsControl
+list	Fields	DataGrid
+list	OpenConnection.Settings	ItemsControl
+list	InboundTypes	ItemsControl
+list	Companies	ItemsControl
+list	Sources	ItemsControl
+list	WhichSettings	ItemsControl
+list	AfterSettings	ItemsControl
+list	Columns	DataGrid
+list	Preview	ItemsControl
+list	OtherConnections	ItemsControl
+automation	NavOutbound
+automation	NavInbound
+automation	NavConnections
+automation	NavService
+automation	CrumbPage
+automation	CrumbType
+automation	CrumbCompany
+automation	NewType
+automation	TypeCard
+automation	RemoveType
+automation	ConfirmRemoveType
+automation	AddCompany
+automation	CompanyCard
+automation	RemoveCompany
+automation	ConfirmRemoveCompany
+automation	EditSharePointTarget
+automation	AddDestination
+automation	DestinationTile
+automation	DestinationFields
+automation	TestGenericConnection
+automation	NewInboundType
+automation	InboundTypeCard
+automation	RemoveInboundType
+automation	ConfirmRemoveInboundType
+automation	InboundTypeName
+automation	AddInboundCompany
+automation	InboundCompanyCard
+automation	RemoveInboundCompany
+automation	ConfirmRemoveInboundCompany
+automation	SourceTile
+automation	InboundCompanyId
+automation	InboundFolder
+automation	InboundPreview
+automation	EditSharePointApp
+automation	EditDocuWare
+automation	EditMail
+automation	EditConnectionKind
+automation	SavedBadge
+automation	CloseSettings
+automation	SaveSettings
+automation	KeepEditing
+automation	CloseWithoutSaving
+codebehind	OnWindowClosing
+codebehind	OnKeepEditing
+codebehind	OnCloseWithoutSaving
+codebehind	OnLoaded
+codebehind	OnSave
+codebehind	OnTestSharePoint
+codebehind	OnTestMail
+codebehind	OnCheckWordFile
+codebehind	OnTestDocuWare
+codebehind	OnAskRemove
+codebehind	OnKeepItem
+codebehind	OnOpenType
+codebehind	OnRemoveType
+codebehind	OnAddCompany
+codebehind	OnOpenCompany
+codebehind	OnRemoveCompany
+codebehind	OnConnectMail
+codebehind	OnPickDestination
+codebehind	OnEditTargetCard
+codebehind	OnEditConnectionKind
+codebehind	OnTestConnection
+codebehind	OnRemoveTargetCard
+codebehind	OnOpenInboundType
+codebehind	OnRemoveInboundType
+codebehind	OnOpenInboundCompany
+codebehind	OnRemoveInboundCompany
+codebehind	OnPickSource
+codebehind	OnChangeSource
+codebehind	OnClose
+
+## HistoryWindow
+command	RefreshCommand	param=	Button	Find
+command	ClearSearchCommand	param=	Button	Clear
+command	RefreshCommand	param=	Button	Refresh
+command	ShowDocumentCommand	param=	Button	All steps of this document
+command	RetryCommand	param=	Button	Retry
+handler	OnSearchKeyDown	KeyDown	TextBox	
+handler	OnRowDoubleClick	MouseDoubleClick	DataGrid	
+input	Search	TextBox.Text
+input	AttentionOnly	CheckBox.IsChecked
+named	SearchBox
+list	Rows	DataGrid
+codebehind	OnSearchKeyDown
+codebehind	OnRowDoubleClick
+
+## DocumentsWindow
+command	RefreshCommand	param=	Button	Refresh
+handler	Document_DoubleClick	MouseDoubleClick	DataGrid	
+list	Documents	DataGrid
+codebehind	Document_DoubleClick
+
+## LogsWindow
+command	OpenLogFolderCommand	param=	Button	Open log folder
+command	RefreshCommand	param=	Button	Refresh
+named	LogList
+list	LogLines	ListBox
+
+## WordCheckWindow
+handler	OnSavePreview	Click	Button	Save PDF preview…
+handler	OnClose	Click	Button	Close
+list	Problems	ItemsControl
+list	Notes	ItemsControl
+list	Fields	DataGrid
+list	Lines	DataGrid
+codebehind	OnSavePreview
+codebehind	OnClose
+
+## ChangelogWindow
+command	RefreshCommand	param=	Button	Refresh
+list	Releases	ItemsControl
+list	Changes	ItemsControl

@@ -1,0 +1,275 @@
+<UserControl x:Class="Balsoft.Hive.BDC.App.Pages.ConnectionsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <!-- "Set up" or "Not set up" for a connection; Tag carries whether it is set up. -->
+        <Style x:Key="SetUpBadge" TargetType="Border" BasedOn="{StaticResource BadgeAmber}">
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="True">
+                    <Setter Property="Background" Value="{StaticResource GreenSoft}"/>
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource Green}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SetUpText" TargetType="TextBlock">
+            <Setter Property="Text" Value="Not set up"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
+                    <Setter Property="Text" Value="Set up"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+    <Grid>
+        <!-- Connections: the sign-ins Hive BDC uses -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Connections}">
+            <StackPanel Margin="24,18,24,24">
+                <TextBlock Text="Connections" Style="{StaticResource H1}"/>
+                <TextBlock Text="Sign-ins Hive BDC uses. Set each up once." Style="{StaticResource Lead}"/>
+
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource ListHeader}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="2.4*"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Name" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="Signs in" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="State" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <Button Style="{StaticResource ListRow}" Command="{Binding OpenCommand}" CommandParameter="sharepoint-app"
+                                AutomationProperties.AutomationId="EditSharePointApp" AutomationProperties.Name="SharePoint">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="2.4*"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="SharePoint" Style="{StaticResource CellStrong}" Margin="0,0,12,0"/>
+                                <TextBlock Grid.Column="1" Text="{Binding SharePointAppDetail}" Style="{StaticResource CellText}" Margin="0,0,12,0"/>
+                                <Border Grid.Column="2" Style="{StaticResource SetUpBadge}" Tag="{Binding SharePointAppSetUp}">
+                                    <TextBlock Style="{StaticResource SetUpText}"/>
+                                </Border>
+                                <ContentControl Grid.Column="3" Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ChevronRight}" Foreground="{StaticResource Chevron}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Button>
+                        <Button Style="{StaticResource ListRow}" Command="{Binding OpenCommand}" CommandParameter="docuware"
+                                AutomationProperties.AutomationId="EditDocuWare" AutomationProperties.Name="DocuWare">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="2.4*"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="DocuWare" Style="{StaticResource CellStrong}" Margin="0,0,12,0"/>
+                                <TextBlock Grid.Column="1" Text="{Binding DocuWareDetail}" Style="{StaticResource CellText}" Margin="0,0,12,0"/>
+                                <Border Grid.Column="2" Style="{StaticResource SetUpBadge}" Tag="{Binding DocuWareSetUp}">
+                                    <TextBlock Style="{StaticResource SetUpText}"/>
+                                </Border>
+                                <ContentControl Grid.Column="3" Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ChevronRight}" Foreground="{StaticResource Chevron}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Button>
+                        <Button Style="{StaticResource ListRow}" Command="{Binding OpenCommand}" CommandParameter="mail"
+                                AutomationProperties.AutomationId="EditMail" AutomationProperties.Name="Document mail">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="2.4*"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Document mail" Style="{StaticResource CellStrong}" Margin="0,0,12,0"/>
+                                <TextBlock Grid.Column="1" Text="{Binding MailDetail}" Style="{StaticResource CellText}" Margin="0,0,12,0"/>
+                                <Border Grid.Column="2" Style="{StaticResource SetUpBadge}" Tag="{Binding MailSetUp}">
+                                    <TextBlock Style="{StaticResource SetUpText}"/>
+                                </Border>
+                                <ContentControl Grid.Column="3" Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ChevronRight}" Foreground="{StaticResource Chevron}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Button>
+                        <ItemsControl ItemsSource="{Binding OtherConnections}" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource ListRow}" Click="OnEditConnectionKind"
+                                            AutomationProperties.AutomationId="EditConnectionKind" AutomationProperties.Name="{Binding Name}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="2.4*"/>
+                                                <ColumnDefinition Width="110"/>
+                                                <ColumnDefinition Width="20"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource CellStrong}" Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Detail}" Style="{StaticResource CellText}" Margin="0,0,12,0"/>
+                                            <Border Grid.Column="2" Style="{StaticResource SetUpBadge}" Tag="{Binding SetUp}">
+                                                <TextBlock Style="{StaticResource SetUpText}"/>
+                                            </Border>
+                                            <ContentControl Grid.Column="3" Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.ChevronRight}" Foreground="{StaticResource Chevron}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                           Text="Passwords and secrets are stored encrypted on this machine when you save, and never shown again."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Connections / SharePoint -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Connections/sharepoint-app}">
+            <StackPanel Margin="24,18,24,24" MaxWidth="760" HorizontalAlignment="Left">
+                <TextBlock Text="SharePoint" Style="{StaticResource H1}"/>
+                <TextBlock Text="The Microsoft 365 app your IT registered for Hive BDC. One app serves every library." Style="{StaticResource Lead}"/>
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <Border Style="{StaticResource PanelBody}">
+                        <StackPanel>
+                            <TextBlock Text="Tenant ID" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding TenantId, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tenant ID"/>
+                            <TextBlock Text="Client ID" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Client ID"/>
+                            <TextBlock Text="Client secret" Style="{StaticResource FieldLabel}"/>
+                            <PasswordBox x:Name="SecretBox" AutomationProperties.Name="Client secret"/>
+                            <TextBlock Text="{Binding SecretPlaceholderHint}" Style="{StaticResource Hint}"/>
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,14,0,0"
+                                       Text="Application permission Sites.ReadWrite.All or Sites.Selected. To test it, open a company's SharePoint library under Outbound and use Test this library. Inbound flows from SharePoint use the same app."/>
+                        </StackPanel>
+                    </Border>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Connections / Document mail -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Connections/mail}">
+            <StackPanel Margin="24,18,24,24" MaxWidth="760" HorizontalAlignment="Left">
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" IsChecked="{Binding MailEnabled}" Content="Send document mails" VerticalAlignment="Center"/>
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Document mail" Style="{StaticResource H1}"/>
+                        <TextBlock Text="Sends each produced document through Microsoft 365, with its own app (application permission Mail.Send)." Style="{StaticResource Lead}"/>
+                    </StackPanel>
+                </DockPanel>
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <Border Style="{StaticResource PanelBody}">
+                        <StackPanel IsEnabled="{Binding MailEnabled}">
+                            <TextBlock Text="Send from" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding MailFrom, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Send from"/>
+                            <TextBlock Style="{StaticResource Hint}" Text="The mailbox documents are sent as, e.g. invoices@yourcompany.com."/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Client ID" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Text="{Binding MailClientId, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Mail client ID"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Client secret" Style="{StaticResource FieldLabel}"/>
+                                    <PasswordBox x:Name="MailSecretBox" AutomationProperties.Name="Mail client secret"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{Binding MailSecretPlaceholderHint}" Style="{StaticResource Hint}"/>
+                            <TextBlock Text="Tenant ID (empty: the same as SharePoint)" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding MailTenantId, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Mail tenant ID"/>
+                            <TextBlock Text="Test recipients" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding MailRedirectTo, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="76" Padding="8,6"
+                                     VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" TextWrapping="NoWrap" AutomationProperties.Name="Test recipients"/>
+                            <TextBlock Style="{StaticResource Hint}" Text="Documents from a test or development ERP go here instead of to the customer or vendor. Separate with ; or one per line."/>
+                            <CheckBox Content="Keep a copy in the sender's Sent Items" Margin="0,14,0,0" IsChecked="{Binding MailSaveToSentItems}"/>
+                            <Border Style="{StaticResource Divider}"/>
+                            <WrapPanel>
+                                <Button Content="Test mail" Click="OnTestMail" Margin="0,0,12,0" AutomationProperties.AutomationId="TestMail"/>
+                                <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0" Text="Checks the app and the mailbox. Sends nothing."/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Connections / DocuWare -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Connections/docuware}">
+            <StackPanel Margin="24,18,24,24" MaxWidth="760" HorizontalAlignment="Left">
+                <TextBlock Text="DocuWare" Style="{StaticResource H1}"/>
+                <TextBlock Text="Three things, then Hive BDC checks the sign-in." Style="{StaticResource Lead}"/>
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <Border Style="{StaticResource PanelBody}">
+                        <StackPanel>
+                            <TextBlock Text="1   Address of your DocuWare" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding DocuWareUrl, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Address of your DocuWare"/>
+                            <TextBlock Style="{StaticResource Hint}" Text="Copy it from the browser when DocuWare is open, e.g. https://yourcompany.docuware.cloud."/>
+                            <TextBlock Text="2   Integration user" Style="{StaticResource FieldLabel}" Margin="0,20,0,0"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="User name" Style="{StaticResource Hint}" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding DocuWareUserName, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="DocuWare user name"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Password" Style="{StaticResource Hint}" Margin="0,0,0,4"/>
+                                    <PasswordBox x:Name="DocuWareSecretBox" AutomationProperties.Name="DocuWare password"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{Binding DocuWareSecretHint}" Style="{StaticResource Hint}"/>
+                            <TextBlock Style="{StaticResource Hint}" Text="A user allowed to sign in with a DocuWare password. Ask your DocuWare administrator for one."/>
+                            <TextBlock Text="3   Check" Style="{StaticResource FieldLabel}" Margin="0,20,0,4"/>
+                            <Button Content="Test connection" HorizontalAlignment="Left" Click="OnTestDocuWare" AutomationProperties.AutomationId="TestDocuWare"/>
+                            <Border Margin="0,10,0,0" Visibility="{Binding DocuWareStatus, Converter={StaticResource Match}, ConverterParameter=!}">
+                                <Border.Style>
+                                    <Style TargetType="Border" BasedOn="{StaticResource NoticeOk}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DocuWareStatusIsError}" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource NoticeErrorFill}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource NoticeErrorLine}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding DocuWareStatus}" Tag="{Binding DocuWareStatusIsError}" Style="{StaticResource ResultText}"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Connections / a kind without a page of its own -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                      Visibility="{Binding View, Converter={StaticResource Match}, ConverterParameter=Connections/conn}">
+            <StackPanel Margin="24,18,24,24" MaxWidth="760" HorizontalAlignment="Left">
+                <TextBlock Text="{Binding OpenConnection.Title}" Style="{StaticResource H1}"/>
+                <TextBlock Text="{Binding OpenConnection.Kind.Description}" Style="{StaticResource Lead}"/>
+                <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                    <Border Style="{StaticResource PanelBody}">
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding OpenConnection.Settings}" ItemTemplate="{StaticResource SourceSettingTemplate}" Focusable="False"/>
+                            <TextBlock Text="{Binding OpenConnection.SecretLabel}" Style="{StaticResource FieldLabel}"/>
+                            <PasswordBox x:Name="ConnectionSecretBox" AutomationProperties.Name="Connection secret"/>
+                            <TextBlock Text="{Binding OpenConnection.SecretHint}" Style="{StaticResource Hint}"/>
+                            <Border Style="{StaticResource Divider}"/>
+                            <Button Content="Test connection" HorizontalAlignment="Left" Click="OnTestConnection" AutomationProperties.AutomationId="TestGenericConnection"/>
+                            <TextBlock Text="{Binding OpenConnection.StatusMessage}" Tag="{Binding OpenConnection.StatusIsError}" Style="{StaticResource ResultText}" Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

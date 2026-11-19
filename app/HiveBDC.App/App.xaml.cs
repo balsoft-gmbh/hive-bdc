@@ -125,7 +125,7 @@ public partial class App : Application
     }
 
     /// <summary>Whether the app is running elevated — Start/Stop of the service require it.</summary>
-    private static bool IsElevated()
+    internal static bool IsElevated()
     {
         try
         {

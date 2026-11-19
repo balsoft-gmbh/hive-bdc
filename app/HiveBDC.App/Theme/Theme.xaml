@@ -1,0 +1,136 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- The web console's tokens (web/src/app/globals.css, density layer, and bdc*.css), light theme. -->
+    <Color x:Key="Color.Canvas">#F4F5F7</Color>
+    <Color x:Key="Color.Surface">#FFFFFF</Color>
+    <Color x:Key="Color.Text">#22262E</Color>
+    <Color x:Key="Color.Muted">#5B6270</Color>
+    <Color x:Key="Color.Subtle">#8A919C</Color>
+    <Color x:Key="Color.Line">#E1E4E8</Color>
+    <Color x:Key="Color.LineStrong">#C9CED6</Color>
+    <Color x:Key="Color.Hover">#F4F5F7</Color>
+    <Color x:Key="Color.Gold">#EFB52C</Color>
+    <Color x:Key="Color.GoldHover">#E5AA1E</Color>
+    <Color x:Key="Color.GoldLine">#DBA225</Color>
+    <Color x:Key="Color.GoldSoft">#FFF7E0</Color>
+    <Color x:Key="Color.GoldSoftLine">#F3DEA6</Color>
+    <Color x:Key="Color.GoldStrongLine">#EDCA74</Color>
+    <Color x:Key="Color.BrandText">#7B5919</Color>
+    <Color x:Key="Color.OnGold">#302615</Color>
+    <Color x:Key="Color.Focus">#E6B53B</Color>
+    <Color x:Key="Color.Chevron">#B4BBC5</Color>
+    <Color x:Key="Color.Green">#286344</Color>
+    <Color x:Key="Color.GreenSoft">#E9F5EF</Color>
+    <Color x:Key="Color.Amber">#76571A</Color>
+    <Color x:Key="Color.AmberSoft">#FCF4E3</Color>
+    <Color x:Key="Color.Rose">#94304B</Color>
+    <Color x:Key="Color.RoseSoft">#FCEEF0</Color>
+    <Color x:Key="Color.Blue">#315681</Color>
+    <Color x:Key="Color.BlueSoft">#EDF3FC</Color>
+    <Color x:Key="Color.Ok">#1F7A55</Color>
+    <Color x:Key="Color.Warn">#9A5B06</Color>
+    <Color x:Key="Color.Danger">#B4232F</Color>
+    <Color x:Key="Color.DangerSoft">#FFF5F6</Color>
+    <Color x:Key="Color.DangerLine">#F1CFD4</Color>
+    <Color x:Key="Color.DotOn">#4DA487</Color>
+    <Color x:Key="Color.DotOff">#C2410C</Color>
+    <Color x:Key="Color.NoticeOk">#EFFAF5</Color>
+    <Color x:Key="Color.NoticeOkLine">#B7E0CF</Color>
+    <Color x:Key="Color.NoticeWarn">#FFF8EA</Color>
+    <Color x:Key="Color.NoticeWarnLine">#F3D39B</Color>
+    <Color x:Key="Color.NoticeError">#FFF1F0</Color>
+    <Color x:Key="Color.NoticeErrorLine">#F2B8B5</Color>
+    <Color x:Key="Color.NoticeInfo">#F3F7FD</Color>
+    <Color x:Key="Color.NoticeInfoLine">#C9D9EF</Color>
+    <Color x:Key="Color.StatGold">#C49A35</Color>
+    <Color x:Key="Color.StatGoldSoft">#FFF6DD</Color>
+    <Color x:Key="Color.StatBlue">#6B9AC4</Color>
+    <Color x:Key="Color.StatBlueSoft">#EDF4FD</Color>
+    <Color x:Key="Color.StatGreen">#69A187</Color>
+    <Color x:Key="Color.StatGreenSoft">#EAF6F0</Color>
+    <Color x:Key="Color.AvatarGold">#F9EBC8</Color>
+    <Color x:Key="Color.AvatarGoldText">#896125</Color>
+    <Color x:Key="Color.Scrim">#66101723</Color>
+    <Color x:Key="Color.Shadow">#20263A</Color>
+    <Color x:Key="Color.LogInfo">#22262E</Color>
+    <Color x:Key="Color.LogDebug">#8A919C</Color>
+    <Color x:Key="Color.LogWarn">#9A5B06</Color>
+    <Color x:Key="Color.LogError">#B4232F</Color>
+    <Color x:Key="Color.LogUi">#315681</Color>
+    <Color x:Key="Color.LogoGoldStart">#F2AE16</Color>
+    <Color x:Key="Color.LogoGoldEnd">#FECE00</Color>
+    <Color x:Key="Color.Transparent">#00FFFFFF</Color>
+
+    <SolidColorBrush x:Key="Canvas" Color="{StaticResource Color.Canvas}"/>
+    <SolidColorBrush x:Key="Surface" Color="{StaticResource Color.Surface}"/>
+    <SolidColorBrush x:Key="Text" Color="{StaticResource Color.Text}"/>
+    <SolidColorBrush x:Key="Muted" Color="{StaticResource Color.Muted}"/>
+    <SolidColorBrush x:Key="Subtle" Color="{StaticResource Color.Subtle}"/>
+    <SolidColorBrush x:Key="Line" Color="{StaticResource Color.Line}"/>
+    <SolidColorBrush x:Key="LineStrong" Color="{StaticResource Color.LineStrong}"/>
+    <SolidColorBrush x:Key="Hover" Color="{StaticResource Color.Hover}"/>
+    <SolidColorBrush x:Key="Gold" Color="{StaticResource Color.Gold}"/>
+    <SolidColorBrush x:Key="GoldHover" Color="{StaticResource Color.GoldHover}"/>
+    <SolidColorBrush x:Key="GoldLine" Color="{StaticResource Color.GoldLine}"/>
+    <SolidColorBrush x:Key="GoldSoft" Color="{StaticResource Color.GoldSoft}"/>
+    <SolidColorBrush x:Key="GoldSoftLine" Color="{StaticResource Color.GoldSoftLine}"/>
+    <SolidColorBrush x:Key="GoldStrongLine" Color="{StaticResource Color.GoldStrongLine}"/>
+    <SolidColorBrush x:Key="BrandText" Color="{StaticResource Color.BrandText}"/>
+    <SolidColorBrush x:Key="OnGold" Color="{StaticResource Color.OnGold}"/>
+    <SolidColorBrush x:Key="Focus" Color="{StaticResource Color.Focus}"/>
+    <SolidColorBrush x:Key="Chevron" Color="{StaticResource Color.Chevron}"/>
+    <SolidColorBrush x:Key="Green" Color="{StaticResource Color.Green}"/>
+    <SolidColorBrush x:Key="GreenSoft" Color="{StaticResource Color.GreenSoft}"/>
+    <SolidColorBrush x:Key="Amber" Color="{StaticResource Color.Amber}"/>
+    <SolidColorBrush x:Key="AmberSoft" Color="{StaticResource Color.AmberSoft}"/>
+    <SolidColorBrush x:Key="Rose" Color="{StaticResource Color.Rose}"/>
+    <SolidColorBrush x:Key="RoseSoft" Color="{StaticResource Color.RoseSoft}"/>
+    <SolidColorBrush x:Key="Blue" Color="{StaticResource Color.Blue}"/>
+    <SolidColorBrush x:Key="BlueSoft" Color="{StaticResource Color.BlueSoft}"/>
+    <SolidColorBrush x:Key="Ok" Color="{StaticResource Color.Ok}"/>
+    <SolidColorBrush x:Key="Warn" Color="{StaticResource Color.Warn}"/>
+    <SolidColorBrush x:Key="Danger" Color="{StaticResource Color.Danger}"/>
+    <SolidColorBrush x:Key="DangerSoft" Color="{StaticResource Color.DangerSoft}"/>
+    <SolidColorBrush x:Key="DangerLine" Color="{StaticResource Color.DangerLine}"/>
+    <SolidColorBrush x:Key="DotOn" Color="{StaticResource Color.DotOn}"/>
+    <SolidColorBrush x:Key="DotOff" Color="{StaticResource Color.DotOff}"/>
+    <SolidColorBrush x:Key="NoticeOkFill" Color="{StaticResource Color.NoticeOk}"/>
+    <SolidColorBrush x:Key="NoticeOkLine" Color="{StaticResource Color.NoticeOkLine}"/>
+    <SolidColorBrush x:Key="NoticeWarnFill" Color="{StaticResource Color.NoticeWarn}"/>
+    <SolidColorBrush x:Key="NoticeWarnLine" Color="{StaticResource Color.NoticeWarnLine}"/>
+    <SolidColorBrush x:Key="NoticeErrorFill" Color="{StaticResource Color.NoticeError}"/>
+    <SolidColorBrush x:Key="NoticeErrorLine" Color="{StaticResource Color.NoticeErrorLine}"/>
+    <SolidColorBrush x:Key="NoticeInfoFill" Color="{StaticResource Color.NoticeInfo}"/>
+    <SolidColorBrush x:Key="NoticeInfoLine" Color="{StaticResource Color.NoticeInfoLine}"/>
+    <SolidColorBrush x:Key="StatGold" Color="{StaticResource Color.StatGold}"/>
+    <SolidColorBrush x:Key="StatGoldSoft" Color="{StaticResource Color.StatGoldSoft}"/>
+    <SolidColorBrush x:Key="StatBlue" Color="{StaticResource Color.StatBlue}"/>
+    <SolidColorBrush x:Key="StatBlueSoft" Color="{StaticResource Color.StatBlueSoft}"/>
+    <SolidColorBrush x:Key="StatGreen" Color="{StaticResource Color.StatGreen}"/>
+    <SolidColorBrush x:Key="StatGreenSoft" Color="{StaticResource Color.StatGreenSoft}"/>
+    <SolidColorBrush x:Key="AvatarGold" Color="{StaticResource Color.AvatarGold}"/>
+    <SolidColorBrush x:Key="AvatarGoldText" Color="{StaticResource Color.AvatarGoldText}"/>
+    <SolidColorBrush x:Key="Scrim" Color="{StaticResource Color.Scrim}"/>
+    <SolidColorBrush x:Key="LogInfo" Color="{StaticResource Color.LogInfo}"/>
+    <SolidColorBrush x:Key="LogDebug" Color="{StaticResource Color.LogDebug}"/>
+    <SolidColorBrush x:Key="LogWarn" Color="{StaticResource Color.LogWarn}"/>
+    <SolidColorBrush x:Key="LogError" Color="{StaticResource Color.LogError}"/>
+    <SolidColorBrush x:Key="LogUi" Color="{StaticResource Color.LogUi}"/>
+    <SolidColorBrush x:Key="Clear" Color="{StaticResource Color.Transparent}"/>
+
+    <DropShadowEffect x:Key="RaisedShadow" BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.14" Color="{StaticResource Color.Shadow}"/>
+
+    <!-- DM Sans for text, Manrope for headings: the console's variable font files, embedded. WPF lists a variable font
+         by its named instances: DM Sans as "DM Sans 14pt" (the optical size of 14 px text), Manrope as "Manrope", each
+         with its real weights. -->
+    <FontFamily x:Key="Font.Body">/HiveBDC.App;component/Assets/Fonts/#DM Sans 14pt, Segoe UI</FontFamily>
+    <FontFamily x:Key="Font.Heading">/HiveBDC.App;component/Assets/Fonts/#Manrope, Segoe UI</FontFamily>
+    <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+
+    <sys:Double x:Key="Size.Body">14</sys:Double>
+    <sys:Double x:Key="Size.Control">32</sys:Double>
+    <CornerRadius x:Key="Radius">4</CornerRadius>
+    <CornerRadius x:Key="Radius.Dialog">6</CornerRadius>
+</ResourceDictionary>

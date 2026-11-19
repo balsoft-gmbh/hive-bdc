@@ -2,6 +2,15 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.10.0",
+      "date": "2026-11-19",
+      "changes": [
+        "The Windows app is one window in the look of the web console: Overview and Document history under WORK, Outbound, Inbound, Connections and Service under SET UP. The former Settings, history, documents, log, Word check and release notes windows are now pages and dialogs of that window.",
+        "Outbound, Inbound, Connections and Service share one Save bar; leaving them with unsaved changes asks first.",
+        "The Windows service and the Azure web console work as in 1.9.0."
+      ]
+    },
+    {
       "version": "1.9.0",
       "date": "2026-11-19",
       "changes": [

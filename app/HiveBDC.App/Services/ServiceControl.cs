@@ -93,7 +93,7 @@ public sealed class ServiceControl
     {
         if (IsAccessDenied(ex))
             return new ServiceActionResult(false,
-                $"Access denied — run the app as administrator to {verb} the service.");
+                $"Access denied. Run the app as administrator to {verb} the service.");
         if (ex is InvalidOperationException && ex.InnerException is null)
             return new ServiceActionResult(false, $"The '{ServiceName}' service is not installed.");
         return new ServiceActionResult(false, $"Could not {verb} the service: {ex.Message}");
