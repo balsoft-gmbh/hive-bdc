@@ -47,9 +47,14 @@ const fact = (page: Page, label: string) =>
     .filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) })
     .locator("dd");
 
-test.beforeEach(async ({ request }) => {
+// The running fixtures started at 16:31 and 17:02 local time; the page's clock stands just after, so the notice of a long
+// restart (design 2026-11-19-update-page-after-restart.md, U5) shows only in the tests that move the clock on.
+const FIXTURE_NOW = new Date("2026-11-19T15:32:00+00:00");
+
+test.beforeEach(async ({ page, request }) => {
   await request.post("/__mock/reset");
   await mock(request, { "GET /logs?tail=200": logs, "GET /logs?tail=5000": fullLog });
+  await page.clock.setFixedTime(FIXTURE_NOW);
 });
 
 test("every tab loads under the host's content security policy without a violation", async ({ page, request }) => {
@@ -401,6 +406,60 @@ test("once another version answers, the running page loads the whole console aga
   await expect(page.locator("main")).toContainText("1.9.1");
 });
 
+test("after a return, a version before 1.9.0 answers 404, and the page opens the update page of that version", async ({ page, request }) => {
+  await mock(request, { "GET /service/updates": returning(), "GET /me": { name: "Anna Weber", roles: ["Administrator"], canRetry: true, canChange: true, version: "1.9.1" } });
+  await page.goto("/service/?tab=updates");
+  await opened(page);
+  await expect(panelHeading(page, "Returning to 1.9.0")).toBeVisible();
+  const visited: string[] = [];
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) visited.push(frame.url());
+  });
+  await mock(request, { "GET /service/updates": { __status: 404, error: "not found" } });
+  await expect.poll(() => visited.some((url) => url.endsWith("/#/service/updates")), { timeout: 12000 }).toBe(true);
+  await expect(page).toHaveURL(/\/service\/\?tab=updates$/);
+});
+
+test("a gap while the app restarts does not reload the page", async ({ page, request }) => {
+  await mock(request, { "GET /service/updates": running() });
+  await page.goto("/service/?tab=updates");
+  await opened(page);
+  // The running panel must be on screen before the next answer is mocked, or the first read still on its way gets it.
+  await expect(panelHeading(page, "Updating to 1.9.1")).toBeVisible();
+  let loads = 0;
+  page.on("load", () => loads++);
+  await mock(request, { "GET /service/updates": { __status: 502, error: "Bad Gateway" } });
+  await expect(page.getByText("Hive BDC is restarting. This page reconnects by itself.")).toBeVisible({ timeout: 9000 });
+  await page.waitForTimeout(6000);
+  expect(loads).toBe(0);
+});
+
+test("a restart that takes longer than 6 minutes says so and offers Reload page; after 10 it says what happens", async ({ page, request }) => {
+  await mock(request, { "GET /service/updates": running() });
+  await page.clock.setFixedTime(new Date("2026-11-19T15:38:00+00:00"));
+  await page.goto("/service/?tab=updates");
+  await opened(page);
+  const slow = page.getByRole("status").filter({ hasText: "This takes longer than usual. Hive BDC may already run 1.9.1; reload the page to see it." });
+  await expect(slow).toBeVisible();
+  const reload = page.getByRole("button", { name: "Reload page" });
+  await expect(reload).toHaveCount(1);
+  await expect(reload).toHaveClass(/\bsecondary\b/);
+  await page.clock.setFixedTime(new Date("2026-11-19T15:42:00+00:00"));
+  await expect(
+    page.getByRole("status").filter({ hasText: "1.9.1 did not answer within 10 minutes. Hive BDC then returns to 1.9.0 by itself; reload the page to see where it stands." }),
+  ).toBeVisible({ timeout: 20000 });
+  await reload.click();
+  await expect(page).toHaveURL(/\/service\/\?tab=updates$/);
+  await expect(panelHeading(page, "Updating to 1.9.1")).toBeVisible();
+});
+
+test("the former address #/service/updates opens the Updates tab", async ({ page, request }) => {
+  await mock(request, { "GET /service/updates": done() });
+  await page.goto("/#/service/updates");
+  await expect(page).toHaveURL(/\/service\/\?tab=updates$/);
+  await expect(panelHeading(page, "Checked after the restart")).toBeVisible();
+});
+
 test("leaving the Updates tab stops asking", async ({ page, request }) => {
   await mock(request, { "GET /service/updates": running() });
   await page.goto("/service/?tab=updates");
@@ -519,6 +578,23 @@ test("Look now sits in one place, asks the feed and shows its answer", async ({ 
   await expect(look).toHaveClass(/\bsecondary\b/);
   await look.click();
   await expect(page.getByRole("status").filter({ hasText: "1.9.0 is the newest version." }).first()).toBeVisible();
+  expect(await calls(request)).toEqual([{ method: "POST", path: "/service/updates/check", body: {} }]);
+});
+
+test("after an update the result screen also offers Look now, next to Return", async ({ page, request }) => {
+  await mock(request, {
+    "GET /service/updates": done(),
+    "POST /service/updates/check": { ok: true, message: "Hive BDC 1.9.2 is ready." },
+  });
+  await page.goto("/service/?tab=updates");
+  await opened(page);
+  await expect(panelHeading(page, "Checked after the restart")).toBeVisible();
+  const look = page.getByRole("button", { name: "Look now" });
+  await expect(look).toHaveCount(1);
+  await expect(look).toHaveClass(/\bsecondary\b/);
+  await expect(page.getByRole("button", { name: /Return to 1\.9\.0/ })).toBeVisible();
+  await look.click();
+  await expect(page.getByRole("status").filter({ hasText: "Hive BDC 1.9.2 is ready." }).first()).toBeVisible();
   expect(await calls(request)).toEqual([{ method: "POST", path: "/service/updates/check", body: {} }]);
 });
 

@@ -3,6 +3,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { setupNeeded } from "@/lib/logic";
+import { legacyConsoleRoute } from "@/lib/updatelogic";
 
 export type Me = {
   name: string;
@@ -72,6 +73,13 @@ export function ConsoleProvider({ children }: { children: React.ReactNode }) {
         setLoaded(true);
       });
   }, []);
+
+  // An address of the console before 1.9.0 (#/service/updates), which its open update page reloads into after an update,
+  // opens the same place here (design 2026-11-19-update-page-after-restart.md, U6).
+  useEffect(() => {
+    const target = legacyConsoleRoute(window.location.hash);
+    if (target) router.replace(target);
+  }, [router]);
 
   // Who is signed in and the state of the instance are read side by side, not one after the other.
   useEffect(() => {

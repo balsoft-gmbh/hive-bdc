@@ -8,14 +8,17 @@ import { Notice } from "./notice";
 import { api, type ApiError } from "@/lib/api";
 import { germanDate } from "@/lib/logic";
 import {
+  answeredByOlderVersion,
   historyRows,
   megabytes,
   progress,
+  restartNotice,
   screenOf,
   stepRows,
   stopText,
   supportDetails,
   whenText,
+  UPDATES_ADDRESS,
   type HistoryRow,
   type UpdateCheck,
   type UpdateView,
@@ -28,6 +31,17 @@ import { Facts, ICON, Mark, Panel, StepList, postAction, type Fact } from "./ser
 // Update now is the one gold button, and only while an update is offered.
 
 export const POLL_MS = 5000;
+const NOTICE_TICK_MS = 10_000;
+
+/** The time, read again every few seconds while the running page is open (U5). */
+function useNow(everyMs: number) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(timer);
+  }, [everyMs]);
+  return now;
+}
 
 type Message = { kind: "info" | "error"; text: string } | null;
 type Action = (id: string, text: string, path: string, options?: { primary?: boolean; body?: unknown; icon?: ReactNode }) => ReactNode;
@@ -89,8 +103,13 @@ export function ServiceUpdates({ onView }: { onView?: (view: UpdateView) => void
           return;
         }
         last = fresh;
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        // A version before 1.9.0 has no /api/: it answers 404, so it runs and its own update page shows the result.
+        if (answeredByOlderVersion(error)) {
+          window.location.assign(UPDATES_ADDRESS);
+          return;
+        }
         setReconnecting(true);
       }
       timer = setTimeout(() => void tick(), POLL_MS);
@@ -157,7 +176,7 @@ export function ServiceUpdates({ onView }: { onView?: (view: UpdateView) => void
       {screen === "offer" && <OfferPanel data={data} zone={zone} action={action} canChange={canChange} />}
       {screen === "done" && (
         <>
-          <DonePanel data={data} zone={zone} canChange={canChange} busy={busy !== ""} run={run} />
+          <DonePanel data={data} zone={zone} canChange={canChange} busy={busy !== ""} run={run} lookNow={lookNow} />
           <ChecksPanel data={data} zone={zone} />
         </>
       )}
@@ -231,6 +250,8 @@ function RunningPanel({ data, zone, reconnecting }: { data: UpdateView; zone?: s
   const percent = progress(rows);
   const p = data.pending!;
   const back = p.kind === "return";
+  const now = useNow(NOTICE_TICK_MS);
+  const late = restartNotice(p.startedAt, now, p.to ?? "", p.from ?? data.version, back);
   return (
     <Panel
       id="running"
@@ -245,7 +266,17 @@ function RunningPanel({ data, zone, reconnecting }: { data: UpdateView; zone?: s
         </div>
       )}
       <StepList rows={rows} label="Steps of the update" />
-      {reconnecting && <Notice kind="info">Hive BDC is restarting. This page reconnects by itself.</Notice>}
+      {late ? (
+        <Notice kind="info">
+          <span>{late}</span>
+          <button type="button" className="button secondary" onClick={() => window.location.assign(UPDATES_ADDRESS)}>
+            <RefreshCw {...ICON} />
+            Reload page
+          </button>
+        </Notice>
+      ) : (
+        reconnecting && <Notice kind="info">Hive BDC is restarting. This page reconnects by itself.</Notice>
+      )}
       <ul className="service-while" aria-label="While it runs">
         <li>Documents wait in their source and are taken right after the restart.</li>
         <li>You can close this page. The update finishes on its own, and the history shows the result.</li>
@@ -301,12 +332,14 @@ function DonePanel({
   canChange,
   busy,
   run,
+  lookNow,
 }: {
   data: UpdateView;
   zone?: string;
   canChange: boolean;
   busy: boolean;
   run: (id: string, path: string, body?: unknown) => Promise<void>;
+  lookNow: ReactNode;
 }) {
   const last = (data.history || [])[0];
   const previous = data.previous?.version;
@@ -322,12 +355,15 @@ function DonePanel({
       title={`Hive BDC ${data.installed?.version}`}
       pill={<StatusPill tone="green">Running</StatusPill>}
       actions={
-        previous && canChange ? (
-          <button type="button" className="button secondary" disabled={busy} title="Back to the version before, if something does not work as before" onClick={() => void back()}>
-            <Undo2 {...ICON} />
-            Return to {previous}
-          </button>
-        ) : null
+        <>
+          {lookNow}
+          {previous && canChange ? (
+            <button type="button" className="button secondary" disabled={busy} title="Back to the version before, if something does not work as before" onClick={() => void back()}>
+              <Undo2 {...ICON} />
+              Return to {previous}
+            </button>
+          ) : null}
+        </>
       }
     >
       <Facts

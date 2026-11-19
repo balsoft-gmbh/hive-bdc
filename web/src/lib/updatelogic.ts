@@ -158,3 +158,44 @@ export function stopText(view: UpdateView): StopText {
     return { badge: "Returned", tone: "amber", line: `${last.version} did not run properly. Hive BDC is back on ${running}, and documents flow as before.` };
   return { badge: "Stopped", tone: "rose", line: `The update stopped before anything changed. ${running} runs with your settings, and documents flow as before.` };
 }
+// Design 2026-11-19-update-page-after-restart.md: the page after the restart.
+
+/**
+ * While a switch runs, a 404 to /api/service/updates comes from a version before 1.9.0 (its API had no /api/ prefix),
+ * so another version answers (U2). A gap while App Service restarts the app is 502 or 503, or no answer (0): wait (U3).
+ */
+export function answeredByOlderVersion(error: unknown) {
+  return typeof error === "object" && error !== null && (error as { status?: unknown }).status === 404;
+}
+
+const SLOW_MINUTES = 6;
+const RETURN_MINUTES = 10;
+
+/** What the running page adds after 6 and after 10 minutes, so a hanging restart is never only the same line (U5). */
+export function restartNotice(startedAt: string | undefined, now: number, to: string, from: string, isReturn = false) {
+  const started = startedAt ? Date.parse(startedAt) : NaN;
+  if (Number.isNaN(started)) return null;
+  const minutes = (now - started) / 60_000;
+  if (minutes >= RETURN_MINUTES && !isReturn)
+    return `${to} did not answer within ${RETURN_MINUTES} minutes. Hive BDC then returns to ${from} by itself; reload the page to see where it stands.`;
+  if (minutes >= SLOW_MINUTES) return `This takes longer than usual. Hive BDC may already run ${to}; reload the page to see it.`;
+  return null;
+}
+
+const SERVICE_TAB_IDS = ["status", "licence", "updates", "log"];
+const PAGES = ["history", "outbound", "connections", "service"];
+
+/**
+ * The page of this console for an address of the console before 1.9.0 (#/service/updates and the like), which an open
+ * page of that version reloads into after an update (U6). Anything else stays where it is.
+ */
+export function legacyConsoleRoute(hash: string) {
+  const parts = hash.startsWith("#/") ? hash.slice(2).split(/[/?]/).filter(Boolean) : [];
+  const [page, tab] = parts;
+  if (!page || !PAGES.includes(page)) return null;
+  if (page === "service" && tab && SERVICE_TAB_IDS.includes(tab)) return `/service/?tab=${tab}`;
+  return `/${page}/`;
+}
+
+/** Where a reload after a switch goes: the update page of whichever version answers (both consoles know this address). */
+export const UPDATES_ADDRESS = "/#/service/updates";

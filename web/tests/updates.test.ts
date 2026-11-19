@@ -1,7 +1,21 @@
 // npm test (tsx --test tests/*.test.ts); port of tests/console/updates.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { historyRows, megabytes, progress, screenOf, stepRows, stopText, supportDetails, updateBadge, whenText, type UpdateView } from "../src/lib/updatelogic";
+import {
+  answeredByOlderVersion,
+  historyRows,
+  legacyConsoleRoute,
+  megabytes,
+  progress,
+  restartNotice,
+  screenOf,
+  stepRows,
+  stopText,
+  supportDetails,
+  updateBadge,
+  whenText,
+  type UpdateView,
+} from "../src/lib/updatelogic";
 
 const base = (): UpdateView => ({
   version: "1.8.0",
@@ -231,4 +245,40 @@ test("a stop says in one line that nothing changed, a return by itself names the
     line: "1.8.1 did not run properly. Hive BDC is back on 1.8.0, and documents flow as before.",
   });
   assert.match(stopText({ ...returned, installed: null }).line, /back on 1\.8\.0,/);
+});
+
+// Design 2026-11-19-update-page-after-restart.md: the page after the restart (U2, U3, U5, U6).
+test("a 404 during the restart is an older version answering; a gap while the app restarts is not", () => {
+  assert.equal(answeredByOlderVersion({ status: 404 }), true);
+  for (const status of [0, 502, 503, 500]) assert.equal(answeredByOlderVersion({ status }), false, String(status));
+  assert.equal(answeredByOlderVersion(new Error("no status")), false);
+});
+
+test("the running page says nothing extra for 6 minutes, then that it takes longer, then what happens after 10", () => {
+  const started = "2026-11-19T22:48:00+00:00";
+  const at = (minutes: number) => Date.parse(started) + minutes * 60_000;
+  assert.equal(restartNotice(started, at(5.9), "1.10.1", "1.8.1"), null);
+  assert.equal(
+    restartNotice(started, at(6), "1.10.1", "1.8.1"),
+    "This takes longer than usual. Hive BDC may already run 1.10.1; reload the page to see it.",
+  );
+  assert.equal(
+    restartNotice(started, at(10), "1.10.1", "1.8.1"),
+    "1.10.1 did not answer within 10 minutes. Hive BDC then returns to 1.8.1 by itself; reload the page to see where it stands.",
+  );
+  assert.equal(restartNotice(undefined, at(30), "1.10.1", "1.8.1"), null);
+  // A return has no further version to fall back to: it keeps the first line.
+  assert.match(restartNotice(started, at(12), "1.8.1", "1.10.1", true)!, /^This takes longer than usual\. Hive BDC may already run 1\.8\.1;/);
+});
+
+test("an address of the former console opens the same place in this one", () => {
+  assert.equal(legacyConsoleRoute("#/service/updates"), "/service/?tab=updates");
+  assert.equal(legacyConsoleRoute("#/service/status"), "/service/?tab=status");
+  assert.equal(legacyConsoleRoute("#/service"), "/service/");
+  assert.equal(legacyConsoleRoute("#/history"), "/history/");
+  assert.equal(legacyConsoleRoute("#/connections"), "/connections/");
+  assert.equal(legacyConsoleRoute("#/service/elsewhere"), "/service/");
+  assert.equal(legacyConsoleRoute("#/nowhere"), null);
+  assert.equal(legacyConsoleRoute("#section"), null);
+  assert.equal(legacyConsoleRoute(""), null);
 });

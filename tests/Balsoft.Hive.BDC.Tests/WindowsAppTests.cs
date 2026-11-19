@@ -442,60 +442,75 @@ public sealed class WindowsAppTests
 
     // W8: the fonts, the logo and the icons ship inside the app, and every resource a view names exists.
 
+    private static readonly string[] Weights = ["Regular", "Medium", "SemiBold", "Bold"];
+    private static readonly (string Family, string Stem, string Console)[] Fonts = [("DM Sans", "DMSans", "dm-sans"), ("Manrope", "Manrope", "manrope")];
+
     [Fact]
     public void TheConsoleFontsShipInsideTheAppWithTheirLicences()
     {
         string project = Read("HiveBDC.App.csproj");
-        foreach (var font in new[] { "dm-sans", "manrope" })
+        foreach (var (_, stem, console) in Fonts)
         {
-            Assert.Contains($"<Resource Include=\"Assets\\Fonts\\{font}.ttf\" />", project);
-            Assert.Contains($"<Content Include=\"Assets\\Fonts\\{font}-OFL.txt\" CopyToOutputDirectory=\"PreserveNewest\" />", project);
-            string shipped = Path.Combine(AppDir, "Assets", "Fonts", font + ".ttf");
-            string console = Path.Combine(Repo, "web", "public", "fonts", font + ".ttf");
-            Assert.Equal(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(console))), Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(shipped))));
-            Assert.Contains("SIL Open Font License", File.ReadAllText(Path.Combine(AppDir, "Assets", "Fonts", font + "-OFL.txt")));
+            foreach (var weight in Weights)
+                Assert.Contains($"<Resource Include=\"Assets\\Fonts\\{stem}-{weight}.ttf\" />", project);
+            Assert.Contains($"<Content Include=\"Assets\\Fonts\\{console}-OFL.txt\" CopyToOutputDirectory=\"PreserveNewest\" />", project);
+            Assert.Contains("SIL Open Font License", File.ReadAllText(Path.Combine(AppDir, "Assets", "Fonts", console + "-OFL.txt")));
+        }
+        Assert.Equal(Fonts.Length * Weights.Length, Regex.Matches(project, @"<Resource Include=""Assets\\Fonts\\[^""]+\.ttf"" />").Count);
+    }
+
+    // Design 2026-11-19-update-page-after-restart.md, amendment of 2026-11-20: Windows Server 2016 hangs in DirectWrite on
+    // a variable font before the first window shows, so the app embeds static fonts only (F1), one per weight the theme
+    // uses (F2), under the family names the theme asks for (F3), cut from the console's fonts at their version.
+
+    [Fact]
+    public void EveryEmbeddedFontIsStaticWithOneFilePerWeightAndTheConsolesVersion()
+    {
+        string folder = Path.Combine(AppDir, "Assets", "Fonts");
+        Assert.Equal(Fonts.Length * Weights.Length, Directory.GetFiles(folder, "*.ttf").Length);
+        foreach (var (family, stem, console) in Fonts)
+        {
+            string consoleVersion = NameRecords(Path.Combine(Repo, "web", "public", "fonts", console + ".ttf"))[5][0];
+            var weights = new List<int>();
+            foreach (var weight in Weights)
+            {
+                string path = Path.Combine(folder, $"{stem}-{weight}.ttf");
+                var tables = FontTables(path);
+                Assert.False(tables.ContainsKey("fvar") || tables.ContainsKey("gvar") || tables.ContainsKey("HVAR"), $"{stem}-{weight}.ttf is a variable font (F1)");
+                byte[] d = File.ReadAllBytes(path);
+                weights.Add((d[tables["OS/2"] + 4] << 8) | d[tables["OS/2"] + 5]);
+                var names = NameRecords(path);
+                Assert.Equal(family, names[16][0]);
+                Assert.Equal(weight, names[17][0]);
+                Assert.Equal(consoleVersion, names[5][0]);
+            }
+            Assert.Equal(new[] { 400, 500, 600, 700 }, weights);
         }
 
         string theme = Read(Path.Combine("Theme", "Theme.xaml"));
         var families = Regex.Matches(theme, @"/HiveBDC\.App;component/Assets/Fonts/#([^,<]+)").Select(m => m.Groups[1].Value.Trim()).ToList();
-        Assert.Equal(new[] { "DM Sans 14pt", "Manrope" }, families);
-        foreach (var family in families)
-            Assert.True(new[] { "dm-sans.ttf", "manrope.ttf" }.Any(f => WpfFamilies(Path.Combine(AppDir, "Assets", "Fonts", f)).Contains(family)),
-                $"{family} is not a family WPF lists for the shipped fonts");
+        Assert.Equal(Fonts.Select(f => f.Family), families);
     }
 
-    /// <summary>
-    /// The families WPF lists for a variable font: its typographic family (name ID 16, else 1), and with an optical size
-    /// axis that family followed by the size its named instances sit at ("DM Sans" at opsz 14 lists as "DM Sans 14pt",
-    /// on the Windows test machine, 2026-11-19).
-    /// </summary>
-    private static HashSet<string> WpfFamilies(string path)
+    [Fact]
+    public void TheFontCheckFindsAVariableFont()
     {
-        var names = NameRecords(path);
-        string family = names.TryGetValue(16, out var typographic) ? typographic[0] : names[1][0];
-        var result = new HashSet<string> { family };
-        if (OpticalSizeOfInstances(path) is double size && names.Values.Any(v => v.Contains($"{size:0}pt")))
-            result.Add($"{family} {size:0}pt");
-        return result;
+        var tables = FontTables(Path.Combine(Repo, "web", "public", "fonts", "dm-sans.ttf"));
+        Assert.True(tables.ContainsKey("fvar") && tables.ContainsKey("gvar"));
     }
 
-    /// <summary>The opsz coordinate of the first named instance in the fvar table, or null without that axis.</summary>
-    private static double? OpticalSizeOfInstances(string path)
+    /// <summary>The table tags of a TrueType file with the offset of each table.</summary>
+    private static Dictionary<string, int> FontTables(string path)
     {
         byte[] d = File.ReadAllBytes(path);
-        int U16(int at) => (d[at] << 8) | d[at + 1];
-        int U32(int at) => (d[at] << 24) | (d[at + 1] << 16) | (d[at + 2] << 8) | d[at + 3];
-        for (int i = 0; i < U16(4); i++)
+        int count = (d[4] << 8) | d[5];
+        var tables = new Dictionary<string, int>();
+        for (int i = 0; i < count; i++)
         {
             int entry = 12 + 16 * i;
-            if (Encoding.ASCII.GetString(d, entry, 4) != "fvar") continue;
-            int fvar = U32(entry + 8);
-            int axesAt = fvar + U16(fvar + 4), axes = U16(fvar + 8), axisSize = U16(fvar + 10), instances = U16(fvar + 12);
-            for (int a = 0; a < axes && instances > 0; a++)
-                if (Encoding.ASCII.GetString(d, axesAt + a * axisSize, 4) == "opsz")
-                    return U32(axesAt + axes * axisSize + 4 + 4 * a) / 65536.0;
+            tables[Encoding.ASCII.GetString(d, entry, 4)] = (d[entry + 8] << 24) | (d[entry + 9] << 16) | (d[entry + 10] << 8) | d[entry + 11];
         }
-        return null;
+        return tables;
     }
 
     /// <summary>The Windows-platform name records of a TrueType file, by name ID.</summary>

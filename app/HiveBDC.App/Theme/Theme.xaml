@@ -122,10 +122,10 @@
 
     <DropShadowEffect x:Key="RaisedShadow" BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.14" Color="{StaticResource Color.Shadow}"/>
 
-    <!-- DM Sans for text, Manrope for headings: the console's variable font files, embedded. WPF lists a variable font
-         by its named instances: DM Sans as "DM Sans 14pt" (the optical size of 14 px text), Manrope as "Manrope", each
-         with its real weights. -->
-    <FontFamily x:Key="Font.Body">/HiveBDC.App;component/Assets/Fonts/#DM Sans 14pt, Segoe UI</FontFamily>
+    <!-- DM Sans for text, Manrope for headings: static files per weight (Regular, Medium, SemiBold, Bold), cut from the
+         console's variable fonts by build/make-static-fonts.py, DM Sans at the optical size of 14 px text. No variable font:
+         Windows Server 2016 hangs on one before the first window shows. -->
+    <FontFamily x:Key="Font.Body">/HiveBDC.App;component/Assets/Fonts/#DM Sans, Segoe UI</FontFamily>
     <FontFamily x:Key="Font.Heading">/HiveBDC.App;component/Assets/Fonts/#Manrope, Segoe UI</FontFamily>
     <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
 

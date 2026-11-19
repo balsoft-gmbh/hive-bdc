@@ -204,12 +204,16 @@ public sealed class AzureWebHost : BackgroundService
         // Pages and the API share names (/history/ and /history), so the API answers only under /api/ (design
         // 2026-11-19-web-console-nextjs.md, decision 3a); everything else is a file of the console or not found.
         string raw = http.Request.Path.Value ?? "";
-        if (!raw.Equals("/api", StringComparison.Ordinal) && !raw.StartsWith("/api/", StringComparison.Ordinal))
+        // A page of 1.8.1 or older polls its update view under the address it had before /api/ while the instance restarts,
+        // and reloads once another version answers there (design 2026-11-19-update-page-after-restart.md, U1): only this
+        // one read keeps the old address.
+        bool olderUpdatePage = HttpMethods.IsGet(http.Request.Method) && raw.Equals("/service/updates", StringComparison.Ordinal);
+        if (!olderUpdatePage && !raw.Equals("/api", StringComparison.Ordinal) && !raw.StartsWith("/api/", StringComparison.Ordinal))
         {
             await ServeConsole(http, user, raw);
             return;
         }
-        string apiPath = raw.Length <= 4 ? "/" : raw[4..];
+        string apiPath = olderUpdatePage ? raw : raw.Length <= 4 ? "/" : raw[4..];
         path = apiPath.TrimEnd('/').ToLowerInvariant();
 
         string body;

@@ -12,7 +12,7 @@
     <AssemblyTitle>Hive BDC Dashboard</AssemblyTitle>
     <Company>Balsoft GmbH</Company>
     <Copyright>© Balsoft GmbH</Copyright>
-    <Version>1.10.0</Version>
+    <Version>1.10.1</Version>
     <ApplicationIcon>Assets\hive-bdc.ico</ApplicationIcon>
     <!-- Embed the UAC manifest so the dashboard always runs elevated (Start/Stop service). -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -21,9 +21,17 @@
   <ItemGroup>
     <Resource Include="Assets\hive-bdc-logo.png" />
     <Resource Include="Assets\changelog.json" />
-    <!-- DM Sans and Manrope, the fonts of the web console, embedded so a clean Windows shows them too (SIL OFL 1.1). -->
-    <Resource Include="Assets\Fonts\dm-sans.ttf" />
-    <Resource Include="Assets\Fonts\manrope.ttf" />
+    <!-- DM Sans and Manrope, the fonts of the web console, embedded so a clean Windows shows them too (SIL OFL 1.1).
+         Static files cut from the console's variable fonts by build/make-static-fonts.py: Windows Server 2016 hangs on a
+         variable font before the first window shows. -->
+    <Resource Include="Assets\Fonts\DMSans-Regular.ttf" />
+    <Resource Include="Assets\Fonts\DMSans-Medium.ttf" />
+    <Resource Include="Assets\Fonts\DMSans-SemiBold.ttf" />
+    <Resource Include="Assets\Fonts\DMSans-Bold.ttf" />
+    <Resource Include="Assets\Fonts\Manrope-Regular.ttf" />
+    <Resource Include="Assets\Fonts\Manrope-Medium.ttf" />
+    <Resource Include="Assets\Fonts\Manrope-SemiBold.ttf" />
+    <Resource Include="Assets\Fonts\Manrope-Bold.ttf" />
     <Content Include="Assets\Fonts\dm-sans-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Fonts\manrope-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

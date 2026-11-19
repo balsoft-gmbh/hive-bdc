@@ -22,6 +22,12 @@ public sealed class AzureWebHostTests : IAsyncLifetime
     private bool _signInOn = true;
     private AzureWebHost _host = null!;
 
+    private sealed class NoFeed : IUpdateFeed
+    {
+        public Task<UpdateManifest> Latest(CancellationToken ct) => throw new HttpRequestException("No feed in this test.");
+        public Task<Stream> Open(string url, CancellationToken ct) => throw new HttpRequestException("No feed in this test.");
+    }
+
     private sealed class Monitor(BDCOptions value) : IOptionsMonitor<BDCOptions>
     {
         public BDCOptions CurrentValue => value;
@@ -39,6 +45,8 @@ public sealed class AzureWebHostTests : IAsyncLifetime
         var api = new LocalStatusServer(new Monitor(options), new TableStateStore(new MemoryTableRows(), NullLogger.Instance),
             NullLogger<LocalStatusServer>.Instance, null, "9.9.9", Path.Combine(_root, "unused.json"), _root,
             new BlobSettingsDocument(_settings), new BlobLicenseStore(new MemoryETagBlob()), tenant);
+        api.Updates = new SelfUpdate(new UpdatePlaces(_root), new NoFeed(), "9.9.9", null, () => null, () => { }, TimeProvider.System,
+            NullLogger.Instance);
         _host = new AzureWebHost(api, NullLogger.Instance, "9.9.9", tenant, () => _signInOn, new IPEndPoint(IPAddress.Loopback, 0));
         await _host.StartAsync(CancellationToken.None);
         for (int i = 0; i < 100 && _host.BoundPort == 0; i++) await Task.Delay(50);
@@ -139,6 +147,24 @@ public sealed class AzureWebHostTests : IAsyncLifetime
         var other = await Call(HttpMethod.Get, "/api/status", Principal(tenant: "99999999-9999-9999-9999-999999999999", roles: ApiRoles.Administrator));
 
         Assert.Equal((HttpStatusCode.Forbidden, "This instance belongs to another organisation."), (other.Status, (string)other.Body!["error"]!));
+    }
+
+    [Fact]
+    public async Task TheUpdatePageOfAnOlderVersionStillReachesTheUpdateView()
+    {
+        // A page of 1.8.1 or older polls /service/updates during the restart and reloads once another version answers
+        // (design 2026-11-19-update-page-after-restart.md, U1 and U4).
+        string viewer = Principal(roles: ApiRoles.Viewer);
+        var current = await Call(HttpMethod.Get, "/api/service/updates", viewer);
+        var older = await Call(HttpMethod.Get, "/service/updates", viewer);
+
+        Assert.Equal((HttpStatusCode.OK, "9.9.9"), (current.Status, (string)current.Body!["version"]!));
+        Assert.Equal((current.Status, current.Body.ToJsonString()), (older.Status, older.Body!.ToJsonString()));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Call(HttpMethod.Get, "/service/updates", null)).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Get, "/service/updates", Principal())).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Post, "/service/updates/run", viewer, "{}")).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Post, "/service/updates/check", viewer, "{}")).Status);
+        Assert.Null((await Call(HttpMethod.Get, "/status", viewer)).Body?["version"]);
     }
 
     [Theory]

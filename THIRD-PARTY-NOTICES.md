@@ -27,8 +27,8 @@ grant for these components.
 | React, React DOM, scheduler | 19.3.0, 19.3.0, 0.28.0 | Azure web console | Copyright (c) Meta Platforms, Inc. and affiliates | MIT |
 | Fluent UI React Components (@fluentui/react-components with tabster, keyborg, @griffel and @floating-ui) | 9.74.7 | Azure web console controls | Copyright (c) Microsoft Corporation; @floating-ui: Copyright (c) 2021-present Floating UI contributors | MIT |
 | lucide-react | 0.577.0 | icons of the Azure web console; the Windows app draws the same icons from their path data | Copyright (c) Lucide Contributors; portions Copyright (c) 2013-2026 Cole Bemis (Feather, MIT) | ISC |
-| DM Sans | variable, from the Balsoft web apps | text font of the Azure web console and the Windows app | Copyright 2014 The DM Sans Project Authors | SIL Open Font License 1.1 |
-| Manrope | variable, from the Balsoft web apps | heading font of the Azure web console and the Windows app | Copyright 2018 The Manrope Project Authors | SIL Open Font License 1.1 |
+| DM Sans | variable in the web console; in the Windows app static files per weight cut from it (`build/make-static-fonts.py`) | text font of the Azure web console and the Windows app | Copyright 2014 The DM Sans Project Authors | SIL Open Font License 1.1 |
+| Manrope | variable in the web console; in the Windows app static files per weight cut from it (`build/make-static-fonts.py`) | heading font of the Azure web console and the Windows app | Copyright 2018 The Manrope Project Authors | SIL Open Font License 1.1 |
 | Liberation Sans, Liberation Serif, Liberation Mono | 2.1.5 (liberation-fonts-ttf-2.1.5.tar.gz, github.com/liberationfonts/liberation-fonts) | Word to PDF where Arial, Times New Roman or Courier New is not installed | Digitized data copyright (c) 2010 Google Corporation with Reserved Font Arimo, Tinos and Cousine; Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name Liberation | SIL Open Font License 1.1 |
 | Carlito | google/fonts ofl/carlito | Word to PDF where Calibri is not installed | Copyright 2013 The Carlito Project Authors, with Reserved Font Name "Carlito" | SIL Open Font License 1.1 |
 | Caladea | 1.002 (crosextrafonts-20130214.tar.gz, Chrome OS mirror; the later OFL release on Google Fonts no longer has Cambria's widths) | Word to PDF where Cambria is not installed | Copyright (c) 2012 Huerta Tipografia | Apache-2.0 |
@@ -41,8 +41,10 @@ tools) are not listed.
 The fonts DM Sans and Manrope ship in the Azure package's web console with their full
 licence texts, `web/public/fonts/dm-sans-OFL.txt` and `web/public/fonts/manrope-OFL.txt`,
 which an Azure instance also serves at `/fonts/dm-sans-OFL.txt` and `/fonts/manrope-OFL.txt`.
-The Windows app carries the same two font files, unmodified, as resources inside `HiveBDC.App.dll`,
-with their licence texts installed next to it as `Assets\Fonts\dm-sans-OFL.txt` and
+The Windows app carries static files cut from those two fonts (Regular, Medium, SemiBold and Bold of each; DM Sans
+at the optical size 14) as resources inside `HiveBDC.App.dll`; `build/make-static-fonts.py` makes them with fontTools,
+outlines and metrics unchanged. Neither licence declares a Reserved Font Name, so the cut files keep the names DM Sans
+and Manrope. The licence texts are installed next to the app as `Assets\Fonts\dm-sans-OFL.txt` and
 `Assets\Fonts\manrope-OFL.txt`.
 
 The fonts Liberation Sans, Serif and Mono and Carlito ship unmodified inside the service

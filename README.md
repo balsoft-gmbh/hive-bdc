@@ -1135,6 +1135,15 @@ nothing and says which step stopped. The state lives in
 `POST /service/updates/{check|run|schedule|cancel|return}` need the role Administrator.
 A build without `Hosting/update-key.pem` never updates itself and says so.
 
+The Updates tab asks `GET /api/service/updates` every 5 seconds while a switch runs and loads the console again once
+another version answers. A version before 1.9.0 had its API without `/api/`, so the host also answers `GET
+/service/updates` (that one read only), which an open update page of 1.8.1 or older asks; it then reloads into the new
+console, and `#/service/updates` opens the Updates tab. The other way, after Return to a version before 1.9.0, its 404
+to `/api/service/updates` counts as that version answering, and the page opens `/#/service/updates` of it. A 502, 503 or
+no answer while App Service restarts the app only says "restarting". After 6 minutes the page says that it takes
+longer than usual and offers Reload page; after 10 minutes it says that the instance returns to the version before by
+itself. Once the update is done, the result shows Look now next to Return.
+
 Releases: `deploy/azure/package.sh` writes `azure/hivebdc-app-{version}.zip` (with the key
 fingerprint in its `hivebdc-package.json`) and `azure/latest.json` without signatures;
 `build/sign-azure-package.ps1` signs the ZIP and the entry on the signing host with the update

@@ -2,6 +2,16 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.10.1",
+      "date": "2026-11-20",
+      "changes": [
+        "Azure: the update page no longer stays on \"Restarting\" when it was opened in 1.8.1 or older; it switches to the new version by itself. The same holds after a return to such a version.",
+        "Azure: if a restart takes longer than 6 minutes, the update page says so and offers Reload page.",
+        "Azure: after an update, Service > Updates also offers Look now next to Return.",
+        "Windows: the dashboard opens again on Windows Server 2016. 1.10.0 waited there forever before its first window, on the fonts of the new look; the same fonts now ship in a form every Windows version reads."
+      ]
+    },
+    {
       "version": "1.10.0",
       "date": "2026-11-19",
       "changes": [
