@@ -197,7 +197,8 @@ public sealed partial class LocalStatusServer : BackgroundService
     private object Status()
     {
         var opts = Snapshot();
-        var lic = _licenseStore.Check(opts, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+        var scope = _licenseTenant.Scope(opts);
+        var lic = _licenseStore.Check(opts, scope, DateOnly.FromDateTime(DateTime.Today));
         return new
         {
             running = true,
@@ -234,6 +235,8 @@ public sealed partial class LocalStatusServer : BackgroundService
                 expires = lic.ExpiresOn?.ToString("yyyy-MM-dd"),
                 features = lic.Blocked ? Array.Empty<string>() : (lic.Info?.Features ?? new List<string>()).ToArray(),
                 blocked = lic.Blocked,   // true => processing is stopped; the dashboard shows a "stopped" banner
+                instanceId = lic.Info?.InstanceId is { Length: > 0 } bound ? bound.Trim() : null,   // the Azure instance the licence is bound to
+                thisInstance = scope.IsLocal || scope.InstanceId == LicenseScope.UnknownInstance ? null : scope.InstanceId,
             },
         };
     }

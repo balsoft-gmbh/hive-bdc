@@ -248,6 +248,11 @@ test('the assistant opens the step asked for while it is reached, else the step 
   assert.equal(stepHref(3, 'Sales Invoice&x'), '/setup/?step=3&type=Sales%20Invoice%26x');
 });
 
+test('the licence request mail names the instance ID when the instance has one', () => {
+  const body = decodeURIComponent(licenceRequest('00000000-0000-0000-0000-000000000002', 'https://h', '00000000-0000-0000-0000-000000000001').split('&body=')[1]);
+  assert.match(body, /Tenant ID: 00000000-0000-0000-0000-000000000002\r\nInstance ID: 00000000-0000-0000-0000-000000000001\r\nInstance address: https:\/\/h$/);
+});
+
 test('the licence request mail names the tenant and the instance address, encoded', () => {
   const link = licenceRequest('00000000-0000-0000-0000-000000000002', 'https://hivebdc-contoso.example.net');
   const url = new URL(link);

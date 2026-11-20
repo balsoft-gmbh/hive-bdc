@@ -10,13 +10,13 @@ public interface ILicenseStore
 {
     string Where(BDCOptions opts);
 
-    LicenseResult Check(BDCOptions opts, string? tenant, DateOnly today);
+    LicenseResult Check(BDCOptions opts, LicenseScope scope, DateOnly today);
 
     /// <summary>Checks <paramref name="content"/> and stores it unless it is Invalid or Expired; Stored says which.</summary>
-    (LicenseResult Result, bool Stored) Install(BDCOptions opts, string content, string? tenant, DateOnly today);
+    (LicenseResult Result, bool Stored) Install(BDCOptions opts, string content, LicenseScope scope, DateOnly today);
 }
 
-public delegate LicenseResult LicenseCheck(string? content, string? tenant, DateOnly today);
+public delegate LicenseResult LicenseCheck(string? content, LicenseScope scope, DateOnly today);
 
 /// <summary>The local rule: License:File, else license.lic next to the exe, else %ProgramData%\HiveBDC\license.lic.</summary>
 public sealed class FileLicenseStore(LicenseCheck? check = null) : ILicenseStore
@@ -25,11 +25,11 @@ public sealed class FileLicenseStore(LicenseCheck? check = null) : ILicenseStore
 
     public string Where(BDCOptions opts) => LicenseValidator.DefaultInstallPath(opts.License.File);
 
-    public LicenseResult Check(BDCOptions opts, string? tenant, DateOnly today) => LicenseValidator.Validate(opts.License.File, tenant, today);
+    public LicenseResult Check(BDCOptions opts, LicenseScope scope, DateOnly today) => LicenseValidator.Validate(opts.License.File, scope, today);
 
-    public (LicenseResult Result, bool Stored) Install(BDCOptions opts, string content, string? tenant, DateOnly today)
+    public (LicenseResult Result, bool Stored) Install(BDCOptions opts, string content, LicenseScope scope, DateOnly today)
     {
-        var result = _check(content, tenant, today);
+        var result = _check(content, scope, today);
         if (result.State is LicenseState.Invalid or LicenseState.Expired) return (result, false);
         string target = Where(opts);
         string dir = Path.GetDirectoryName(target)!;
@@ -43,7 +43,7 @@ public sealed class FileLicenseStore(LicenseCheck? check = null) : ILicenseStore
 }
 
 /// <summary>
-/// The Azure rule: license.lic next to the settings blob. A check reads the blob only when its ETag, the tenant or the day
+/// The Azure rule: license.lic next to the settings blob. A check reads the blob only when its ETag, the scope or the day
 /// changed; when the blob cannot be read, the last result stands.
 /// </summary>
 public sealed class BlobLicenseStore(IETagBlob blob, LicenseCheck? check = null) : ILicenseStore
@@ -51,11 +51,11 @@ public sealed class BlobLicenseStore(IETagBlob blob, LicenseCheck? check = null)
     private const int Attempts = 3;
     private readonly LicenseCheck _check = check ?? LicenseValidator.ValidateContent;
     private readonly object _gate = new();
-    private (string ETag, string? Tenant, DateOnly Day, LicenseResult Result)? _last;
+    private (string ETag, LicenseScope Scope, DateOnly Day, LicenseResult Result)? _last;
 
     public string Where(BDCOptions opts) => blob.Where;
 
-    public LicenseResult Check(BDCOptions opts, string? tenant, DateOnly today)
+    public LicenseResult Check(BDCOptions opts, LicenseScope scope, DateOnly today)
     {
         lock (_gate)
         {
@@ -64,26 +64,26 @@ public sealed class BlobLicenseStore(IETagBlob blob, LicenseCheck? check = null)
                 string? etag = blob.CurrentETag();
                 if (etag is null)
                     return new LicenseResult { State = LicenseState.Missing, Message = "No valid license installed — processing is stopped. Upload the license file Balsoft sent you." };
-                if (_last is { } last && last.ETag == etag && last.Tenant == tenant && last.Day == today) return last.Result;
+                if (_last is { } last && last.ETag == etag && last.Scope == scope && last.Day == today) return last.Result;
                 var stored = blob.Read();
                 if (stored is null)
                     return new LicenseResult { State = LicenseState.Missing, Message = "No valid license installed — processing is stopped. Upload the license file Balsoft sent you." };
-                var result = _check(Encoding.UTF8.GetString(stored.Value.Content), tenant, today);
-                _last = (stored.Value.ETag, tenant, today, result);
+                var result = _check(Encoding.UTF8.GetString(stored.Value.Content), scope, today);
+                _last = (stored.Value.ETag, scope, today, result);
                 return result;
             }
             catch (Exception ex)
             {
-                return _last is { } last && last.Tenant == tenant && last.Day == today
+                return _last is { } last && last.Scope == scope && last.Day == today
                     ? last.Result
                     : new LicenseResult { State = LicenseState.Invalid, Message = $"The license in {blob.Where} could not be read: {ex.Message}" };
             }
         }
     }
 
-    public (LicenseResult Result, bool Stored) Install(BDCOptions opts, string content, string? tenant, DateOnly today)
+    public (LicenseResult Result, bool Stored) Install(BDCOptions opts, string content, LicenseScope scope, DateOnly today)
     {
-        var result = _check(content, tenant, today);
+        var result = _check(content, scope, today);
         if (result.State is LicenseState.Invalid or LicenseState.Expired) return (result, false);
         byte[] bytes = Encoding.UTF8.GetBytes(content.Trim());
         for (int attempt = 0; attempt < Attempts; attempt++)

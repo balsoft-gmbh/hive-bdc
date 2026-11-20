@@ -326,6 +326,20 @@ tenant-bound licence is not accepted. An Azure instance keeps its licence as
 licence is checked against the instance's tenant before it is stored, and a
 foreign, expired or tampered one never replaces a working one.
 
+A licence can also be **bound to one Azure instance** (licences for the Azure
+Marketplace offer are). It names the object id of the instance's own identity
+(the system-assigned managed identity of the web app, the `oid` of the same
+token), which stays the same through self-updates and restarts and is another one
+for a copy in any other web app, resource group or subscription. The console shows
+it as **Instance ID** in the set-up assistant's licence step (the licence request
+mail names it) and the binding under **Service > Licence**. A bound licence runs
+only on that instance: a local install refuses it ("does not run on a local
+install"), another instance refuses it naming both ids, and while the instance's
+identity cannot be read it is not accepted. A bound licence carries the product
+`HiveBDCInstance`, so versions before 1.11.0 refuse it instead of ignoring the
+binding. Switching the identity off and on, or deploying the app anew, gives a new
+id, and Balsoft issues a new licence. Licences without a binding work as before.
+
 ## Updates
 
 The dashboard checks a public update feed (**Service > Updates > Check for updates**),

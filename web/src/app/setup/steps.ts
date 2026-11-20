@@ -38,11 +38,12 @@ export function stepLabel(index: number, done: boolean) {
 }
 
 /** The mail to Balsoft that asks for the licence, with the two values it is issued for. */
-export function licenceRequest(tenantId: string, address: string) {
+export function licenceRequest(tenantId: string, address: string, instanceId = "") {
   const body = [
     "Please send us the Hive BDC licence for this instance.",
     "",
     `Tenant ID: ${tenantId}`,
+    ...(instanceId ? [`Instance ID: ${instanceId}`] : []),
     `Instance address: ${address}`,
   ].join("\r\n");
   return `mailto:${SUPPORT_MAIL}?subject=${encodeURIComponent("Hive BDC licence")}&body=${encodeURIComponent(body)}`;

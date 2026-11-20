@@ -4,6 +4,8 @@ import { useConsole } from "./console-context";
 import { LicenceUpload } from "./licence-upload";
 import { Notice } from "./notice";
 import { featureWords, germanDate, licenceNote, licenceWorks } from "@/lib/logic";
+
+const same = (a: unknown, b: unknown) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 import { Facts, Panel } from "./service-ui";
 import type { Identity } from "./service-status";
 
@@ -37,6 +39,12 @@ export function ServiceLicence({ identity }: { identity: Identity | null }) {
                 { label: "Valid until", value: germanDate(licence.expires) },
                 { label: "Features", value: featureWords(licence.features) },
                 { label: "Tenant", value: tenant, span: 2 as const },
+                ...(licence.instanceId
+                  ? [{ label: "Bound to instance", value: same(licence.instanceId, licence.thisInstance) ? `This instance, ${licence.instanceId}` : licence.instanceId, span: 2 as const }]
+                  : []),
+                ...(licence.thisInstance && !same(licence.instanceId, licence.thisInstance)
+                  ? [{ label: "This instance", value: licence.thisInstance, span: 2 as const }]
+                  : []),
               ]
         }
       />

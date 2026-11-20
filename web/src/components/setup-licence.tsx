@@ -52,6 +52,8 @@ export function LicenceStep({ progress, readOnly }: { progress: Progress; readOn
   }, []);
 
   const tenant = identity?.tenantId ? String(identity.tenantId) : "";
+  // The licence of a Marketplace instance is bound to this id (the object id of the instance's own identity).
+  const instance = identity?.objectId ? String(identity.objectId) : "";
   const stored = async () => {
     await refresh();
     router.push("/setup/");
@@ -65,6 +67,12 @@ export function LicenceStep({ progress, readOnly }: { progress: Progress; readOn
     value: <code>{identity === null ? "Reading" : tenant || "Not known"}</code>,
     copy: !readOnly && tenant ? { text: tenant, label: "Copy the tenant ID" } : undefined,
   });
+  if (instance)
+    facts.push({
+      label: "Instance ID",
+      value: <code>{instance}</code>,
+      copy: !readOnly ? { text: instance, label: "Copy the instance ID" } : undefined,
+    });
   facts.push({
     label: "Instance address",
     value: <code>{address}</code>,
@@ -97,7 +105,7 @@ export function LicenceStep({ progress, readOnly }: { progress: Progress; readOn
         {identity?.message && !tenant && <Hint warn>{identity.message}</Hint>}
         {!readOnly && (
           <div className="setup-licence-actions">
-            <a className="button secondary" href={licenceRequest(tenant || "not known", address)}>
+            <a className="button secondary" href={licenceRequest(tenant || "not known", address, instance)}>
               <Mail {...ICON} />
               Request your licence
             </a>

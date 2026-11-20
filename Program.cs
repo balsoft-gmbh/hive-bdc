@@ -266,7 +266,7 @@ if (runMode == RunModes.Azure)
     else
         log.LogInformation("Settings from {Blob}{Problem}.", settingsDocument.Where,
             settingsBlob.Problem is { } p ? ", which cannot be read now (" + p + ")" : "");
-    log.LogInformation("Licence tenant {Tenant}, from the identity of this instance.", licenseTenant.For(opts));
+    log.LogInformation("Licence tenant {Tenant} and instance {Instance}, from the identity of this instance.", licenseTenant.For(opts), licenseTenant.Scope(opts).InstanceId);
     foreach (var problem in AzureSettingsCheck.Problems(opts))
         log.LogWarning("Not usable in Azure: {Problem}", problem);
 }
@@ -288,7 +288,7 @@ if (installLicenseFile is not null)
         log.LogCritical("The license file {File} could not be read: {Error}", installLicenseFile, ex.Message);
         return 1;
     }
-    var (checkedLicense, stored) = licenseStore.Install(opts, content, licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+    var (checkedLicense, stored) = licenseStore.Install(opts, content, licenseTenant.Scope(opts), DateOnly.FromDateTime(DateTime.Today));
     if (!stored)
     {
         log.LogCritical("License not installed, {State}: {Message}", checkedLicense.State, checkedLicense.Message);
@@ -298,7 +298,7 @@ if (installLicenseFile is not null)
     return 0;
 }
 
-var license = licenseStore.Check(opts, licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+var license = licenseStore.Check(opts, licenseTenant.Scope(opts), DateOnly.FromDateTime(DateTime.Today));
 LicenseLogging.Report(log, license);
 if (testLicense)
     return license.Blocked ? 1 : 0;

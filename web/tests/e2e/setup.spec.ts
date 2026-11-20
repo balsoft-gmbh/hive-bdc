@@ -101,19 +101,21 @@ test("a fresh instance without a licence opens step 1 under the content security
   expect(violations).toEqual([]);
 });
 
-test("tenant ID and instance address are read-only facts with icon-only copy buttons", async ({ page, request, context }) => {
+test("tenant ID, instance ID and instance address are read-only facts with icon-only copy buttons", async ({ page, request, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await mock(request, { "GET /status": noLicence(), "GET /config": freshConfig() });
   await openStep(page, "Licence");
   const origin = new URL(page.url()).origin;
   const facts = page.locator(".setup-facts");
-  await expect(facts.locator("dt")).toHaveText(["Tenant ID", "Instance address"]);
+  await expect(facts.locator("dt")).toHaveText(["Tenant ID", "Instance ID", "Instance address"]);
   expect(await facts.locator("dt").first().evaluate((el) => getComputedStyle(el).textTransform)).toBe("uppercase");
   await expect(facts.locator("dd").first()).toContainText("00000000-0000-0000-0000-000000000002");
-  await expect(facts.locator("dd").nth(1)).toContainText(origin);
+  await expect(facts.locator("dd").nth(1)).toContainText("00000000-0000-0000-0000-000000000001");
+  await expect(facts.locator("dd").nth(2)).toContainText(origin);
   await expect(facts.locator("input")).toHaveCount(0);
   for (const [label, value] of [
     ["Copy the tenant ID", "00000000-0000-0000-0000-000000000002"],
+    ["Copy the instance ID", "00000000-0000-0000-0000-000000000001"],
     ["Copy the instance address", origin],
   ]) {
     const button = page.getByRole("button", { name: label });
@@ -125,7 +127,7 @@ test("tenant ID and instance address are read-only facts with icon-only copy but
   }
 });
 
-test("the licence request mail names the tenant ID and the instance address", async ({ page, request }) => {
+test("the licence request mail names the tenant ID, the instance ID and the instance address", async ({ page, request }) => {
   await mock(request, { "GET /status": noLicence(), "GET /config": freshConfig() });
   await openStep(page, "Licence");
   const origin = new URL(page.url()).origin;
@@ -136,6 +138,7 @@ test("the licence request mail names the tenant ID and the instance address", as
   expect(href).toMatch(/^mailto:support@balsoft\.de\?subject=Hive%20BDC%20licence&body=/);
   const body = decodeURIComponent(href!.split("&body=")[1]);
   expect(body).toContain("Tenant ID: 00000000-0000-0000-0000-000000000002");
+  expect(body).toContain("Instance ID: 00000000-0000-0000-0000-000000000001");
   expect(body).toContain(`Instance address: ${origin}`);
   expect(href).not.toContain(" ");
 });
@@ -159,7 +162,7 @@ test("a valid licence shows as facts and step 1 continues with a link", async ({
   await openStep(page, "Licence", "/setup/?step=1");
   const licence = page.getByRole("region", { name: "Licence" });
   await expect(licence.locator(".badge")).toHaveText("Valid");
-  await expect(licence.locator(".setup-facts dt")).toHaveText(["Licensed to", "Valid until", "Tenant ID", "Instance address", "Features"]);
+  await expect(licence.locator(".setup-facts dt")).toHaveText(["Licensed to", "Valid until", "Tenant ID", "Instance ID", "Instance address", "Features"]);
   await expect(licence.locator(".setup-facts dd").first()).toHaveText("Contoso GmbH");
   await expect(licence.locator(".setup-facts dd").nth(1)).toHaveText("30.09.2027");
   await expect(page.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/setup/?step=2");

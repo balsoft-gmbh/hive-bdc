@@ -207,7 +207,7 @@ public sealed class Worker : BackgroundService
 
                 // Re-check the license every cycle (cheap) so expiry/renewal is picked up
                 // without a service restart. Log only when the state changes to avoid spam.
-                var license = _licenseStore.Check(opts, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+                var license = _licenseStore.Check(opts, _licenseTenant.Scope(opts), DateOnly.FromDateTime(DateTime.Today));
                 if (license.State != _lastLicenseState)
                 {
                     LicenseLogging.Report(_log, license);
@@ -276,7 +276,7 @@ public sealed class Worker : BackgroundService
         try
         {
             if (hold is not null) return new TestRunResult(false, null, "Hive BDC cannot take documents now: " + hold);
-            var license = _licenseStore.Check(opts, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+            var license = _licenseStore.Check(opts, _licenseTenant.Scope(opts), DateOnly.FromDateTime(DateTime.Today));
             if (license.Blocked) return new TestRunResult(false, null, "The licence does not allow processing: " + license.Message);
             // The uploader is built from the running settings; a SharePoint destination set up a moment ago needs one.
             var sharePoint = uploader ?? (AnySharePointEnabled(opts) ? SharePointUploader.Create(opts.SharePointAuth, _log) : null);

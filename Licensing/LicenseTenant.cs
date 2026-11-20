@@ -4,10 +4,27 @@ using Azure.Identity;
 
 namespace Balsoft.Hive.BDC.Licensing;
 
-/// <summary>The tenant a licence must be issued for on this instance.</summary>
+/// <summary>
+/// What a licence is checked against: the tenant (blank = not bound, as before) and the instance. A local install has no
+/// instance (null); an Azure instance has the object id of its own system identity, or <see cref="UnknownInstance"/>
+/// while that cannot be read, so a licence bound to an instance fails closed.
+/// </summary>
+public sealed record LicenseScope(string? TenantId, string? InstanceId, string? Problem = null)
+{
+    public const string UnknownInstance = "unknown";
+
+    /// <summary>A local install: the tenant only.</summary>
+    public static LicenseScope Local(string? tenantId) => new(tenantId, null);
+
+    public bool IsLocal => InstanceId is null;
+}
+
+/// <summary>The tenant, and on Azure the instance, a licence must be issued for on this install.</summary>
 public interface ILicenseTenant
 {
     string? For(BDCOptions opts);
+
+    LicenseScope Scope(BDCOptions opts) => LicenseScope.Local(For(opts));
 }
 
 /// <summary>A local install: the tenant of the SharePoint app in the settings, as before (blank = not bound).</summary>
@@ -46,6 +63,15 @@ public sealed class InstanceTenant : ILicenseTenant
     }
 
     public string? For(BDCOptions opts) => Resolve(out var tenant, out _) ? tenant : Unknown;
+
+    /// <summary>
+    /// The tenant and the object id of this instance's system identity (design 2026-11-20 licence binding): the id stays
+    /// the same through self-updates and restarts and is another one for a copy in any other resource.
+    /// </summary>
+    public LicenseScope Scope(BDCOptions opts)
+        => Resolve(out var tenant, out var problem) && ObjectId is { Length: > 0 } oid
+            ? new LicenseScope(tenant, oid)
+            : new LicenseScope(tenant ?? Unknown, LicenseScope.UnknownInstance, problem ?? "the access token of this instance names no object id");
 
     public bool Resolve(out string? tenant, out string? problem)
     {

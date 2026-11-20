@@ -48,7 +48,8 @@ public sealed record LicenseDto(
     string? Customer,
     string? Expires,
     bool Blocked = false,
-    List<string>? Features = null);
+    List<string>? Features = null,
+    string? InstanceId = null);
 
 /// <summary>GET /metrics. Month may be absent/null on some builds.</summary>
 public sealed record MetricsDto(

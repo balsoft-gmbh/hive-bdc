@@ -64,6 +64,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _licenseMessage = "";
     [ObservableProperty] private string _licenseCustomer = "—";
     [ObservableProperty] private string _licenseExpires = "—";
+
+    /// <summary>The Azure instance a licence is bound to; empty for a licence of any install.</summary>
+    [ObservableProperty] private string _licenseInstance = "";
     /// <summary>True when the service reports processing is halted for a license reason (missing/invalid/expired past grace).</summary>
     [ObservableProperty] private bool _licenseBlocked;
 
@@ -178,6 +181,7 @@ public sealed partial class MainViewModel : ObservableObject
             LicenseMessage = "";
             LicenseCustomer = "—";
             LicenseExpires = "—";
+            LicenseInstance = "";
             LicenseBlocked = false;
             return;
         }
@@ -187,6 +191,7 @@ public sealed partial class MainViewModel : ObservableObject
         LicenseMessage = lic.Message ?? "";
         LicenseCustomer = string.IsNullOrWhiteSpace(lic.Customer) ? "—" : lic.Customer!;
         LicenseExpires = string.IsNullOrWhiteSpace(lic.Expires) ? "—" : lic.Expires!;
+        LicenseInstance = lic.InstanceId?.Trim() ?? "";
         LicenseBlocked = lic.Blocked;
     }
 

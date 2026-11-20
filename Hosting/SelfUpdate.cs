@@ -662,7 +662,7 @@ public static class UpdateHealth
         }
         catch (Exception e) { lines.Add(new("Settings read", false, $"The settings cannot be read: {e.Message}")); }
 
-        var licence = licences.Check(opts, tenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+        var licence = licences.Check(opts, tenant.Scope(opts), DateOnly.FromDateTime(DateTime.Today));
         lines.Add(new("Licence", !licence.Blocked, licence.Blocked ? $"The licence does not allow processing: {licence.Message}"
             : licence.ExpiresOn is { } until ? $"Valid until {until:dd.MM.yyyy}" : "Valid"));
 

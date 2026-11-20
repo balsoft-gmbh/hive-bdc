@@ -23,6 +23,9 @@ public sealed class LicenseInfo
     [JsonPropertyName("customer")] public string Customer { get; set; } = "";
     [JsonPropertyName("customerCode")] public string CustomerCode { get; set; } = "";
     [JsonPropertyName("tenantId")] public string TenantId { get; set; } = "";
+
+    /// <summary>The Azure instance (object id of its system identity) the licence is bound to; empty = any install.</summary>
+    [JsonPropertyName("instanceId")] public string InstanceId { get; set; } = "";
     [JsonPropertyName("issued")] public string Issued { get; set; } = "";
     [JsonPropertyName("expires")] public string Expires { get; set; } = "";
     [JsonPropertyName("features")] public List<string> Features { get; set; } = new();
@@ -70,11 +73,14 @@ public sealed class LicenseResult
 /// Verifies a signed, time-limited license against the embedded Balsoft public
 /// certificate (same cert that signs the binaries). Offline, no phone-home.
 /// License file format: {base64url(payloadJson)}.{base64url(RSA-PKCS1-SHA256 signature)}.
-/// Bound to the customer's M365 tenant id; grace-and-warn expiry policy.
+/// Bound to the customer's M365 tenant id and optionally to one Azure instance; grace-and-warn expiry policy.
+/// A bound licence carries the product <see cref="BoundProductName"/>, so versions before 1.11.0, which do not know the
+/// binding, refuse it instead of ignoring it.
 /// </summary>
 public static class LicenseValidator
 {
     public const string ProductName = "HiveBDC";
+    public const string BoundProductName = "HiveBDCInstance";
     public const int WarnWithinDays = 30;   // warn this many days BEFORE expiry
     public const int GraceDays = 7;         // keep running this many days AFTER expiry
 
@@ -82,9 +88,9 @@ public static class LicenseValidator
     // An RSA verification plus a file read each time is wasted work: the result only changes
     // when the file changes (renewal), the expected tenant changes, or the day rolls over.
     private static readonly object CacheGate = new();
-    private static (string Path, DateTime Written, long Length, string? Tenant, DateOnly Day, LicenseResult Result)? _cache;
+    private static (string Path, DateTime Written, long Length, LicenseScope Scope, DateOnly Day, LicenseResult Result)? _cache;
 
-    public static LicenseResult Validate(string? configuredPath, string? expectedTenantId, DateOnly today)
+    public static LicenseResult Validate(string? configuredPath, LicenseScope scope, DateOnly today)
     {
         string? path = ResolvePath(configuredPath);
         if (path is null || !System.IO.File.Exists(path))
@@ -94,15 +100,15 @@ public static class LicenseValidator
         lock (CacheGate)
         {
             if (_cache is { } c && c.Path == path && c.Written == info.LastWriteTimeUtc && c.Length == info.Length
-                && c.Tenant == expectedTenantId && c.Day == today)
+                && c.Scope == scope && c.Day == today)
                 return c.Result;
         }
 
         string raw;
         try { raw = System.IO.File.ReadAllText(path).Trim(); }
         catch (Exception ex) { return new LicenseResult { State = LicenseState.Invalid, Message = "License file could not be read: " + ex.Message }; }
-        var result = ValidateContent(raw, expectedTenantId, today);
-        lock (CacheGate) _cache = (path, info.LastWriteTimeUtc, info.Length, expectedTenantId, today, result);
+        var result = ValidateContent(raw, scope, today);
+        lock (CacheGate) _cache = (path, info.LastWriteTimeUtc, info.Length, scope, today, result);
         return result;
     }
 
@@ -111,8 +117,13 @@ public static class LicenseValidator
     /// upload/renew flow to pre-check a .lic before installing it. Same checks as <see cref="Validate"/>
     /// minus the Missing case (there is always content here); empty text is Invalid.
     /// </summary>
-    public static LicenseResult ValidateContent(string? content, string? expectedTenantId, DateOnly today)
+    public static LicenseResult ValidateContent(string? content, LicenseScope scope, DateOnly today)
+        => ValidateContent(content, scope, today, null);
+
+    /// <summary>The same with the public key to trust; tests sign licences with a key of their own.</summary>
+    internal static LicenseResult ValidateContent(string? content, LicenseScope scope, DateOnly today, RSA? trustedKey)
     {
+        string? expectedTenantId = scope.TenantId;
         string raw = content?.Trim() ?? "";
         if (raw.Length == 0)
             return new LicenseResult { State = LicenseState.Invalid, Message = "License file is empty." };
@@ -128,8 +139,13 @@ public static class LicenseValidator
         bool signatureOk;
         try
         {
-            using var rsa = LoadTrustedPublicKey();
-            signatureOk = rsa.VerifyData(payloadBytes, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            if (trustedKey is not null)
+                signatureOk = trustedKey.VerifyData(payloadBytes, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            else
+            {
+                using var rsa = LoadTrustedPublicKey();
+                signatureOk = rsa.VerifyData(payloadBytes, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            }
         }
         catch (Exception ex)
         {
@@ -141,7 +157,8 @@ public static class LicenseValidator
         LicenseInfo? info;
         try { info = JsonSerializer.Deserialize<LicenseInfo>(payloadBytes); }
         catch { return new LicenseResult { State = LicenseState.Invalid, Message = "License payload could not be read." }; }
-        if (info is null || !string.Equals(info.Product, ProductName, StringComparison.OrdinalIgnoreCase))
+        bool boundProduct = string.Equals(info?.Product, BoundProductName, StringComparison.OrdinalIgnoreCase);
+        if (info is null || !(boundProduct || string.Equals(info.Product, ProductName, StringComparison.OrdinalIgnoreCase)))
             return new LicenseResult
             {
                 State = LicenseState.Invalid, Info = info,
@@ -162,6 +179,9 @@ public static class LicenseValidator
             };
         }
 
+        if (Binding(info, boundProduct, scope) is { } refused)
+            return new LicenseResult { State = LicenseState.Invalid, Info = info, Message = refused };
+
         if (!DateOnly.TryParse(info.Expires, out var expires))
             return new LicenseResult { State = LicenseState.Invalid, Info = info, Message = "License has no valid expiry date." };
 
@@ -181,6 +201,24 @@ public static class LicenseValidator
                 Message = $"License for {info.Customer} EXPIRED on {expires:yyyy-MM-dd}; grace period ends in {GraceDays - daysPast} day(s). Renew now." }
             : new LicenseResult { State = LicenseState.Expired, Info = info, ExpiresOn = expires,
                 Message = $"License for {info.Customer} expired on {expires:yyyy-MM-dd} and the {GraceDays}-day grace period is over — processing is stopped. Renew the license." };
+    }
+
+    /// <summary>
+    /// Why a licence bound to an Azure instance does not run here, or null when it does (or is not bound). A licence of the
+    /// bound product must name its instance; a binding is compared trimmed and without regard to case.
+    /// </summary>
+    private static string? Binding(LicenseInfo info, bool boundProduct, LicenseScope scope)
+    {
+        string bound = info.InstanceId?.Trim() ?? "";
+        if (bound.Length == 0)
+            return boundProduct ? "This licence is for one Hive BDC instance in Azure but names no instance. Ask Balsoft for a new licence file." : null;
+        if (scope.IsLocal)
+            return $"This licence belongs to the Hive BDC instance {bound} in Azure and does not run on a local install. Ask Balsoft for a licence for this install.";
+        if (scope.InstanceId == LicenseScope.UnknownInstance)
+            return $"This licence belongs to instance {bound}; the identity of this instance cannot be read yet ({scope.Problem}).";
+        if (!string.Equals(bound, scope.InstanceId!.Trim(), StringComparison.OrdinalIgnoreCase))
+            return $"This licence belongs to another Hive BDC instance ({bound}). This instance is {scope.InstanceId}. Ask Balsoft for a licence issued for it.";
+        return null;
     }
 
     /// <summary>Comma list of the license's features, or "none".</summary>

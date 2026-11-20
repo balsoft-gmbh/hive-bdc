@@ -133,7 +133,7 @@ public sealed partial class LocalStatusServer
         bool stored;
         try
         {
-            (result, stored) = _licenseStore.Install(opts, content, _licenseTenant.For(opts), DateOnly.FromDateTime(DateTime.Today));
+            (result, stored) = _licenseStore.Install(opts, content, _licenseTenant.Scope(opts), DateOnly.FromDateTime(DateTime.Today));
         }
         catch (Exception ex)
         { Respond(call, 500, new { ok = false, message = "Could not install the license: " + ex.Message }); return; }

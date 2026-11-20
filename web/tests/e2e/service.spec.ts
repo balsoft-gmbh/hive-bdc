@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFile } from "node:fs/promises";
-import { config } from "./fixtures";
+import { config, defaults } from "./fixtures";
 import {
   cannotUpdate,
   done,
@@ -88,6 +88,26 @@ test("the page is titled Service with one short line, and the breadcrumb names t
   await crumbs.getByRole("link", { name: "Service" }).click();
   await expect(page).toHaveURL(/\/service\/$/);
   await expect(crumbs.locator("[aria-current='page']")).toHaveText("Status");
+});
+
+test("a licence bound to an instance shows the binding; a licence of another instance names both ids", async ({ page, request }) => {
+  const status = (license: Record<string, unknown>) => ({ ...(defaults()["GET /status"] as any), license: { ...(defaults()["GET /status"] as any).license, ...license } });
+  await mock(request, { "GET /status": status({ instanceId: "00000000-0000-0000-0000-000000000001", thisInstance: "00000000-0000-0000-0000-000000000001" }) });
+  await page.goto("/service/?tab=licence");
+  await opened(page);
+  await expect(fact(page, "Bound to instance")).toHaveText("This instance, 00000000-0000-0000-0000-000000000001");
+  await expect(fact(page, "This instance")).toHaveCount(0);
+  await mock(request, {
+    "GET /status": status({
+      state: "Invalid", blocked: true, features: [], instanceId: "00000000-0000-0000-0000-000000000009", thisInstance: "00000000-0000-0000-0000-000000000001",
+      message: "This licence belongs to another Hive BDC instance (00000000-0000-0000-0000-000000000009). This instance is 00000000-0000-0000-0000-000000000001. Ask Balsoft for a licence issued for it.",
+    }),
+  });
+  await page.reload();
+  await opened(page);
+  await expect(page.getByText("This licence belongs to another Hive BDC instance")).toBeVisible();
+  await expect(fact(page, "Bound to instance")).toHaveText("00000000-0000-0000-0000-000000000009");
+  await expect(fact(page, "This instance")).toHaveText("00000000-0000-0000-0000-000000000001");
 });
 
 test("?tab=licence opens the Licence tab directly and a reload keeps it; the tabs switch by link", async ({ page }) => {

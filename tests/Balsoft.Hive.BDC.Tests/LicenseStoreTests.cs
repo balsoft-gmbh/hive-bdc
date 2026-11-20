@@ -20,9 +20,9 @@ public sealed class LicenseStoreTests : IDisposable
     }
 
     /// <summary>Stands in for the signature check: "good" licenses this tenant, "foreign" another one, anything else is tampered.</summary>
-    private LicenseResult Check(string? content, string? tenant, DateOnly today)
+    private LicenseResult Check(string? content, LicenseScope scope, DateOnly today)
     {
-        _checked.Add((content, tenant));
+        _checked.Add((content, scope.TenantId));
         return content?.Trim() switch
         {
             "good" => new LicenseResult { State = LicenseState.Valid, Message = "License OK", Info = new LicenseInfo { TenantId = Tenant } },
@@ -37,12 +37,12 @@ public sealed class LicenseStoreTests : IDisposable
     {
         var store = new BlobLicenseStore(_blob, Check);
 
-        var (result, stored) = store.Install(new BDCOptions(), "good\n", Tenant, Today);
+        var (result, stored) = store.Install(new BDCOptions(), "good\n", LicenseScope.Local(Tenant), Today);
 
         Assert.True(stored);
         Assert.Equal(LicenseState.Valid, result.State);
         Assert.Equal("good", _blob.Text);
-        Assert.Equal(LicenseState.Valid, store.Check(new BDCOptions(), Tenant, Today).State);
+        Assert.Equal(LicenseState.Valid, store.Check(new BDCOptions(), LicenseScope.Local(Tenant), Today).State);
     }
 
     [Theory]
@@ -54,7 +54,7 @@ public sealed class LicenseStoreTests : IDisposable
         _blob.Put("good");
         var store = new BlobLicenseStore(_blob, Check);
 
-        var (result, stored) = store.Install(new BDCOptions(), upload, Tenant, Today);
+        var (result, stored) = store.Install(new BDCOptions(), upload, LicenseScope.Local(Tenant), Today);
 
         Assert.False(stored);
         Assert.NotEqual(LicenseState.Valid, result.State);
@@ -65,14 +65,14 @@ public sealed class LicenseStoreTests : IDisposable
     [Fact]
     public void TheUploadIsCheckedAgainstTheTenantGiven()
     {
-        new BlobLicenseStore(_blob, Check).Install(new BDCOptions(), "good", Tenant, Today);
+        new BlobLicenseStore(_blob, Check).Install(new BDCOptions(), "good", LicenseScope.Local(Tenant), Today);
 
         Assert.Equal((string?)Tenant, Assert.Single(_checked).Tenant);
     }
 
     [Fact]
     public void NoBlobMeansNoLicence()
-        => Assert.Equal(LicenseState.Missing, new BlobLicenseStore(_blob, Check).Check(new BDCOptions(), Tenant, Today).State);
+        => Assert.Equal(LicenseState.Missing, new BlobLicenseStore(_blob, Check).Check(new BDCOptions(), LicenseScope.Local(Tenant), Today).State);
 
     [Fact]
     public void TheBlobIsReadAgainOnlyWhenItTheTenantOrTheDayChanged()
@@ -80,14 +80,14 @@ public sealed class LicenseStoreTests : IDisposable
         _blob.Put("good");
         var store = new BlobLicenseStore(_blob, Check);
 
-        store.Check(new BDCOptions(), Tenant, Today);
-        store.Check(new BDCOptions(), Tenant, Today);
+        store.Check(new BDCOptions(), LicenseScope.Local(Tenant), Today);
+        store.Check(new BDCOptions(), LicenseScope.Local(Tenant), Today);
         Assert.Equal(1, _blob.Reads);
 
-        store.Check(new BDCOptions(), Tenant, Today.AddDays(1));
-        store.Check(new BDCOptions(), "other", Today.AddDays(1));
+        store.Check(new BDCOptions(), LicenseScope.Local(Tenant), Today.AddDays(1));
+        store.Check(new BDCOptions(), LicenseScope.Local("other"), Today.AddDays(1));
         _blob.Put("old");
-        Assert.Equal(LicenseState.Expired, store.Check(new BDCOptions(), "other", Today.AddDays(1)).State);
+        Assert.Equal(LicenseState.Expired, store.Check(new BDCOptions(), LicenseScope.Local("other"), Today.AddDays(1)).State);
         Assert.Equal(4, _blob.Reads);
     }
 
@@ -96,12 +96,12 @@ public sealed class LicenseStoreTests : IDisposable
     {
         _blob.Put("good");
         var store = new BlobLicenseStore(_blob, Check);
-        store.Check(new BDCOptions(), Tenant, Today);
+        store.Check(new BDCOptions(), LicenseScope.Local(Tenant), Today);
 
         _blob.Down = true;
-        Assert.Equal(LicenseState.Valid, store.Check(new BDCOptions(), Tenant, Today).State);
+        Assert.Equal(LicenseState.Valid, store.Check(new BDCOptions(), LicenseScope.Local(Tenant), Today).State);
 
-        var fresh = new BlobLicenseStore(_blob, Check).Check(new BDCOptions(), Tenant, Today);
+        var fresh = new BlobLicenseStore(_blob, Check).Check(new BDCOptions(), LicenseScope.Local(Tenant), Today);
         Assert.Equal(LicenseState.Invalid, fresh.State);
         Assert.Contains("could not be read: blob 503", fresh.Message);
     }
@@ -113,7 +113,7 @@ public sealed class LicenseStoreTests : IDisposable
         _blob.BeforeWrite = b => b.Put("tampered");
         var store = new BlobLicenseStore(_blob, Check);
 
-        Assert.True(store.Install(new BDCOptions(), "good", Tenant, Today).Stored);
+        Assert.True(store.Install(new BDCOptions(), "good", LicenseScope.Local(Tenant), Today).Stored);
         Assert.Equal("good", _blob.Text);
     }
 
@@ -124,10 +124,10 @@ public sealed class LicenseStoreTests : IDisposable
         var opts = new BDCOptions { License = { File = file } };
         var store = new FileLicenseStore(Check);
 
-        Assert.False(store.Install(opts, "foreign", Tenant, Today).Stored);
+        Assert.False(store.Install(opts, "foreign", LicenseScope.Local(Tenant), Today).Stored);
         Assert.False(File.Exists(file));
 
-        Assert.True(store.Install(opts, "good\r\n", Tenant, Today).Stored);
+        Assert.True(store.Install(opts, "good\r\n", LicenseScope.Local(Tenant), Today).Stored);
         Assert.Equal("good", File.ReadAllText(file));
         Assert.Equal(file, store.Where(opts));
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));

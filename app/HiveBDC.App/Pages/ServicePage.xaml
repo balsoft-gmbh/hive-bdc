@@ -220,6 +220,10 @@
                                     <TextBlock Text="EXPIRES" Style="{StaticResource FactLabel}"/>
                                     <TextBlock Text="{Binding LicenseExpires}" Style="{StaticResource FactValue}"/>
                                 </StackPanel>
+                                <StackPanel Style="{StaticResource Fact}" Visibility="{Binding LicenseInstance, Converter={StaticResource Match}, ConverterParameter=!}">
+                                    <TextBlock Text="BOUND TO THE AZURE INSTANCE" Style="{StaticResource FactLabel}"/>
+                                    <TextBlock Text="{Binding LicenseInstance}" Style="{StaticResource FactValue}" AutomationProperties.AutomationId="LicenceInstance"/>
+                                </StackPanel>
                             </WrapPanel>
                             <TextBlock Text="{Binding LicenseMessage}" Style="{StaticResource FactValue}" Margin="0,14,0,0"
                                        Visibility="{Binding LicenseMessage, Converter={StaticResource Match}, ConverterParameter=!}"/>
