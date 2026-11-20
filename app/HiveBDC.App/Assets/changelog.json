@@ -2,6 +2,16 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.11.0",
+      "date": "2026-11-21",
+      "changes": [
+        "Inbound flows deliver the CSV to Azure Blob Storage or Azure Service Bus as well as to a folder, for example where a Dynamics 365 F&O receive flow reads; the document file goes beside it, outside the folder the ERP reads. In Blob Storage and Service Bus the CSV has no byte order mark, which F&O would read as part of the first column name.",
+        "Azure: the web console has Inbound pages like the Windows app: document types, companies, where the documents come from, where your ERP reads them and the CSV columns with a preview of a ready document.",
+        "Windows: Inbound > Goes to offers Folder the ERP reads, Blob Storage and Service Bus. Preview with a ready document shows the CSV the document makes.",
+        "Licences can be bound to one Azure instance. Such a licence runs only on that instance; the set-up assistant shows the Instance ID that Balsoft needs for it, and Service > Licence shows the binding. Licences without a binding work as before."
+      ]
+    },
+    {
       "version": "1.10.1",
       "date": "2026-11-20",
       "changes": [
