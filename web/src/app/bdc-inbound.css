@@ -1,0 +1,136 @@
+/* Inbound (inbound-*.tsx, boards I1 to I6), on the same panels, fields and tiles as Outbound. Scoped to .bdc-edit. */
+
+.bdc-edit .bdc-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.bdc-edit .bdc-two + .panel,
+.bdc-edit .company-bar + .bdc-two,
+.bdc-edit .company-bar + .notice,
+.bdc-edit .notice + .bdc-two {
+  margin-top: 12px;
+}
+.bdc-edit .bdc-two .panel + .panel {
+  margin-top: 0;
+}
+.bdc-edit .bdc-two .form-body,
+.bdc-edit .panel .form-body > .field + .field,
+.bdc-edit .panel .form-body > .field + .toggle-pill,
+.bdc-edit .panel .form-body > .toggle-pill + .field {
+  margin-top: 12px;
+}
+.bdc-edit .source-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.bdc-edit .link-button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  font: inherit;
+  font-weight: 600;
+  color: #8a6400;
+  cursor: pointer;
+}
+.bdc-edit .link-button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.bdc-edit .form-row-split {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) minmax(0, 1fr);
+  gap: 12px;
+}
+.bdc-edit .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.bdc-edit .grid-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.bdc-edit .columns-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+}
+.bdc-edit .columns-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.bdc-edit .columns-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.bdc-edit .columns-table tr:last-child td {
+  border-bottom: 0;
+}
+.bdc-edit .columns-table input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.bdc-edit .columns-table .cell-action {
+  width: 44px;
+  text-align: center;
+}
+.bdc-edit .mono,
+.bdc-edit .csv-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.bdc-edit .csv-preview {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.6;
+}
+.bdc-edit .preview-values {
+  margin-top: 10px;
+}
+.bdc-edit .preview-values summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.bdc-edit .badge-inbound {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+  color: #145c33;
+  background: #e3f4ea;
+}
+:root[data-theme="dark"] .bdc-edit .badge-inbound {
+  color: #a8e2c2;
+  background: #1d3a2c;
+}
+.bdc-edit .source-tiles .field-label {
+  grid-column: 1 / -1;
+  padding: 0;
+  margin-bottom: 4px;
+}
+.bdc-edit .source-tiles > .field-hint {
+  grid-column: 1 / -1;
+}

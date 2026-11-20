@@ -34,8 +34,30 @@ public sealed class ConnectorRegistry
         registry.RegisterConnectionKind(ConnectionKinds.AzureStorage, () => new AzureStorageConnectionKind());
         registry.RegisterConnectionKind(ConnectionKinds.Https, () => new HttpsConnectionKind());
         registry.RegisterConnectionKind(ConnectionKinds.ServiceBus, () => new ServiceBusConnectionKind());
+        registry.RegisterInbound("folder", _ => new FolderInboundTarget());
+        registry.RegisterInbound("blob", options => new BlobInboundTarget(options, (c, container) => AzureBlobStore.For(c, container)));
+        registry.RegisterInbound(ConnectionKinds.ServiceBus,
+            options => new ServiceBusInboundTarget(options, AzureServiceBus.Outbox, (c, container) => AzureBlobStore.For(c, container)));
         return registry;
     }
+
+    private readonly Dictionary<string, Func<BDCOptions, IInboundTarget>> _inbound = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _inboundOrder = new();
+
+    /// <summary>A place an inbound flow delivers its CSV to (where the ERP reads).</summary>
+    public void RegisterInbound(string kind, Func<BDCOptions, IInboundTarget> create)
+    {
+        string key = TargetKinds.Clean(kind);
+        if (!_inbound.ContainsKey(key)) _inboundOrder.Add(key);
+        _inbound[key] = create;
+    }
+
+    /// <summary>The inbound destination kinds in the order they were registered (the order of the choices in the dashboard).</summary>
+    public IReadOnlyList<string> InboundKindNames => _inboundOrder;
+
+    /// <summary>The inbound destination for <paramref name="kind"/>, or null when this version does not know the kind.</summary>
+    public IInboundTarget? Inbound(string kind, BDCOptions options)
+        => _inbound.TryGetValue(TargetKinds.Clean(kind), out var create) ? create(options) : null;
 
     /// <summary>The Settings side of a destination kind (its page and lists); delivery is the target of the same kind.</summary>
     public void RegisterDestination(string kind, Func<SourceRuntime, IDestinationKind> create)

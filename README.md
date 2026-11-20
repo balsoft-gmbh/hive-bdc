@@ -994,7 +994,8 @@ changes, then every 5 minutes):
 - the settings blob cannot be read (the last settings read stay in use);
 - the settings use what only a local install has: a company that reads a folder
   instead of Blob Storage or Service Bus, Word input, a company that only writes to
-  its output folder, an inbound flow that writes to a folder, or a secret kept in the settings
+  its output folder, an inbound flow that writes to a folder (choose Blob Storage or Service
+  Bus under Inbound), or a secret kept in the settings
   instead of a `kv:` reference. Each is named with its type and company or flow;
 - Table Storage cannot be reached;
 - Key Vault cannot be reached (asked at most once a minute);
@@ -1008,6 +1009,7 @@ program does not start (exit code 3); `--once` exits with 2 while it would wait.
 An Azure instance serves its console at its own address (`/`), behind the same sign-in
 and roles as the API: the overview (documents delivered today, documents that need
 attention with Retry for Operators, licence), the document history with search, Outbound,
+Inbound (as in the Windows app, with Blob Storage and Service Bus as the places the ERP reads),
 Connections, Service (status, licence, updates, technical log) and, on a fresh instance,
 the set-up assistant, which takes the whole screen until the instance runs.
 
@@ -1186,6 +1188,7 @@ package: Bicep build and linter, Microsoft's ARM template test toolkit (arm-ttk)
 
 ### Inbound flows (DocuWare, SharePoint)
 
+The Windows app and the web console of an Azure instance have the same Inbound pages.
 **Inbound > New document type**, then **Add company** asks where the
 documents come from: one tile per document system this version reads from (DocuWare and
 SharePoint today; a further system is one source connector in the service and shows up
@@ -1201,9 +1204,27 @@ settings, with lists read from the system itself:
   than 5000 files, index the ready column (Library settings, Indexed columns), otherwise
   the flow says so and takes nothing.
 
-Every scan, the ready documents become a CSV file in the folder the ERP reads, and the
-ready field or column is then set to the done value, so a document is imported once.
-The document's file can be saved next to the CSV (`{FilePath}` is its path). Columns are
+Every scan, the ready documents become a CSV where the ERP reads it, and the ready field
+or column is then set to the done value, so a document is imported once. **Goes to**
+offers the places this run mode has:
+
+- **Folder the ERP reads** (Windows only): the CSV in that folder, the document's file
+  next to it (`{FilePath}` is its path).
+- **Blob Storage**: the CSV in a container under **Folder in the container**, for example
+  the pending prefix of a Dynamics 365 F&O Blob Storage receive flow; the file under
+  **Folder for the files** (default `files/`), which must lie outside the folder the ERP
+  reads, or the ERP would take each file for a CSV. Save refuses such a setting.
+  `{FilePath}` is the file's blob address.
+- **Service Bus**: the CSV as the body of one message to a queue or topic, for example one
+  an F&O Service Bus receive flow reads; MessageId `{flow id}_{document id}` (the same for
+  a repeat, so duplicate detection drops it), Subject the document type, and the message
+  properties `documentType`, `dataAreaId`, `recordId` and `fileName`. A message cannot
+  carry the file, so it goes to the storage connection and container named under
+  **Storage for the files**. A CSV larger than the namespace takes in one message (256 KB
+  on the Standard tier) fails with its size named.
+
+The file is saved before the CSV, so the ERP never reads a CSV whose file is missing; a
+CSV that cannot be built leaves nothing behind. Columns are
 named as the ERP expects; **Columns from a CSV the ERP reads…** takes them from the first
 line of such a file, **One column per field** adds every field, and **Preview with a ready
 document** reads one ready document so the values can be checked. Each column is filled
@@ -1213,14 +1234,19 @@ the current table row when the rows come from a DocuWare table field), `{DWDOCID
 chosen, every table row becomes a CSV row with the other columns repeated. Two switched-on
 flows that would pick up the same documents are refused on Save.
 
-The CSV is UTF-8 with a byte order mark, separated by `;` unless set otherwise,
+The CSV is UTF-8, with a byte order mark in a folder (as AX reads it) and without one in
+Blob Storage and Service Bus (an F&O receive flow would read the mark as part of the first
+column name), separated by `;` unless set otherwise,
 with numbers and dates in German (`1234,5`, `31.12.2026`), English (US) or ISO
 format, quoted per RFC 4180 where a value holds the separator, a quote or a line
 break, and written under a temporary name first. Dates are read in German time, so a
 date stored at midnight is not moved to the day before. A column naming a field the
 document lacks stops that document with the column named and nothing written; it is
 tried again after an hour or after the flow is saved. If the done mark cannot be
-written, the next scan only repeats the mark. Each company is one entry under `Flows`;
+written, the next scan only repeats the mark, also when the flow moved to another place in
+between. A busy or unreachable Blob Storage or Service Bus leaves the document waiting for
+the next scan. **Preview with a ready document** shows the CSV the document makes, built
+by the same code as a run. Each company is one entry under `Flows`;
 `DocumentType` and `DataAreaId` are new in 1.5.0, and an entry without them is shown under
 its own name:
 
@@ -1241,9 +1267,20 @@ its own name:
                     "ReadyColumn": "Status", "ReadyValue": "Approved", "DoneValue": "In ERP" } },
     "Produce": { "Kind": "csv", "Settings": { "FileName": "{ID}.csv" },
       "Columns": [ { "Name": "Company", "Value": "{DataAreaId}" }, { "Name": "VendorAccount", "Value": "{VendorNumber}" } ] },
-    "Targets": [ { "Kind": "folder", "Settings": { "Folder": "\\\\server\\erp\\vendor-invoices", "SaveFile": "true" } } ] }
+    "Targets": [ { "Kind": "folder", "Settings": { "Folder": "\\\\server\\erp\\vendor-invoices", "SaveFile": "true" } } ] },
+  { "Id": "vendor-invoice-usmf", "Name": "Vendor invoice (USMF)", "Enabled": true,
+    "DocumentType": "Vendor invoice", "DataAreaId": "USMF",
+    "Source": { "Kind": "sharepoint", "Settings": { "SiteUrl": "https://contoso.sharepoint.com/sites/Finance", "Library": "Incoming invoices",
+                    "ReadyColumn": "Status", "ReadyValue": "Approved", "DoneValue": "In ERP" } },
+    "Produce": { "Kind": "csv", "Settings": { "FileName": "{ID}.csv" }, "Columns": [ { "Name": "DOCID", "Value": "{ID}" } ] },
+    "Targets": [ { "Kind": "blob", "Connection": "fo-storage",
+      "Settings": { "Container": "erp-inbound", "Prefix": "pending/", "SaveFile": "true", "FilePrefix": "files/" } } ] }
 ]
 ```
+
+A Service Bus destination is `{ "Kind": "servicebus", "Connection": "fo-bus", "Settings": { "Queue":
+"bdc-inbound", "SaveFile": "true", "FileConnection": "fo-storage", "FileContainer": "erp-files",
+"FilePrefix": "vendor/" } }`.
 
 ### Document history
 

@@ -438,6 +438,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         var res = await _client.GetSourcesAsync();
         var (docuWare, sharePoint) = UnsavedSecrets?.Invoke() ?? ("", "");
+        InboundDestinations = res.Data?.Destinations is { Count: > 0 } offered ? offered : new() { InboundDestinationDto.Folder };
         Sources.Clear();
         foreach (var s in res.Data?.Sources ?? new())
         {
@@ -450,6 +451,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         RebuildInbound();
     }
+
+    /// <summary>Where an inbound flow can deliver, as the service reports it (only the folder from an older service).</summary>
+    public List<InboundDestinationDto> InboundDestinations { get; private set; } = new() { InboundDestinationDto.Folder };
+
+    /// <summary>The connections of one kind by name, for the connection lists of an inbound destination.</summary>
+    private IReadOnlyList<string> ConnectionsOfKind(string kind)
+        => _connections.Where(c => string.Equals(c.Kind, kind, StringComparison.OrdinalIgnoreCase)).Select(c => c.Id ?? "").Where(id => id.Length > 0).ToList();
 
     private SourceInfoDto? SourceFor(string kind)
         => Sources.FirstOrDefault(s => string.Equals(s.Kind, kind, StringComparison.OrdinalIgnoreCase));
@@ -600,7 +608,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             StatusIsError = false;
             return;
         }
-        OpenInbound = new InboundFlowViewModel(_client, WithDrafts, source, row);
+        OpenInbound = new InboundFlowViewModel(_client, WithDrafts, source, row, InboundDestinations, ConnectionsOfKind);
         Open("company");
         _ = OpenInbound.LoadAsync();
     }

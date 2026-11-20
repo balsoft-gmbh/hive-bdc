@@ -2,6 +2,7 @@
 // tests/export.test.ts. Every change works on a copy of the POST /config body (postBody in logic.ts), so one draft can
 // span several screens. Port of Hosting/Console/exportlogic.js.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { flowChanges, flowConnectionUses } from './inboundlogic';
 import { cleanPrefix, typeLabel } from './logic';
 
 const same = (a: any, b: any) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
@@ -384,6 +385,7 @@ export function draftChanges(original: any, draft: any) {
   }
   for (const t of o.documentTypes) if (!findType(d, t.id)) lines.push(`${typeLabel(t)} removed`);
   lines.push(...settingsChanges(o, d));
+  lines.push(...flowChanges(o.flows, d.flows));
   for (const c of d.connections) if (c.secret) lines.push(c.kind === 'https' ? `New key for ${c.id}` : `New secret for ${c.id}`);
   return lines;
 }
@@ -446,6 +448,7 @@ export function connectionUses(draft: any, id: any) {
       for (const x of c.targets || []) if (x.connection === id) uses.push(`${where} (${kindName(x.kind)})`);
     }
   }
+  uses.push(...flowConnectionUses(draft && draft.flows, id));
   return uses;
 }
 

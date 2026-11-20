@@ -266,6 +266,23 @@ public sealed record DocuWareCabinetDto(string? Id, string? Name);
 public sealed class SourcesDto
 {
     [JsonPropertyName("sources")] public List<SourceInfoDto>? Sources { get; set; }
+
+    /// <summary>Where an inbound flow can deliver in this run mode (1.11.0 and later; absent from an older service).</summary>
+    [JsonPropertyName("destinations")] public List<InboundDestinationDto>? Destinations { get; set; }
+}
+
+/// <summary>A place an inbound flow delivers its CSV to: a folder, Blob Storage or Service Bus, with what it needs.</summary>
+public sealed class InboundDestinationDto
+{
+    [JsonPropertyName("kind")] public string? Kind { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("description")] public string? Description { get; set; }
+    [JsonPropertyName("connectionKind")] public string? ConnectionKind { get; set; }
+    [JsonPropertyName("connected")] public bool Connected { get; set; }
+    [JsonPropertyName("settings")] public List<SourceSettingDto>? Settings { get; set; }
+
+    /// <summary>The folder every older service writes to; offered when the service names no destinations.</summary>
+    public static InboundDestinationDto Folder => new() { Kind = "folder", Name = "Folder the ERP reads", Connected = true, Settings = new() };
 }
 
 /// <summary>A document system this version of the service reads from, and the settings an inbound flow from it needs.</summary>
@@ -311,6 +328,11 @@ public sealed class SourceRequestDto
     [JsonPropertyName("settings")] public Dictionary<string, string>? Settings { get; set; }
     [JsonPropertyName("docuWare")] public DocuWareRequestDto? DocuWare { get; set; }
     [JsonPropertyName("sharePoint")] public SharePointDraftDto? SharePoint { get; set; }
+
+    /// <summary>POST /sources/preview: the CSV settings and columns, the company and where the CSV goes.</summary>
+    [JsonPropertyName("produce")] public System.Text.Json.Nodes.JsonNode? Produce { get; set; }
+    [JsonPropertyName("dataAreaId")] public string? DataAreaId { get; set; }
+    [JsonPropertyName("target")] public System.Text.Json.Nodes.JsonNode? Target { get; set; }
 }
 
 public sealed record SourceChoiceDto(string? Value, string? Label, string? Detail)
@@ -386,6 +408,9 @@ public sealed class SourceSampleResult
     [JsonPropertyName("ok")] public bool Ok { get; set; }
     [JsonPropertyName("message")] public string? Message { get; set; }
     [JsonPropertyName("values")] public List<SourceValueDto>? Values { get; set; }
+
+    /// <summary>POST /sources/preview only: the CSV the record makes, line by line.</summary>
+    [JsonPropertyName("lines")] public List<string>? Lines { get; set; }
 }
 
 public sealed record TestDocuWareResult(bool Ok, string? Message, List<DocuWareCabinetDto>? Cabinets);

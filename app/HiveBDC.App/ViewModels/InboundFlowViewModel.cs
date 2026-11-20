@@ -67,10 +67,29 @@ public sealed partial class SourceSettingField : ObservableObject
     }
 }
 
+/// <summary>One place the CSV can go, as a segment of the "Goes to" choice.</summary>
+public sealed partial class DestinationChoice(InboundDestinationDto descriptor) : ObservableObject
+{
+    public InboundDestinationDto Descriptor { get; } = descriptor;
+    public string Kind => Descriptor.Kind ?? "";
+    public string Name => Descriptor.Name ?? Kind;
+
+    [ObservableProperty] private bool _isSelected;
+
+    /// <summary>The company page's own reaction when this place is picked.</summary>
+    internal Action<DestinationChoice>? Picked;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        if (value) Picked?.Invoke(this);
+    }
+}
+
 /// <summary>
 /// One company of an inbound document type: where its records come from (any document system the service reports,
-/// with that system's own settings), and the CSV the ERP reads plus the folder it goes to. Edits the flow's JSON, so
-/// keys this dashboard does not know survive a save.
+/// with that system's own settings), and the CSV the ERP reads plus where it goes (a folder, Blob Storage or Service
+/// Bus, as the service offers them). Edits the flow's JSON, so keys this dashboard does not know survive a save, and a
+/// destination kind it does not know is kept as it is.
 /// </summary>
 public sealed partial class InboundFlowViewModel : ObservableObject
 {
@@ -83,12 +102,16 @@ public sealed partial class InboundFlowViewModel : ObservableObject
 
     private readonly LoopbackClient _client;
     private readonly Func<SourceRequestDto, SourceRequestDto> _withDrafts;
+    private readonly Func<string, IReadOnlyList<string>> _connectionsOfKind;
+    private readonly JsonObject? _originalTarget;
     private bool _loading;
 
-    public InboundFlowViewModel(LoopbackClient client, Func<SourceRequestDto, SourceRequestDto> withDrafts, SourceInfoDto source, ImportFlowRow row)
+    public InboundFlowViewModel(LoopbackClient client, Func<SourceRequestDto, SourceRequestDto> withDrafts, SourceInfoDto source, ImportFlowRow row,
+        IReadOnlyList<InboundDestinationDto>? destinations = null, Func<string, IReadOnlyList<string>>? connectionsOfKind = null)
     {
         _client = client;
         _withDrafts = withDrafts;
+        _connectionsOfKind = connectionsOfKind ?? (_ => Array.Empty<string>());
         Source = source;
         Row = row;
         _dataAreaId = row.DataAreaId;
@@ -104,10 +127,18 @@ public sealed partial class InboundFlowViewModel : ObservableObject
         string culture = row.Setting("Produce", "Culture");
         _numberFormat = culture.StartsWith("de", StringComparison.OrdinalIgnoreCase) || culture.Length == 0 ? NumberFormats[0]
             : culture.Equals("en-US", StringComparison.OrdinalIgnoreCase) ? NumberFormats[1] : NumberFormats[2];
-        var targetSettings = ImportFlowRow.Get((ImportFlowRow.Get(row.Json, "Targets") as JsonArray)?.FirstOrDefault() as JsonObject, "Settings") as JsonObject;
+        _originalTarget = (ImportFlowRow.Get(row.Json, "Targets") as JsonArray)?.OfType<JsonObject>()
+            .FirstOrDefault(t => !ImportFlowRow.Text(t, "Enabled").Equals("false", StringComparison.OrdinalIgnoreCase))?.DeepClone() as JsonObject;
+        var targetSettings = ImportFlowRow.Get(_originalTarget, "Settings") as JsonObject;
         _folder = ImportFlowRow.Text(targetSettings, "Folder");
         string saveFile = ImportFlowRow.Text(targetSettings, "SaveFile");
         _saveFile = saveFile.Length == 0 || saveFile.Equals("true", StringComparison.OrdinalIgnoreCase);
+        foreach (var offered in destinations is { Count: > 0 } ? destinations : new[] { InboundDestinationDto.Folder })
+            Destinations.Add(new DestinationChoice(offered) { Picked = c => DestinationKind = c.Kind });
+        string kind = ImportFlowRow.Text(_originalTarget, "Kind");
+        _destinationKind = kind.Length > 0 ? kind.ToLowerInvariant() : Destinations[0].Kind;
+        _destinationConnection = ImportFlowRow.Text(_originalTarget, "Connection");
+        BuildDestinationFields(targetSettings);
         if (ImportFlowRow.Get(ImportFlowRow.Get(row.Json, "Produce") as JsonObject, "Columns") is JsonArray columns)
             foreach (var c in columns.OfType<JsonObject>())
                 Columns.Add(new ColumnRow(ImportFlowRow.Text(c, "Name"), ImportFlowRow.Text(c, "Value")));
@@ -123,6 +154,69 @@ public sealed partial class InboundFlowViewModel : ObservableObject
     public ObservableCollection<string> TableChoices { get; } = new() { "" };
     public ObservableCollection<ColumnRow> Columns { get; } = new();
     public ObservableCollection<string> Preview { get; } = new();
+
+    public ObservableCollection<DestinationChoice> Destinations { get; } = new();
+    public ObservableCollection<SourceSettingField> DestinationFields { get; } = new();
+    public ObservableCollection<SourceSettingField> FileFields { get; } = new();
+    public ObservableCollection<string> ConnectionChoices { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFolder), nameof(IsOtherDestination), nameof(IsUnknownDestination), nameof(HasKnownDestination), nameof(UnknownDestinationText),
+        nameof(SaveFileText), nameof(DestinationDescription), nameof(ShowFileFields))]
+    private string _destinationKind;
+
+    [ObservableProperty] private string _destinationConnection;
+
+    private DestinationChoice? Chosen => Destinations.FirstOrDefault(d => d.Kind.Equals(DestinationKind, StringComparison.OrdinalIgnoreCase));
+    public bool IsFolder => DestinationKind == "folder" && Chosen is not null;
+    public bool IsOtherDestination => Chosen is not null && !IsFolder;
+    public bool IsUnknownDestination => Chosen is null;
+    public bool HasKnownDestination => Chosen is not null;
+    public string UnknownDestinationText => $"This company goes to '{DestinationKind}', which this version of the Windows app does not know. It is kept as it is.";
+    public string SaveFileText => IsFolder ? "Save the document file next to the CSV" : "Save the document file as well";
+    public string DestinationDescription => Chosen?.Descriptor.Description ?? "";
+    public bool ShowFileFields => IsOtherDestination && SaveFile && FileFields.Count > 0;
+
+    partial void OnSaveFileChanged(bool value) => OnPropertyChanged(nameof(ShowFileFields));
+
+    partial void OnDestinationKindChanged(string value)
+    {
+        foreach (var d in Destinations) d.IsSelected = d.Kind.Equals(value, StringComparison.OrdinalIgnoreCase);
+        // A switch starts the destination's own settings afresh; going back to the kind the flow had keeps its values.
+        bool original = ImportFlowRow.Text(_originalTarget, "Kind").Equals(value, StringComparison.OrdinalIgnoreCase);
+        DestinationConnection = original ? ImportFlowRow.Text(_originalTarget, "Connection") : "";
+        BuildDestinationFields(original ? ImportFlowRow.Get(_originalTarget, "Settings") as JsonObject : null);
+    }
+
+    /// <summary>The settings of the chosen destination as fields; a "connections:{kind}" list holds the connections of that kind.</summary>
+    private void BuildDestinationFields(JsonObject? settings)
+    {
+        foreach (var d in Destinations) d.IsSelected = d.Kind.Equals(DestinationKind, StringComparison.OrdinalIgnoreCase);
+        DestinationFields.Clear();
+        FileFields.Clear();
+        ConnectionChoices.Clear();
+        if (Chosen is not { } chosen || IsFolder) { OnPropertyChanged(nameof(ShowFileFields)); return; }
+        foreach (var c in _connectionsOfKind(chosen.Descriptor.ConnectionKind ?? "")) ConnectionChoices.Add(c);
+        if (DestinationConnection.Length == 0 && ConnectionChoices.Count > 0) DestinationConnection = ConnectionChoices[0];
+        foreach (var spec in chosen.Descriptor.Settings ?? new())
+        {
+            var field = new SourceSettingField(spec, ImportFlowRow.Text(settings, spec.Key ?? ""));
+            string lookup = spec.Lookup ?? "";
+            if (lookup.StartsWith("connections:", StringComparison.Ordinal))
+            {
+                var names = _connectionsOfKind(lookup["connections:".Length..]);
+                field.SetChoices(names.Select(n => new SourceChoiceDto(n, n, "")));
+                if (field.Text.Length == 0 && names.Count > 0) field.Value = names[0];
+            }
+            (spec.DependsOn == "SaveFile" ? FileFields : DestinationFields).Add(field);
+        }
+        OnPropertyChanged(nameof(ShowFileFields));
+    }
+
+    /// <summary>The destination as the settings file holds it: the chosen kind with its settings, or the one this app does not know, unchanged.</summary>
+    public JsonObject TargetJson()
+        => InboundTargetJson.Build(DestinationKind, HasKnownDestination, _originalTarget, Folder, SaveFile, DestinationConnection,
+            IsOtherDestination ? DestinationFields.Concat(FileFields).Select(f => new KeyValuePair<string, string>(f.Key, f.Text)) : Array.Empty<KeyValuePair<string, string>>());
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Title))] private string _dataAreaId;
     [ObservableProperty] private bool _enabled;
@@ -259,14 +353,26 @@ public sealed partial class InboundFlowViewModel : ObservableObject
     {
         Preview.Clear();
         Show($"Reading one ready {Source.RecordNoun ?? "record"} from {SourceName}…", error: false);
-        var res = await _client.SourceSampleAsync(Request(""));
+        var request = Request("");
+        var flow = ToJson(Row.Id.Length > 0 ? Row.Id : "preview", Row.TypeLabel);
+        request.Produce = flow["Produce"]?.DeepClone();
+        request.DataAreaId = DataAreaId.Trim();
+        request.Target = TargetJson();
+        var res = await _client.SourcePreviewAsync(request);
+        // A service before 1.11.0 has no preview; its sample lists the record's values.
+        bool withCsv = res is { Reachable: true, Data: not null };
+        if (!withCsv) res = await _client.SourceSampleAsync(Request(""));
         if (res is not { Reachable: true, Data: { Ok: true } data })
         {
             Show(res.Data?.Message ?? res.Error ?? $"{SourceName} could not be read.", error: true);
             return;
         }
+        foreach (var line in data.Lines ?? new()) Preview.Add(line);
+        if (data.Lines is { Count: > 0 }) Preview.Add("");
         foreach (var v in data.Values ?? new()) Preview.Add($"{v.Name}: {v.Value}");
-        Show($"{data.Message} Its values are listed below the columns.", error: false);
+        Show(data.Lines is { Count: > 0 }
+            ? $"{data.Message} The CSV and the document's values are listed below the columns."
+            : $"{data.Message} Its values are listed below the columns.", error: false);
     }
 
     [RelayCommand]
@@ -322,12 +428,7 @@ public sealed partial class InboundFlowViewModel : ObservableObject
             ["Columns"] = new JsonArray(Columns.Where(c => !string.IsNullOrWhiteSpace(c.Column))
                 .Select(c => (JsonNode)new JsonObject { ["Name"] = c.Column.Trim(), ["Value"] = c.Template ?? "" }).ToArray()),
         };
-        json["Targets"] = new JsonArray(new JsonObject
-        {
-            ["Kind"] = "folder",
-            ["Enabled"] = true,
-            ["Settings"] = new JsonObject { ["Folder"] = Folder.Trim(), ["SaveFile"] = SaveFile ? "true" : "false" },
-        });
+        json["Targets"] = new JsonArray(TargetJson());
         return json;
     }
 }

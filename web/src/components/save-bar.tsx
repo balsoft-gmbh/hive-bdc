@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import { saveConfig } from "@/lib/api";
 import { postBody } from "@/lib/logic";
 import { draftChanges, keptTests, saveProblems } from "@/lib/exportlogic";
+import { flowProblems } from "@/lib/inboundlogic";
 import { ConflictPanel } from "./conflict-panel";
 import { useConsole } from "./console-context";
 import { Notice } from "./notice";
@@ -31,6 +32,8 @@ export const draft = {
   tests: {} as Record<string, TestResult>,
   /** The destination kinds of GET /targets, for the Save bar's checks. */
   targets: [] as any[],
+  /** The inbound destinations of GET /sources (this run mode), for the Save bar's checks of the flows. */
+  inbound: null as any[] | null,
   /** Grows with every Save and Discard, so the pages start their own state afresh (the former state.ui = {}). */
   generation: 0,
 };
@@ -68,6 +71,11 @@ export function change(fn: (body: any) => any) {
 
 export function setTargets(targets: any[]) {
   draft.targets = targets || [];
+  emit();
+}
+
+export function setInbound(destinations: any[]) {
+  draft.inbound = destinations || [];
   emit();
 }
 
@@ -111,7 +119,7 @@ export function useDraft() {
 
 /** Pages that edit the draft: moving between them keeps it, so only links elsewhere ask first. */
 export function keepsDraft(pathname: string) {
-  return /^\/(outbound|connections)(\/|$)/.test(pathname);
+  return /^\/(outbound|inbound-flows|connections)(\/|$)/.test(pathname);
 }
 
 const LEAVE = "Your changes are not saved. Leave this page and lose them?";
@@ -177,7 +185,9 @@ export function SaveBar({ hidden = false }: { hidden?: boolean }) {
   if (!canChange || hidden) return null;
 
   const lines = draftChanges(state.original, state.body);
-  const problems = lines.length ? saveProblems(state.body, config, state.targets) : [];
+  const problems = lines.length
+    ? [...saveProblems(state.body, config, state.targets), ...(state.inbound ? flowProblems(state.body, state.inbound) : [])]
+    : [];
 
   const saved = async () => {
     const before = draft.original;

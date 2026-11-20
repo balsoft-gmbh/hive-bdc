@@ -98,6 +98,10 @@ public sealed class LoopbackClient
     public Task<ApiResult<SourceSampleResult>> SourceSampleAsync(SourceRequestDto request, CancellationToken ct = default)
         => PostAsync<SourceSampleResult>("/sources/sample", request, ct);
 
+    /// <summary>POST /sources/preview: the CSV one ready record makes with the columns on screen (1.11.0 and later).</summary>
+    public Task<ApiResult<SourceSampleResult>> SourcePreviewAsync(SourceRequestDto request, CancellationToken ct = default)
+        => PostAsync<SourceSampleResult>("/sources/preview", request, ct);
+
     /// <summary>GET /targets: the destination kinds outbound documents can go to, with what each needs.</summary>
     public Task<ApiResult<TargetsDto>> GetTargetsAsync(CancellationToken ct = default)
         => GetAsync<TargetsDto>("/targets", ct);

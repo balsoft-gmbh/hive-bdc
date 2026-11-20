@@ -22,6 +22,13 @@ public partial class InboundPage : UserControl
 
     private void OnAskRemove(object sender, RoutedEventArgs e) => RecordActions.SetConfirm(sender, true);
 
+    /// <summary>A segment writes only into the record on screen (WPF pitfalls note), here the chosen "Goes to" place.</summary>
+    private void OnSegmentChecked(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string property, DataContext: { } record })
+            record.GetType().GetProperty(property)?.SetValue(record, true);
+    }
+
     private void OnKeepItem(object sender, RoutedEventArgs e) => RecordActions.SetConfirm(sender, false);
 
     private void OnRemoveInboundType(object sender, RoutedEventArgs e)

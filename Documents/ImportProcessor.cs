@@ -5,16 +5,16 @@ using Microsoft.Extensions.Logging;
 namespace Balsoft.Hive.BDC.Documents;
 
 /// <summary>
-/// Runs the inbound flows (<see cref="BDCOptions.Flows"/>): finds the records a document system marks ready, writes for
-/// each a CSV (and its file) into the folder the ERP reads, then marks the record done in that system. The system is a
-/// source connector by kind (<see cref="IRecordSource"/>). Every record gets a history like an outbound document. A
-/// record whose files were written but whose done mark failed is not written again: the next run only repeats the mark.
+/// Runs the inbound flows (<see cref="BDCOptions.Flows"/>): finds the records a document system marks ready, delivers
+/// for each a CSV (and its file) where the ERP reads (a folder, Blob Storage or Service Bus), then marks the record
+/// done in that system. Source and destination are connectors by kind (<see cref="IRecordSource"/>,
+/// <see cref="IInboundTarget"/>). Every record gets a history like an outbound document. A record whose CSV was
+/// delivered but whose done mark failed is not delivered again: the next run only repeats the mark.
 /// </summary>
 public sealed class ImportProcessor
 {
     private const int RecordsPerRun = 50;
     private static readonly TimeSpan FailedPause = TimeSpan.FromHours(1);
-    private static readonly UTF8Encoding Utf8WithBom = new(encoderShouldEmitUTF8Identifier: true);
 
     private readonly ILogger _log;
     private readonly IStateStore? _state;
@@ -65,8 +65,14 @@ public sealed class ImportProcessor
         if (!license.HasFeature(d.RequiredFeature))
         { WarnOnce(flow.Id, $"flow {flow.DisplayName}: the installed licence has no '{d.RequiredFeature}' feature, which {d.Name} import needs."); return new(0, 0, 0); }
         var problems = source.Problems(flow.Source).ToList();
-        string folder = flow.Targets.FirstOrDefault(t => t.Enabled && t.Kind == "folder")?.Setting("Folder") ?? "";
-        if (folder.Length == 0) problems.Add("Set the folder the ERP reads.");
+        var target = flow.Targets.FirstOrDefault(t => t.Enabled);
+        var destination = target is null ? null : _connectors.Inbound(target.Kind, runtime.Options);
+        if (target is null)
+            problems.Add(SettingsPaths.Pick("Set the folder the ERP reads.", "Choose where your ERP reads the CSV: Blob Storage or Service Bus."));
+        else if (destination is null)
+            problems.Add($"It goes to '{target.Kind}', which this version of Hive BDC does not know.");
+        else
+            problems.AddRange(destination.Problems(target));
         if (flow.Produce.Columns.Count == 0) problems.Add("Add at least one CSV column.");
         if (problems.Count > 0) { WarnOnce(flow.Id, $"flow {flow.DisplayName}: " + string.Join(" ", problems)); return new(0, 0, 0); }
         _warned.RemoveWhere(w => w.StartsWith(flow.Id + "|", StringComparison.Ordinal));
@@ -77,53 +83,49 @@ public sealed class ImportProcessor
         {
             string key = $"{flow.Id}|{source.RecordKey(flow.Source, id)}";
             if (_failedUntil.TryGetValue(key, out var until) && DateTime.UtcNow < until) continue;
-            result += ImportOne(flow, source, id, folder, key);
+            result += ImportOne(flow, source, id, target!, destination!, key);
         }
         return result;
     }
 
-    private DocumentProcessor.ScanResult ImportOne(FlowOptions flow, IRecordSource source, string id, string folder, string key)
+    /// <summary>Whether the record's CSV already went out, to the destination of any kind (a flow changed from a folder to Blob Storage after the CSV went out is not delivered twice).</summary>
+    private bool Delivered(string key, string kind)
+        => _state is not null && (_state.DeliveryRemoteId(key, kind) is not null
+                                  || _connectors.InboundKindNames.Any(k => k != kind && _state.DeliveryRemoteId(key, k) is not null));
+
+    private DocumentProcessor.ScanResult ImportOne(FlowOptions flow, IRecordSource source, string id, TargetOptions target,
+        IInboundTarget destination, string key)
     {
         var d = source.Descriptor;
         string input = $"{d.Name} {d.RecordNoun} {id}";
-        bool written = _state?.DeliveryRemoteId(key, "folder") is not null;
+        string kind = destination.Descriptor.Kind;
+        bool written = Delivered(key, kind);
+        bool atDestination = false;
         try
         {
             if (!written)
             {
                 Note(id, input, EventSteps.Received, EventStates.Ok, $"Found {d.RecordNoun} {id} in {d.Name}, ready for flow \"{flow.DisplayName}\".", flow);
                 var record = source.ReadAsync(flow.Source, id).GetAwaiter().GetResult();
-                var culture = CultureFor(flow.Produce.Setting("Culture", "de-DE"));
-                string delimiter = flow.Produce.Setting("Delimiter", ";");
-                string rowsFrom = flow.Produce.Setting("RowsFrom");
-                var extra = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["DataAreaId"] = flow.DataAreaId };
 
-                string? filePath = null;
-                if (string.Equals(flow.Targets.First(t => t.Kind == "folder").Setting("SaveFile"), "true", StringComparison.OrdinalIgnoreCase)
-                    && source.FileAsync(flow.Source, id).GetAwaiter().GetResult() is { } file)
-                {
-                    string ext = Path.GetExtension(file.Name);
-                    filePath = Path.Combine(folder, CsvFile.SafeFileName($"{d.FilePrefix}{id}{(ext.Length > 0 ? ext : ".pdf")}"));
-                    CsvFile.WriteAtomic(filePath, file.ReadAllBytes());
-                }
-                extra["FilePath"] = filePath ?? "";
+                // The file is read and its place known before the CSV is built, so a CSV that cannot be built leaves nothing behind.
+                DocumentFile? file = InboundSettings.SavesFile(target) ? source.FileAsync(flow.Source, id).GetAwaiter().GetResult() : null;
+                string? fileName = file is null ? null : FileNameFor(d, id, file.Name);
+                var csv = MakeCsv(d, record, flow.Produce, flow.DataAreaId, fileName is null ? "" : destination.FileLocation(target, fileName));
+                if (csv.Problems.Count > 0)
+                    throw new InvalidOperationException(string.Join(" ", csv.Problems) + $" Correct the columns of the flow in {SettingsPaths.Pick("Settings > Inbound", "Inbound")}.");
+                string csvName = csv.FileName;
+                string text = csv.Text;
 
-                var problems = new List<string>();
-                string text = CsvFile.Build(record, flow.Produce.Columns, rowsFrom.Length > 0 ? rowsFrom : null, delimiter, culture, extra, problems);
-                if (problems.Count > 0)
-                {
-                    if (filePath is not null) TryDelete(filePath);
-                    throw new InvalidOperationException(string.Join(" ", problems.Distinct()) + $" Correct the columns of the flow in {SettingsPaths.Pick("Settings > Inbound", "Inbound")}.");
-                }
-                string fileName = CsvFile.SafeFileName(CsvFile.Resolve(flow.Produce.Setting("FileName", d.DefaultFileName), record, null,
-                    new Dictionary<string, object?>(), culture, extra, "file name", null));
-                if (!fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) fileName += ".csv";
-                string csvPath = Path.Combine(folder, fileName);
-                CsvFile.WriteAtomic(csvPath, Utf8WithBom.GetPreamble().Concat(Utf8WithBom.GetBytes(text)).ToArray());
+                var delivery = new InboundDelivery(flow, target, id, _log);
+                atDestination = true;
+                string? savedAs = file is null ? null : destination.SaveFile(delivery, fileName!, file.ReadAllBytes(), file.ContentType);
+                var delivered = destination.DeliverCsv(delivery, csvName, text);
+                atDestination = false;
                 int rows = text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Length - 1;
-                _state?.RecordDelivery(key, "folder", "folder", csvPath, id);
+                _state?.RecordDelivery(key, kind, kind, delivered.Location, delivered.RemoteId ?? id);
                 Note(id, input, EventSteps.Delivered, EventStates.Ok,
-                    $"Wrote {fileName} with {rows} row(s) to {folder}" + (filePath is null ? "." : $" and the file as {Path.GetFileName(filePath)}."), flow, "folder");
+                    $"Wrote {csvName} with {rows} row(s) {delivered.Summary}" + (savedAs is null ? "." : $" and the file as {savedAs}."), flow, kind);
             }
 
             string done = source.MarkDoneAsync(flow.Source, id).GetAwaiter().GetResult();
@@ -133,7 +135,7 @@ public sealed class ImportProcessor
         }
         catch (ConnectorException ex) when (ex.RetryLater)
         {
-            Note(id, input, EventSteps.Waiting, EventStates.Waiting, $"{d.Name}: {ex.Message} Hive BDC tries again on the next scan.", flow);
+            Note(id, input, EventSteps.Waiting, EventStates.Waiting, (atDestination ? ex.Message : $"{d.Name}: {ex.Message}") + " Hive BDC tries again on the next scan.", flow);
             return new(0, 0, 1);
         }
         catch (Exception ex)
@@ -144,6 +146,35 @@ public sealed class ImportProcessor
                 ex.Message + (written ? "" : " Nothing was written for it.") + " Hive BDC tries again in an hour, or after the flow's settings are saved.", flow);
             return new(0, 1, 0);
         }
+    }
+
+    /// <summary>The CSV a record makes and its file name; Problems names every column that cannot be filled.</summary>
+    public sealed record CsvResult(string Text, string FileName, IReadOnlyList<string> Problems);
+
+    /// <summary>The name the record's file gets where the ERP reads it, e.g. DW17.pdf.</summary>
+    public static string FileNameFor(SourceDescriptor d, string id, string sourceName)
+    {
+        string ext = Path.GetExtension(sourceName);
+        return CsvFile.SafeFileName($"{d.FilePrefix}{id}{(ext.Length > 0 ? ext : ".pdf")}");
+    }
+
+    /// <summary>Builds the CSV of one record as a run does: columns, separator, number and date format, rows from a table.</summary>
+    public static CsvResult MakeCsv(SourceDescriptor d, SourceRecord record, ProduceOptions produce, string dataAreaId, string filePath)
+    {
+        var culture = CultureFor(produce.Setting("Culture", "de-DE"));
+        string delimiter = produce.Setting("Delimiter", ";");
+        string rowsFrom = produce.Setting("RowsFrom");
+        var extra = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["DataAreaId"] = dataAreaId, ["FilePath"] = filePath };
+        var problems = new List<string>();
+        string text = CsvFile.Build(record, produce.Columns, rowsFrom.Length > 0 ? rowsFrom : null, delimiter, culture, extra, problems);
+        string csvName = "";
+        if (problems.Count == 0)
+        {
+            csvName = CsvFile.SafeFileName(CsvFile.Resolve(produce.Setting("FileName", d.DefaultFileName), record, null,
+                new Dictionary<string, object?>(), culture, extra, "file name", null));
+            if (!csvName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) csvName += ".csv";
+        }
+        return new CsvResult(text, csvName, problems.Distinct().ToList());
     }
 
     /// <summary>Saving the settings clears the pause after a failure, so a corrected flow runs at once.</summary>
@@ -181,8 +212,4 @@ public sealed class ImportProcessor
         return culture;
     }
 
-    private static void TryDelete(string path)
-    {
-        try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-    }
 }

@@ -165,6 +165,7 @@ public sealed partial class LocalStatusServer : BackgroundService
                 case ("GET", "/sources"): Respond(call, 200, Sources()); return;
                 case ("POST", "/sources/choices"): await PostSourceChoices(call); return;
                 case ("POST", "/sources/sample"): await PostSourceSample(call); return;
+                case ("POST", "/sources/preview"): await PostSourcePreview(call); return;
                 case ("GET", "/targets"): Respond(call, 200, Targets()); return;
                 case ("POST", "/targets/choices"): await PostTargetChoices(call); return;
                 case ("GET", "/connections/kinds"): Respond(call, 200, ConnectionKindsList()); return;

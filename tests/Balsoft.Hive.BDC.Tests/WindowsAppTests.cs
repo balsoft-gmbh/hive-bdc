@@ -303,7 +303,7 @@ public sealed class WindowsAppTests
     {
         var segments = Views().SelectMany(f => XDocument.Parse(Read(f)).Descendants()
             .Where(e => e.Name.LocalName == "RadioButton" && (string?)e.Attribute("Style") == "{StaticResource Segment}")).ToList();
-        Assert.Equal(6, segments.Count);
+        Assert.Equal(7, segments.Count);
         foreach (var radio in segments)
         {
             string property = (string)radio.Attribute("Tag")!;

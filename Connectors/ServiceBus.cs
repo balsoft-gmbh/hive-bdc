@@ -48,6 +48,10 @@ public interface IBusOutbox
     string Where { get; }
 
     void Send(byte[] body, string messageId, string subject, IReadOnlyDictionary<string, object> properties);
+
+    /// <summary>The same with the body's content type; an outbox that only knows JSON sends it as JSON.</summary>
+    void Send(byte[] body, string messageId, string subject, IReadOnlyDictionary<string, object> properties, string contentType)
+        => Send(body, messageId, subject, properties);
 }
 
 /// <summary>
@@ -143,8 +147,11 @@ public static class AzureServiceBus
         public string Where => where;
 
         public void Send(byte[] body, string messageId, string subject, IReadOnlyDictionary<string, object> properties)
+            => Send(body, messageId, subject, properties, "application/json");
+
+        public void Send(byte[] body, string messageId, string subject, IReadOnlyDictionary<string, object> properties, string contentType)
         {
-            var message = new ServiceBusMessage(body) { MessageId = messageId, Subject = subject, ContentType = "application/json" };
+            var message = new ServiceBusMessage(body) { MessageId = messageId, Subject = subject, ContentType = contentType };
             foreach (var (name, value) in properties) message.ApplicationProperties[name] = value;
             sender.SendMessageAsync(message).GetAwaiter().GetResult();
         }

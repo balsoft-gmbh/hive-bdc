@@ -6,6 +6,7 @@ import {
   Cable,
   ChevronRight,
   ChevronsUpDown,
+  FileInput,
   FileOutput,
   History,
   LayoutDashboard,
@@ -42,6 +43,7 @@ export const PAGES: { label: string; pages: Page[] }[] = [
     label: "SET UP",
     pages: [
       { href: "/outbound/", title: "Outbound", sub: "from your ERP", icon: FileOutput },
+      { href: "/inbound-flows/", title: "Inbound", sub: "into your ERP", icon: FileInput },
       { href: "/connections/", title: "Connections", icon: Cable },
       { href: "/service/", title: "Service", icon: ServerCog },
     ],

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./bdc.css";
 import "./bdc-outbound.css";
+import "./bdc-inbound.css";
 import "./bdc-service.css";
 import "./bdc-setup.css";
 import { UiProvider } from "@/components/ui/provider";

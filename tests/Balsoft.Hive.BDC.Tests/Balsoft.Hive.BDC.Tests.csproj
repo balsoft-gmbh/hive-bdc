@@ -22,6 +22,7 @@
     <Compile Include="..\..\app\HiveBDC.App\Services\LogLine.cs" Link="LogLine.cs" />
     <Compile Include="..\..\app\HiveBDC.App\Services\UnsavedChanges.cs" Link="UnsavedChanges.cs" />
     <Compile Include="..\..\app\HiveBDC.App\ViewModels\ShellViewModel.cs" Link="ShellViewModel.cs" />
+    <Compile Include="..\..\app\HiveBDC.App\ViewModels\InboundTargetJson.cs" Link="InboundTargetJson.cs" />
   </ItemGroup>
 
   <ItemGroup>

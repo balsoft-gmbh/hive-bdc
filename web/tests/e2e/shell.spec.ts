@@ -57,7 +57,7 @@ test("the navigation icons sit in one column, so every label starts on the same 
   const lefts = await page.locator("nav[aria-label='Main navigation'] .nav-text").evaluateAll((nodes) =>
     nodes.map((n) => Math.round(n.getBoundingClientRect().left)),
   );
-  expect(lefts.length).toBe(5);
+  expect(lefts.length).toBe(6);
   expect(new Set(lefts).size).toBe(1);
 });
 

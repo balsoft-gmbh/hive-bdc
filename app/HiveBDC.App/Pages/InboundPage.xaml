@@ -307,22 +307,54 @@
                         </Border>
                         <Border Style="{StaticResource PanelBody}">
                             <StackPanel MaxWidth="760" HorizontalAlignment="Left">
-                                <TextBlock Text="Folder the ERP reads" Style="{StaticResource FieldLabel}"/>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox Text="{Binding Folder, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="InboundFolder" AutomationProperties.Name="Folder the ERP reads"/>
-                                    <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding BrowseFolderCommand}" AutomationProperties.Name="Browse for the folder the ERP reads">
-                                        <StackPanel Orientation="Horizontal">
-                                            <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.FolderOpen}" Margin="0,0,6,0"/>
-                                            <TextBlock Text="Browse…"/>
-                                        </StackPanel>
-                                    </Button>
-                                </Grid>
-                                <CheckBox IsChecked="{Binding SaveFile}" Content="Save the document file next to the CSV" Margin="0,14,0,0"/>
-                                <TextBlock Style="{StaticResource Hint}" Text="Its path is {FilePath} in the CSV."/>
+                                <!-- One choice per place the service offers; segments bind OneWay plus a Checked handler (WPF pitfalls note). -->
+                                <ItemsControl ItemsSource="{Binding Destinations}" Focusable="False"
+                                              Visibility="{Binding Destinations.Count, Converter={StaticResource CountToVis}}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <RadioButton Style="{StaticResource Segment}" GroupName="InboundGoesTo" Content="{Binding Name}"
+                                                         IsChecked="{Binding IsSelected, Mode=OneWay}" Tag="IsSelected" Checked="OnSegmentChecked"
+                                                         AutomationProperties.Name="{Binding Name}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Style="{StaticResource Hint}" Text="{Binding DestinationDescription}"/>
+                                <TextBlock Style="{StaticResource WarnText}" Text="{Binding UnknownDestinationText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Visibility="{Binding IsUnknownDestination, Converter={StaticResource BoolToVis}}"/>
+                                <StackPanel Visibility="{Binding IsFolder, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="Folder the ERP reads" Style="{StaticResource FieldLabel}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding Folder, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="InboundFolder" AutomationProperties.Name="Folder the ERP reads"/>
+                                        <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding BrowseFolderCommand}" AutomationProperties.Name="Browse for the folder the ERP reads">
+                                            <StackPanel Orientation="Horizontal">
+                                                <ContentControl Style="{StaticResource IconSmall}" Tag="{StaticResource Icon.FolderOpen}" Margin="0,0,6,0"/>
+                                                <TextBlock Text="Browse…"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Visibility="{Binding IsOtherDestination, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="Connection" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox ItemsSource="{Binding ConnectionChoices}" SelectedItem="{Binding DestinationConnection}" AutomationProperties.Name="Connection"
+                                              AutomationProperties.AutomationId="InboundDestinationConnection"/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Connections are set up under Connections."/>
+                                    <ItemsControl ItemsSource="{Binding DestinationFields}" ItemTemplate="{StaticResource SourceSettingTemplate}" Focusable="False"/>
+                                </StackPanel>
+                                <CheckBox IsChecked="{Binding SaveFile}" Content="{Binding SaveFileText}" Margin="0,14,0,0"
+                                          Visibility="{Binding HasKnownDestination, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Style="{StaticResource Hint}" Text="Its path is {FilePath} in the CSV."
+                                           Visibility="{Binding IsFolder, Converter={StaticResource BoolToVis}}"/>
+                                <ItemsControl ItemsSource="{Binding FileFields}" ItemTemplate="{StaticResource SourceSettingTemplate}" Focusable="False"
+                                              Visibility="{Binding ShowFileFields, Converter={StaticResource BoolToVis}}"/>
                                 <TextBlock Text="CSV file name" Style="{StaticResource FieldLabel}"/>
                                 <TextBox Text="{Binding FileName, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="CSV file name"/>
                                 <Grid>

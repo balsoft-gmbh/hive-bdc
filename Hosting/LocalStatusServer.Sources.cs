@@ -19,6 +19,11 @@ public sealed partial class LocalStatusServer
         public Dictionary<string, string>? Settings { get; set; }
         public DocuWareRequestDto? DocuWare { get; set; }
         public SharePointDraftDto? SharePoint { get; set; }
+
+        /// <summary>POST /sources/preview: the CSV settings and columns, the company and where the CSV goes.</summary>
+        public ProduceOptions? Produce { get; set; }
+        public string? DataAreaId { get; set; }
+        public TargetOptions? Target { get; set; }
     }
 
     private sealed class SharePointDraftDto
@@ -49,7 +54,70 @@ public sealed partial class LocalStatusServer
                     key = x.Key, label = x.Label, step = x.Step, required = x.Required, lookup = x.Lookup, dependsOn = x.DependsOn, hint = x.Hint,
                 }).ToArray(),
             }).ToArray(),
+            destinations = InboundDestinations(ConnectorRegistry.BuiltIn(), opts, SettingsPaths.Azure),
         };
+    }
+
+    /// <summary>Where an inbound flow can deliver in this run mode (a folder only on Windows), for the "Goes to" choice.</summary>
+    internal static object[] InboundDestinations(ConnectorRegistry registry, BDCOptions opts, bool azure)
+        => registry.InboundKindNames
+            .Select(kind => registry.Inbound(kind, opts)!.Descriptor)
+            .Where(d => !(azure && d.LocalOnly))
+            .Select(d => (object)new
+            {
+                kind = d.Kind,
+                name = d.Name,
+                description = d.Description,
+                connectionKind = d.ConnectionKind,
+                connected = d.ConnectionKind.Length == 0 || opts.Connections.Any(c => c.Kind == d.ConnectionKind && c.Problems().Count == 0),
+                settings = d.Settings.Select(x => new
+                {
+                    key = x.Key, label = x.Label, step = x.Step, required = x.Required, lookup = x.Lookup, dependsOn = x.DependsOn, hint = x.Hint,
+                }).ToArray(),
+            })
+            .ToArray();
+
+    /// <summary>
+    /// POST /sources/preview: the CSV one ready record makes with the columns on screen, built by the same code as a run,
+    /// so both dashboards show what the ERP will get. Nothing is written and nothing is marked.
+    /// </summary>
+    private async Task PostSourcePreview(ApiCall call)
+    {
+        SourceRequestDto? dto;
+        try { dto = JsonSerializer.Deserialize<SourceRequestDto>(call.Body, JsonOpts); }
+        catch (Exception ex) { Respond(call, 400, new { ok = false, message = "Invalid JSON: " + ex.Message }); return; }
+        dto ??= new();
+        var runtime = DraftRuntime(dto);
+        var source = ConnectorRegistry.BuiltIn().Source(dto.Kind ?? "", runtime);
+        if (source is null) { Respond(call, 200, new { ok = false, message = $"The document system '{dto.Kind}' is not known to this version of Hive BDC." }); return; }
+        var options = SourceOf(dto);
+        var problems = source.Problems(options);
+        if (problems.Count > 0) { Respond(call, 200, new { ok = false, message = string.Join(" ", problems) }); return; }
+        var produce = dto.Produce ?? new ProduceOptions();
+        produce.Normalize();
+        if (produce.Columns.Count == 0) { Respond(call, 200, new { ok = false, message = "Add at least one CSV column." }); return; }
+        try
+        {
+            var ready = await source.ReadyAsync(options, 1);
+            if (ready.Count == 0)
+            {
+                Respond(call, 200, new { ok = false, message = $"No {source.Descriptor.RecordNoun} is ready in {source.Descriptor.Name} right now, so there is nothing to preview." });
+                return;
+            }
+            var record = await source.ReadAsync(options, ready[0]);
+            var preview = InboundPreview.Build(source.Descriptor, record, produce, dto.DataAreaId ?? "", dto.Target, runtime.Options);
+            Respond(call, 200, new
+            {
+                ok = preview.Problems.Count == 0,
+                message = preview.Problems.Count == 0
+                    ? $"{source.Descriptor.Name} {source.Descriptor.RecordNoun} {record.Id}. {preview.Columns} column(s), {preview.Rows} row(s)."
+                    : string.Join(" ", preview.Problems),
+                fileName = preview.FileName,
+                lines = preview.Lines,
+                values = record.Values.Select(v => new { name = v.Key, value = Convert.ToString(v.Value, System.Globalization.CultureInfo.InvariantCulture) ?? "" }).ToArray(),
+            });
+        }
+        catch (ConnectorException ex) { Respond(call, 200, new { ok = false, message = ex.Message }); }
     }
 
     /// <summary>The settings as saved, with the dashboard's unsaved connection values laid over them.</summary>

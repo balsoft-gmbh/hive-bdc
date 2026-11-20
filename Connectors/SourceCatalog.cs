@@ -43,6 +43,11 @@ public static class InboundChecks
                              string.Join(" and ", same.Select(f => $"\"{f.DisplayName}\"" + (f.DataAreaId.Length > 0 ? $" ({f.DataAreaId})" : ""))) +
                              $" read the same documents from {source.Descriptor.Name}. Switch one off or change which documents it picks up.");
         }
+        foreach (var flow in flows)
+            foreach (var target in flow.Targets.Where(t => t.Enabled))
+                if (registry.Inbound(target.Kind, runtime.Options) is { } destination)
+                    problems.AddRange(destination.SettingsProblems(target).Select(p =>
+                        $"Inbound flow \"{flow.DisplayName}\"" + (flow.DataAreaId.Length > 0 ? $" ({flow.DataAreaId})" : "") + ": " + p));
         return problems;
     }
 }

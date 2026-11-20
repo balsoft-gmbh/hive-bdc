@@ -71,7 +71,7 @@ public static class AzureSettingsCheck
 
         foreach (var flow in opts.Flows.Where(f => f.Enabled))
             foreach (var target in flow.Targets.Where(t => t.Enabled && t.Kind == "folder"))
-                problems.Add($"Inbound flow '{(flow.Name.Length > 0 ? flow.Name : flow.Id)}' writes to the folder '{target.Setting("Folder")}', which an Azure instance does not have.");
+                problems.Add($"Inbound flow '{(flow.Name.Length > 0 ? flow.Name : flow.Id)}' writes to the folder '{target.Setting("Folder")}', which an Azure instance does not have; choose Blob Storage or Service Bus under Inbound.");
 
         void Secret(string where, string? value)
         {

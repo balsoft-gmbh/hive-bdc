@@ -1,5 +1,6 @@
 // Pure functions of the web console: no DOM, no network, so Node's test runner checks them (tests/logic.test.ts).
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { flowBody } from './inboundlogic';
 import { addCompany, addConnection, httpsConnectionId, setCompanyActive, setHttpsKey, setSource, setType, suggestId, updateConnection } from './exportlogic';
 
 const roleOrder = ['Viewer', 'Operator', 'Administrator'];
@@ -208,6 +209,7 @@ export function postBody(config: any) {
       saveToSentItems: mail.saveToSentItems !== false,
     },
     connections: (c.connections || []).map((x: any) => ({ id: x.id, kind: x.kind, settings: copy(x.settings) })),
+    flows: (c.flows || []).map(flowBody),
     documentTypes: (c.documentTypes || []).map((t: any) => ({
       id: t.id,
       displayName: t.displayName || '',
