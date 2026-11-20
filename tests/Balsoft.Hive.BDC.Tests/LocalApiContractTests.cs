@@ -50,7 +50,8 @@ public sealed class LocalApiContractTests : IAsyncLifetime
             Path.Combine(_root, "logs"), "9.9.9", settings, _root);
         await _server.StartAsync(CancellationToken.None);
         string endpoint = Path.Combine(_root, "app-endpoint.json");
-        for (int i = 0; i < 100 && !File.Exists(endpoint); i++) await Task.Delay(50);
+        // A shared CI runner can take well over 5 seconds to start Kestrel the first time (2026-11-20, tag run of 1.11.0).
+        for (int i = 0; i < 600 && !File.Exists(endpoint); i++) await Task.Delay(50);
         var node = JsonNode.Parse(File.ReadAllText(endpoint))!;
         _port = (int)node["port"]!;
         _token = (string)node["token"]!;

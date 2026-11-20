@@ -364,7 +364,8 @@ public sealed partial class LocalStatusServer : BackgroundService
         // Publish the resolved log directory too, so the dashboard app can co-log into
         // the SAME rolling file the service writes (one unified, app-visible log).
         string json = JsonSerializer.Serialize(new { port, token = _token, logDir = _logDir });
-        File.WriteAllText(Path.Combine(dir, EndpointFileName), json);
+        // Written under a temporary name and moved, so the dashboard (and a test) never reads half a file.
+        Documents.CsvFile.WriteAtomic(Path.Combine(dir, EndpointFileName), System.Text.Encoding.UTF8.GetBytes(json));
     }
 
     /// <summary>A caller-supplied value for the log, without line breaks that could fake further log entries.</summary>

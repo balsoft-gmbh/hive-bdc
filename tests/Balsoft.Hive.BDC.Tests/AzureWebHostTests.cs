@@ -49,7 +49,7 @@ public sealed class AzureWebHostTests : IAsyncLifetime
             NullLogger.Instance);
         _host = new AzureWebHost(api, NullLogger.Instance, "9.9.9", tenant, () => _signInOn, new IPEndPoint(IPAddress.Loopback, 0));
         await _host.StartAsync(CancellationToken.None);
-        for (int i = 0; i < 100 && _host.BoundPort == 0; i++) await Task.Delay(50);
+        for (int i = 0; i < 600 && _host.BoundPort == 0; i++) await Task.Delay(50);
     }
 
     public async Task DisposeAsync()

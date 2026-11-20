@@ -127,6 +127,28 @@ test("Comes from fills its dropdowns from the document system and keeps the chos
   expect(choices.every((c) => c.body.kind === "sharepoint")).toBe(true);
 });
 
+test("a dropdown the document system leaves empty becomes a text box, so a value no document carries yet can be typed", async ({ page, request }) => {
+  await mock(request, { "POST /sources/choices": { ok: true, message: "", choices: [] } });
+  await page.goto(type(`${invoice}&company=DEMF&tab=from`));
+  await opened(page);
+  const value = page.getByLabel("has the value");
+  await expect(value).toHaveJSProperty("tagName", "INPUT");
+  await value.fill("Ready for SAP");
+  await value.press("Enter");
+  await expect(saveBar(page)).toContainText("when Status is Ready for SAP");
+  await mock(request, { "POST /sources/choices": inboundAnswers()["POST /sources/choices"] });
+});
+
+test("a dropdown that waits for another setting names it", async ({ page }) => {
+  const settings = inboundConfig();
+  settings.flows[0].Source.Settings = { SiteUrl: "https://contoso.sharepoint.com/sites/Finance" } as any;
+  await mock(page.request, { "GET /config": settings });
+  await page.goto(type(`${invoice}&company=DEMF&tab=from`));
+  await opened(page);
+  await expect(page.getByText('Set "Library" first.')).toBeVisible();
+  await expect(page.getByText('Set "Ready when the column" first.').first()).toBeVisible();
+});
+
 test("Goes to Service Bus with the file in Blob Storage; a file folder inside the ERP folder blocks the save (case 1)", async ({ page }) => {
   await page.goto(type(`${invoice}&company=DEMF&tab=to`));
   await opened(page);

@@ -46,7 +46,7 @@ public sealed class HttpsInboundTests : IAsyncLifetime
             NullLogger<LocalStatusServer>.Instance, null, "9.9.9", Path.Combine(_root, "unused.json"), _root);
         _host = new AzureWebHost(api, NullLogger.Instance, "9.9.9", null, () => _signInOn, new IPEndPoint(IPAddress.Loopback, 0), () => _options);
         await _host.StartAsync(CancellationToken.None);
-        for (int i = 0; i < 100 && _host.BoundPort == 0; i++) await Task.Delay(50);
+        for (int i = 0; i < 600 && _host.BoundPort == 0; i++) await Task.Delay(50);
     }
 
     public async Task DisposeAsync()

@@ -99,8 +99,10 @@ function SourceSetting({ flow, setting, all, ro }: { flow: any; setting: any; al
   const id = `inbound-source-${setting.key}`;
   const value = String(settings[setting.key] || "");
   const set = (v: string, label?: string) => change((d) => I.setSourceSetting(d, flow.Id, setting.key, v, label));
-  const hint = !ready && depends ? `Choose ${depends.label.toLowerCase()} first.` : note || setting.hint;
-  if (setting.lookup && !note) {
+  const hint = !ready && depends ? `Set "${depends.label}" first.` : note || setting.hint;
+  // A list from the document system when it has entries; otherwise a text box, as in the Windows app, so a value no
+  // document carries yet (the one a workflow sets later) can be typed.
+  if (setting.lookup && !note && (loading || !ready || choices.length > 0)) {
     const known = choices.some((c: Choice) => c.value === value);
     return (
       <Field label={setting.label} htmlFor={id} hint={hint}>

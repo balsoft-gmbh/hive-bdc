@@ -71,7 +71,7 @@ public sealed class WebConsoleTests : IAsyncLifetime
             new BlobSettingsDocument(settings), new BlobLicenseStore(new MemoryETagBlob()), tenant);
         var host = new AzureWebHost(api, NullLogger.Instance, "9.9.9", tenant, () => true, new IPEndPoint(IPAddress.Loopback, 0), console: console);
         await host.StartAsync(CancellationToken.None);
-        for (int i = 0; i < 100 && host.BoundPort == 0; i++) await Task.Delay(50);
+        for (int i = 0; i < 600 && host.BoundPort == 0; i++) await Task.Delay(50);
         return host;
     }
 
