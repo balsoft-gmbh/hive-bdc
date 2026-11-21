@@ -651,7 +651,9 @@ The service logs every poll cycle, each watched folder, the document types in
 play, and each produce / upload / mail step to a rolling daily file (default
 `%ProgramData%\HiveBDC\logs`). The **dashboard** logs its own actions into
 the **same** file, tagged `UI ·`. The dashboard's log view (**Service > Technical log**) is colour-coded by
-severity; read it there, or open the folder with **Open log folder**.
+severity and filters by **Type** (All types, Errors and warnings, Errors, Warnings, Info, Debug, Dashboard actions;
+a stack trace keeps the type of the line above it, the web console offers the same choices); read it there, or open the
+folder with **Open log folder**.
 
 ## Project layout
 
@@ -1118,8 +1120,8 @@ secrets go only with Save into Key Vault and are never shown again.
 whether the instance takes documents (Pause and Start, a test
 run of the first waiting export of a company with a Blob source), the licence with upload,
 the version, region, time zone and the identity for role commands (`GET /setup/identity`
-also names `timeZone` and `region`), and the last 200 lines of the technical log with a
-filter for warnings and a download. A pause from here keeps the console's pages: only the
+also names `timeZone` and `region`), and the last 200 lines of the technical log with the **Type** filter of the
+Windows app and a download of the whole day. A pause from here keeps the console's pages: only the
 set-up assistant marks its own pause (`SetupOpen` in the settings, `setupOpen` in
 `GET /config`), and Start ends both.
 

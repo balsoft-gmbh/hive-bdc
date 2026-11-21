@@ -1,0 +1,27 @@
+{
+  "about": "Technical log types, shared by the Windows app (LogParserTests) and the web console (web/tests/logtypes.test.ts). Lines in file order, oldest first; each line has the type of its entry.",
+  "lines": [
+    { "text": "   at Old.Frame()", "type": "info" },
+    { "text": "2026-11-21 08:00:00.000 [INF] Hive BDC 1.11.2 started", "type": "info" },
+    { "text": "2026-11-21 08:00:01.000 [DBG] Poll SalesInvoice: 0 files", "type": "debug" },
+    { "text": "2026-11-21 08:01:00.000 [ERR] Upload failed for CIV-000171", "type": "error" },
+    { "text": "System.IO.IOException: disk full", "type": "error" },
+    { "text": "   at Upload.Run()", "type": "error" },
+    { "text": "2026-11-21 08:02:00.000 +01:00 [WRN] The container answered 403, retrying", "type": "warning" },
+    { "text": "2026-11-21 08:03:00.000 [INF] Error mail sent to the admin", "type": "info" },
+    { "text": "2026-11-21 08:04:00.000 [FTL] Service stopped", "type": "error" },
+    { "text": "2026-11-21 08:05:00.000 [INF] UI · Settings saved", "type": "dashboard" },
+    { "text": "2026-11-21 08:06:00.000 [WRN] UI · Save failed: folder missing", "type": "warning" },
+    { "text": "2026-11-21 08:07:00.000 [VRB] Verbose detail", "type": "info" },
+    { "text": "2026-11-21 08:08:00.000 [INF] Warning count reset", "type": "info" }
+  ],
+  "choices": [
+    { "id": "all", "label": "All types", "lines": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
+    { "id": "problems", "label": "Errors and warnings", "lines": [3, 4, 5, 6, 8, 10] },
+    { "id": "error", "label": "Errors", "lines": [3, 4, 5, 8] },
+    { "id": "warning", "label": "Warnings", "lines": [6, 10] },
+    { "id": "info", "label": "Info", "lines": [0, 1, 7, 11, 12] },
+    { "id": "debug", "label": "Debug", "lines": [2] },
+    { "id": "dashboard", "label": "Dashboard actions", "lines": [9] }
+  ]
+}

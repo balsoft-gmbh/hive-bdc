@@ -367,6 +367,24 @@
 }
 
 /* Technical log: light grey box, the newest line at the bottom. */
+.service-log-type {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  font-weight: 400;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.service-log-type select {
+  min-width: 190px;
+  color: var(--text);
+}
+.service-log-count {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .service-log {
   max-height: 420px;
   margin: 0;

@@ -7,8 +7,8 @@ using CommunityToolkit.Mvvm.Input;
 namespace Balsoft.Hive.BDC.App.ViewModels;
 
 /// <summary>
-/// Backs the full-logs window: the tail of the current day's log file (up to 5000 lines)
-/// over the loopback API, newest entry first. Never reads invoice content — only the service's log lines.
+/// Backs Service > Technical log: the tail of the current day's log file (up to 5000 lines) over the loopback API,
+/// newest entry first, filtered by type (design 2026-11-21). Never reads invoice content, only the service's log lines.
 /// </summary>
 public sealed partial class LogsViewModel : ObservableObject
 {
@@ -19,6 +19,24 @@ public sealed partial class LogsViewModel : ObservableObject
     [ObservableProperty] private IReadOnlyList<LogLine> _logLines = new List<LogLine> { new("(loading…)", "OTH") };
     [ObservableProperty] private string _statusMessage = "";
     [ObservableProperty] private bool _isBusy;
+
+    /// <summary>The chosen type, an id of <see cref="LogTypes.Choices"/>; kept while the app runs.</summary>
+    [ObservableProperty] private string _logType = LogTypes.All;
+
+    public IReadOnlyList<LogTypes.Choice> TypeChoices => LogTypes.Choices;
+
+    private List<LogLine>? _all;
+    private string? _file;
+
+    partial void OnLogTypeChanged(string value) => ApplyType();
+
+    private void ApplyType()
+    {
+        if (_all is null) return;
+        var shown = LogParser.Filter(_all, LogType);
+        LogLines = shown.Count > 0 ? shown : LogParser.Parse(new[] { LogTypes.NoLines(_all.Count) });
+        StatusMessage = LogTypes.Count(shown.Count, _all.Count) + (string.IsNullOrEmpty(_file) ? "" : $", {_file}");
+    }
 
     /// <summary>Fetch the log tail. Called on open, by the auto-refresh timer, and by the Refresh button.</summary>
     public async Task RefreshAsync()
@@ -32,17 +50,20 @@ public sealed partial class LogsViewModel : ObservableObject
             {
                 if (d.Lines is { Count: > 0 })
                 {
-                    LogLines = LogParser.ParseNewestFirst(d.Lines);
-                    StatusMessage = $"{d.Lines.Count} line(s)" + (string.IsNullOrEmpty(d.File) ? "" : $", {d.File}");
+                    _all = LogParser.ParseNewestFirst(d.Lines);
+                    _file = d.File;
+                    ApplyType();
                 }
                 else
                 {
+                    _all = null;
                     LogLines = LogParser.Parse(new[] { d.Note ?? d.Error ?? "(no log lines yet)" });
                     StatusMessage = "";
                 }
             }
             else
             {
+                _all = null;
                 LogLines = LogParser.Parse(new[] { "(service not reachable, logs unavailable)" });
                 StatusMessage = res.Error ?? "";
             }

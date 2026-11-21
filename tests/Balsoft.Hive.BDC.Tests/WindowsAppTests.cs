@@ -323,6 +323,29 @@ public sealed class WindowsAppTests
         Assert.Contains("_shell.DiscardSettings += AttachSettings;", code);
     }
 
+    // Technical log filter (design 2026-11-21): a Type select beside the legend, bound to the log view model.
+
+    [Fact]
+    public void TheTechnicalLogHasATypeSelectBesideItsLegend()
+    {
+        string xaml = Read("Pages/ServicePage.xaml");
+        var doc = XDocument.Parse(xaml);
+        var select = doc.Descendants().Single(e => e.Name.LocalName == "ComboBox" && (string?)e.Attribute("AutomationProperties.AutomationId") == "LogType");
+
+        Assert.Equal("{Binding TypeChoices}", (string?)select.Attribute("ItemsSource"));
+        Assert.Equal("{Binding LogType}", (string?)select.Attribute("SelectedValue"));
+        Assert.Equal("Id", (string?)select.Attribute("SelectedValuePath"));
+        Assert.Equal("Label", (string?)select.Attribute("DisplayMemberPath"));
+        Assert.Equal("Type", (string?)select.Attribute("AutomationProperties.Name"));
+        Assert.Contains(select.Ancestors(), a => (string?)a.Attribute(Xaml + "Name") == "LogTab");
+        Assert.Contains("Text=\"Dashboard action\"", xaml);
+
+        string vm = Read("ViewModels/LogsViewModel.cs");
+        Assert.Contains("LogParser.Filter(", vm);
+        Assert.Contains("LogTypes.Count(", vm);
+        Assert.Contains("LogTypes.NoLines(", vm);
+    }
+
     // W5: long lists stay virtualized.
 
     [Theory]

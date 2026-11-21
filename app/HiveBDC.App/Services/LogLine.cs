@@ -1,7 +1,61 @@
 namespace Balsoft.Hive.BDC.App.Services;
 
-/// <summary>One parsed log line: the raw text plus a normalized severity used to colour it.</summary>
-public sealed record LogLine(string Text, string Level);
+/// <summary>
+/// One parsed log line: the raw text, a normalized severity used to colour it, and the type of its entry used by the
+/// Type filter (a stack trace line has the type of the line above it).
+/// </summary>
+public sealed record LogLine(string Text, string Level, string Type = LogTypes.Info);
+
+/// <summary>
+/// The types of the technical log and the Type filter, the same as the web console's (web/src/lib/logtypes.ts);
+/// tests/fixtures/log-types.json checks both sides.
+/// </summary>
+public static class LogTypes
+{
+    public const string All = "all";
+    public const string Problems = "problems";
+    public const string Error = "error";
+    public const string Warning = "warning";
+    public const string Info = "info";
+    public const string Debug = "debug";
+    public const string Dashboard = "dashboard";
+
+    public sealed record Choice(string Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    public static IReadOnlyList<Choice> Choices { get; } = new[]
+    {
+        new Choice(All, "All types"),
+        new Choice(Problems, "Errors and warnings"),
+        new Choice(Error, "Errors"),
+        new Choice(Warning, "Warnings"),
+        new Choice(Info, "Info"),
+        new Choice(Debug, "Debug"),
+        new Choice(Dashboard, "Dashboard actions"),
+    };
+
+    public static string OfLevel(string level) => level switch
+    {
+        "ERR" => Error,
+        "WRN" => Warning,
+        "DBG" => Debug,
+        "UI" => Dashboard,
+        _ => Info,
+    };
+
+    public static bool Matches(string? choice, string type) => choice switch
+    {
+        Problems => type is Error or Warning,
+        Error or Warning or Info or Debug or Dashboard => choice == type,
+        _ => true,
+    };
+
+    public static string Count(int shown, int total) => $"{shown} of {total} {(total == 1 ? "line" : "lines")}";
+
+    public static string NoLines(int total) => $"No lines of this type in the last {(total == 1 ? "line" : $"{total} lines")}.";
+}
 
 /// <summary>
 /// Turns raw Serilog lines ("2026-.. [INF] message") into <see cref="LogLine"/>s tagged with a
@@ -10,8 +64,23 @@ public sealed record LogLine(string Text, string Level);
 /// </summary>
 public static class LogParser
 {
+    /// <summary>The lines in file order, each with the type of its entry.</summary>
     public static List<LogLine> Parse(IEnumerable<string> lines)
-        => lines.Select(FromText).ToList();
+    {
+        string type = LogTypes.Info;
+        var result = new List<LogLine>();
+        foreach (var text in lines)
+        {
+            var line = FromText(text);
+            if (StartsEntry(text)) type = LogTypes.OfLevel(line.Level);
+            result.Add(line with { Type = type });
+        }
+        return result;
+    }
+
+    /// <summary>The lines of the chosen type (an id of <see cref="LogTypes.Choices"/>); an unknown choice keeps all.</summary>
+    public static List<LogLine> Filter(IEnumerable<LogLine> lines, string? choice)
+        => lines.Where(l => LogTypes.Matches(choice, l.Type)).ToList();
 
     /// <summary>
     /// Like <see cref="Parse"/>, but the newest entry first, so the latest activity is always at the
@@ -30,7 +99,7 @@ public static class LogParser
 
         var result = new List<LogLine>();
         for (int i = entries.Count - 1; i >= 0; i--)
-            result.AddRange(entries[i].Select(FromText));
+            result.AddRange(Parse(entries[i]));
         return result;
     }
 

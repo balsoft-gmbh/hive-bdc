@@ -2,24 +2,24 @@
 import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { api } from "@/lib/api";
+import { LOG_CHOICES, filterLog, logCount, noLinesOfType } from "@/lib/logtypes";
 import { Notice } from "./notice";
-import { TogglePill } from "./toggle-pill";
 import { ICON, Panel } from "./service-ui";
 
-// The Technical log tab: the last 200 lines of today's log (GET /logs?tail=200), only warnings and errors on request,
-// and the whole day as a download that the browser builds from a Blob, so no inline script is needed (failure case 1).
+// The Technical log tab: the last 200 lines of today's log (GET /logs?tail=200), filtered by type as in the Windows app
+// (design 2026-11-21), and the whole day as a download that the browser builds from a Blob, so no inline script is
+// needed (failure case 1).
 
-const warning = /\b(WRN|ERR|FTL|WARN|ERROR|FATAL|Warning|Error)\b/;
 type Logs = { lines?: string[]; note?: string; error?: string; file?: string };
 
 // Kept while the console is open, as the former page kept it between visits.
-let rememberedOnlyWarnings = false;
+let rememberedType = "all";
 
 export function ServiceLog() {
   const [logs, setLogs] = useState<Logs | null>(null);
   const [error, setError] = useState("");
   const [downloadError, setDownloadError] = useState("");
-  const [onlyWarnings, setOnlyWarnings] = useState(rememberedOnlyWarnings);
+  const [type, setType] = useState(rememberedType);
   const box = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
@@ -29,8 +29,12 @@ export function ServiceLog() {
   }, []);
 
   const lines = logs?.lines || [];
-  const shown = onlyWarnings ? lines.filter((l) => warning.test(l)) : lines;
-  const text = shown.length ? shown.join("\n") : logs?.note || logs?.error || "Nothing in the log yet.";
+  const shown = filterLog(lines, type);
+  const text = !lines.length
+    ? logs?.note || logs?.error || "Nothing in the log yet."
+    : shown.length
+      ? shown.join("\n")
+      : noLinesOfType(lines.length);
 
   useEffect(() => {
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
@@ -57,14 +61,24 @@ export function ServiceLog() {
       title="Technical log"
       actions={
         <>
-          <TogglePill
-            label="Only warnings and errors"
-            checked={onlyWarnings}
-            onChange={(checked) => {
-              rememberedOnlyWarnings = checked;
-              setOnlyWarnings(checked);
-            }}
-          />
+          {lines.length > 0 && <span className="service-log-count">{logCount(shown.length, lines.length)}</span>}
+          <label className="service-log-type">
+            Type
+            <select
+              aria-label="Type"
+              value={type}
+              onChange={(e) => {
+                rememberedType = e.target.value;
+                setType(e.target.value);
+              }}
+            >
+              {LOG_CHOICES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="button" className="button secondary" onClick={() => void download()}>
             <Download {...ICON} />
             Download today&apos;s log
@@ -79,7 +93,10 @@ export function ServiceLog() {
           {text}
         </pre>
       )}
-      <p className="service-footnote">The last 200 lines of today. Azure keeps the full log under the app&apos;s Log stream.</p>
+      <p className="service-footnote">
+        The last 200 lines of today. The download is the whole day, whatever type is chosen. Azure keeps the full log
+        under the app&apos;s Log stream.
+      </p>
     </Panel>
   );
 }

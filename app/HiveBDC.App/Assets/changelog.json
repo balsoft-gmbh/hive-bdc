@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.11.2",
+      "date": "2026-11-21",
+      "changes": [
+        "The technical log has a Type filter in the Windows app and the web console: All types, Errors and warnings, Errors, Warnings, Info, Debug and Dashboard actions, with a count of the lines shown. A stack trace shows and hides with its error.",
+        "Azure: the Type filter replaces the switch Only warnings and errors. An Info line that mentions an error no longer counts as one. The download is still the whole day."
+      ]
+    },
+    {
       "version": "1.11.1",
       "date": "2026-11-21",
       "changes": [

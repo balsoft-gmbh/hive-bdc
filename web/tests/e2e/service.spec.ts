@@ -644,19 +644,36 @@ test("an instance without self-update says how it is updated", async ({ page, re
   await expect(page.locator(".notice-info")).toHaveText("This instance is updated by Setup from the Windows app.");
 });
 
-test("the technical log shows only warnings and errors on request and downloads the whole day", async ({ page }) => {
+test("the technical log filters by type, keeps the choice and downloads the whole day", async ({ page }) => {
   await page.goto("/service/?tab=log");
   await opened(page);
   const box = page.getByRole("region", { name: "Lines of the technical log" });
+  const type = page.getByLabel("Type", { exact: true });
+  const count = page.locator(".service-log-count");
   await expect(box).toContainText("[INF] Hive BDC 1.9.0 started");
-  await expect(page.locator(".toggle-pill")).toHaveText("Only warnings and errors");
-  await page.getByLabel("Only warnings and errors").check();
+  await expect(type).toHaveValue("all");
+  await expect(count).toHaveText("4 of 4 lines");
+  await expect(page.locator(".toggle-pill")).toHaveCount(0);
+
+  await type.selectOption({ label: "Errors and warnings" });
   await expect(box).not.toContainText("[INF]");
   await expect(box).toContainText("[WRN] The container answered 403");
   await expect(box).toContainText("[ERR] SharePoint answered 404");
+  await expect(count).toHaveText("2 of 4 lines");
+
+  await type.selectOption({ label: "Errors" });
+  await expect(box).not.toContainText("[WRN]");
+  await expect(box).toContainText("[ERR] SharePoint answered 404");
+
+  await type.selectOption({ label: "Debug" });
+  await expect(box).toHaveText("No lines of this type in the last 4 lines.");
+  await expect(count).toHaveText("0 of 4 lines");
+
+  await type.selectOption({ label: "Errors and warnings" });
   await tabBar(page).getByRole("link", { name: "Status" }).click();
   await tabBar(page).getByRole("link", { name: "Technical log" }).click();
-  await expect(page.getByLabel("Only warnings and errors")).toBeChecked();
+  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("problems");
+  await expect(box).not.toContainText("[INF]");
 
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download today's log" }).click();
@@ -664,6 +681,7 @@ test("the technical log shows only warnings and errors on request and downloads 
   expect(file.suggestedFilename()).toBe("hivebdc-20261119.log");
   const text = await readFile(await file.path(), "utf8");
   expect(text.split("\n")).toEqual(fullLog.lines);
+  await expect(page.locator(".service-footnote")).toContainText("The download is the whole day, whatever type is chosen.");
 });
 
 test("an empty log says so, and a log without a file names why", async ({ page, request }) => {
@@ -692,7 +710,7 @@ for (const who of [viewer, operator]) {
       await noActions(page);
     }
     await expect(page.getByRole("button", { name: "Download today's log" })).toBeEnabled();
-    await expect(page.getByLabel("Only warnings and errors")).toBeEnabled();
+    await expect(page.getByLabel("Type", { exact: true })).toBeEnabled();
     await page.goto("/service/");
     await expect(page.getByLabel("Company for the test run")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy the managed identity" })).toBeEnabled();
