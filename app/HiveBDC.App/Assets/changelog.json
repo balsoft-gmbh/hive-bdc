@@ -2,6 +2,13 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.11.3",
+      "date": "2026-11-22",
+      "changes": [
+        "Windows app: a new outbound document type starts without companies, as in the web console. Until now it took the companies of Sales invoice with their source folder and destinations. Settings already saved stay as they are; remove such a company under its type."
+      ]
+    },
+    {
       "version": "1.11.2",
       "date": "2026-11-21",
       "changes": [

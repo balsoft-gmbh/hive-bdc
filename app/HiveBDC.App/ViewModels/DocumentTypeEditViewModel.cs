@@ -184,10 +184,9 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
 
     // ── company entries ───────────────────────────────────────────────────────
 
-    /// <summary>Add a company entry; <paramref name="template"/> (another type's entry) pre-fills company, folder and target.</summary>
-    public void AddCompany(RouteRow? template = null)
+    public void AddCompany()
     {
-        var row = template is null ? new RouteRow() : new RouteRow(template.ToDto()) { Output = "" };
+        var row = new RouteRow();
         Companies.Add(row);
         SelectedCompany = row;
     }

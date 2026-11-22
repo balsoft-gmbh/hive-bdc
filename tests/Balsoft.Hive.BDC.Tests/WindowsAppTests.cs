@@ -702,4 +702,26 @@ public sealed class WindowsAppTests
         }
         Assert.Equal(5, lists);
     }
+
+    /// <summary>
+    /// A new outbound type starts without companies, as addType in the web console does: each company is set up
+    /// under its own type. Until 1.11.2 the Windows app copied the Sales invoice's companies, folders and
+    /// destinations into every new type.
+    /// </summary>
+    [Fact]
+    public void ANewDocumentTypeStartsWithoutCompanies()
+    {
+        string settings = Read("ViewModels/SettingsViewModel.cs");
+        var add = System.Text.RegularExpressions.Regex.Match(settings, @"private void AddDocumentType\(\)\s*\{(?<body>.*?)\n    \}",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        Assert.True(add.Success, "AddDocumentType not found");
+        Assert.DoesNotContain("Companies", add.Groups["body"].Value);
+        Assert.DoesNotContain("AddCompany", add.Groups["body"].Value);
+
+        string type = Read("ViewModels/DocumentTypeEditViewModel.cs");
+        Assert.Contains("public void AddCompany()", type);
+        Assert.DoesNotContain("AddCompany(RouteRow", type);
+
+        Assert.Contains("Text=\"No company yet. Add company sets up the first one.\"", Read("Pages/OutboundPage.xaml"));
+    }
 }

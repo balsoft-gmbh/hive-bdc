@@ -777,13 +777,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void AddDocumentType()
     {
         var t = new DocumentTypeEditViewModel();
-        // A new type most likely lives where the others do: start it with the sales invoice's
-        // (or the first type's) company entries, so the user only adjusts what differs.
-        var template = DocumentTypes.FirstOrDefault(x => x.Id.Equals("SalesInvoice", StringComparison.OrdinalIgnoreCase))
-                       ?? DocumentTypes.FirstOrDefault();
-        if (template is not null)
-            foreach (var r in template.Companies) t.AddCompany(r);
-        t.SelectedCompany = t.Companies.FirstOrDefault();
         DocumentTypes.Add(t);
         SelectedDocumentType = t;
     }
