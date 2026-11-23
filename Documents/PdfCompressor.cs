@@ -13,17 +13,18 @@ public sealed record PdfCompression(long Before, long After, string? NotCompress
 {
     public bool Compressed => NotCompressedReason is null;
 
+    /// <summary>English text for the history, so the numbers are written the same on every server culture.</summary>
     public string Summary => Compressed
-        ? $"Compressed {Size(Before)} to {Size(After)} ({Percent}% smaller)."
+        ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Compressed {Size(Before)} to {Size(After)} ({Percent}% smaller).")
         : $"Not compressed: {NotCompressedReason}.";
 
     private int Percent => Before <= 0 ? 0 : (int)Math.Round(100.0 * (Before - After) / Before);
 
     internal static string Size(long bytes) => bytes switch
     {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:0} KB",
-        _ => $"{bytes / (1024.0 * 1024):0.0} MB",
+        < 1024 => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes} B"),
+        < 1024 * 1024 => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes / 1024.0:0} KB"),
+        _ => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes / (1024.0 * 1024):0.0} MB"),
     };
 }
 

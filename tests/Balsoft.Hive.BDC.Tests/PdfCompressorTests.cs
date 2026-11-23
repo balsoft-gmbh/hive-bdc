@@ -363,12 +363,20 @@ public sealed class PdfCompressorTests : IDisposable
         Assert.Empty(Directory.EnumerateFiles(_root, "*.tmp"));
     }
 
-    [Fact]
-    public void SummaryNamesSizesAndReason()
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]   // the culture of the build host and of German servers
+    public void SummaryNamesSizesAndReasonOnEveryCulture(string culture)
     {
-        Assert.Equal("Compressed 977 KB to 98 KB (90% smaller).", new PdfCompression(1_000_000, 100_000).Summary);
-        Assert.Equal("Compressed 1.4 MB to 160 KB (89% smaller).", new PdfCompression(1_468_006, 163_840).Summary);
-        Assert.Equal("Not compressed: signed PDF.", new PdfCompression(5, 5, "signed PDF").Summary);
+        var before = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+        try
+        {
+            Assert.Equal("Compressed 977 KB to 98 KB (90% smaller).", new PdfCompression(1_000_000, 100_000).Summary);
+            Assert.Equal("Compressed 1.4 MB to 160 KB (89% smaller).", new PdfCompression(1_468_006, 163_840).Summary);
+            Assert.Equal("Not compressed: signed PDF.", new PdfCompression(5, 5, "signed PDF").Summary);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = before; }
     }
 
     // ── settings ──────────────────────────────────────────────────────────────
