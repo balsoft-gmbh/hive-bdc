@@ -16,6 +16,9 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     /// <summary>Mail each document of this company to the recipient the ERP names.</summary>
     [ObservableProperty] private bool _mail = true;
 
+    /// <summary>Make each PDF of this company smaller before it is delivered (fonts reduced to the letters used, images above 300 ppi to 200 ppi).</summary>
+    [ObservableProperty] private bool _compressPdf;
+
     /// <summary>Whether this company of the document type runs; off = its folder is not read for this type.</summary>
     [ObservableProperty] private bool _enabled = true;
 
@@ -85,6 +88,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         IsWord = InputFormats.IsWord(dto.InputFormat);
         Output = dto.Output ?? "";
         Mail = dto.Mail ?? true;
+        CompressPdf = dto.CompressPdf ?? false;
         Enabled = dto.Enabled ?? true;
         var sp = dto.SharePoint;
         SharePointEnabled = sp?.Enabled ?? false;
@@ -159,6 +163,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         InputFormat = IsWord ? InputFormats.Word : InputFormats.Json,
         Output = Output?.Trim() ?? "",
         Mail = Mail,
+        CompressPdf = CompressPdf,
         Enabled = Enabled,
         SharePoint = new CompanySharePointConfigDto
         {

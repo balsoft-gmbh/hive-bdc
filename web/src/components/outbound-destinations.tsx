@@ -98,17 +98,62 @@ export function DestinationsTab({
     },
   ];
   return (
-    <section className="panel" aria-labelledby="to-heading">
+    <>
+      <section className="panel" aria-labelledby="to-heading">
+        <div className="section-heading">
+          <h2 id="to-heading">Goes to</h2>
+          {!ro && (
+            <button type="button" className="button secondary" onClick={onAdd}>
+              <Plus {...ICON} aria-hidden="true" />
+              Add a destination
+            </button>
+          )}
+        </div>
+        <DataGrid label={`Destinations of Company ${company}`} columns={columns} rows={gridRows} />
+      </section>
+      <BeforeDelivery type={type} entry={entry} ro={ro} />
+    </>
+  );
+}
+
+type StepRow = { id: string };
+
+/** Compress PDF, the step between producing the file and delivering it (same words as the Windows app). */
+function BeforeDelivery({ type, entry, ro }: { type: any; entry: any; ro: boolean }) {
+  const company = entry.dataAreaId;
+  const columns: GridColumn<StepRow>[] = [
+    { key: "step", label: "Step", width: 240, render: () => <span className="cell-strong">Compress PDF</span> },
+    {
+      key: "what",
+      label: "What it does",
+      render: () => (
+        <span className="wrap-cell">
+          Smaller file, same look: fonts keep only the letters used, images above 300 ppi go to 200 ppi.
+          <span className="cell-muted"> E-invoices: applies to ZUGFeRD PDFs. Signed and PDF/A files stay as they are.</span>
+        </span>
+      ),
+    },
+    {
+      key: "on",
+      label: "State",
+      width: 110,
+      render: () => (
+        <RowToggle
+          label="On"
+          name="Compress PDF"
+          checked={entry.compressPdf === true}
+          disabled={ro}
+          onChange={(on) => change((d) => X.setCompressPdf(d, type.id, company, on))}
+        />
+      ),
+    },
+  ];
+  return (
+    <section className="panel" aria-labelledby="before-heading">
       <div className="section-heading">
-        <h2 id="to-heading">Goes to</h2>
-        {!ro && (
-          <button type="button" className="button secondary" onClick={onAdd}>
-            <Plus {...ICON} aria-hidden="true" />
-            Add a destination
-          </button>
-        )}
+        <h2 id="before-heading">Before delivery</h2>
       </div>
-      <DataGrid label={`Destinations of Company ${company}`} columns={columns} rows={gridRows} />
+      <DataGrid label={`Before delivery of Company ${company}`} columns={columns} rows={[{ id: "#compress" }]} />
     </section>
   );
 }

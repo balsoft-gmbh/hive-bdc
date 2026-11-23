@@ -436,3 +436,19 @@ test('a connection kind has its name before the kinds list has answered', () => 
   assert.equal(X.connectionKindName('docuware', [{ kind: 'docuware', name: 'DocuWare file system' }]), 'DocuWare file system');
   assert.equal(X.connectionKindName('future-dms', []), 'future-dms');
 });
+
+test('Compress PDF is a company switch that the save body carries and the change list names', () => {
+  const start = postBody(config());
+  assert.equal(start.documentTypes[0].companies[0].compressPdf, false);
+  assert.equal('compressPdf' in start.documentTypes[0], false);   // a type the service sent without it stays without it
+
+  const on = X.setCompressPdf(start, 'SalesInvoice', '1000', true);
+  assert.equal(on.documentTypes[0].companies[0].compressPdf, true);
+  assert.equal(start.documentTypes[0].companies[0].compressPdf, false);   // the draft is a copy
+  assert.deepEqual(draftChanges(start, on), ['Rechnung › 1000: compress PDF on']);
+  assert.deepEqual(draftChanges(on, X.setCompressPdf(on, 'SalesInvoice', '1000', false)), ['Rechnung › 1000: compress PDF off']);
+
+  const sent = postBody({ ...config(), documentTypes: [{ ...config().documentTypes[0], compressPdf: true }] });
+  assert.equal(sent.documentTypes[0].compressPdf, true);
+  assert.equal(addCompany(start, 'SalesInvoice', '2000').documentTypes[0].companies.at(-1).compressPdf, false);
+});

@@ -98,7 +98,7 @@ public static class SettingsFile
     {
         var companies = new JsonArray();
         foreach (var r in t.Companies) companies.Add(RouteNode(r));
-        return new JsonObject
+        var node = new JsonObject
         {
             ["Id"] = t.Id,
             ["DisplayName"] = t.DisplayName,
@@ -109,6 +109,9 @@ public static class SettingsFile
             ["Discovered"] = t.Discovered,
             ["Companies"] = companies,
         };
+        // Written only when on, so a file that never used it keeps the shape earlier versions wrote.
+        if (t.CompressPdf) node["CompressPdf"] = true;
+        return node;
     }
 
     /// <summary>One company entry of a document type (folders + SharePoint target).</summary>
@@ -134,6 +137,7 @@ public static class SettingsFile
         // Written only once a company has its own switch; without it the entry follows the type, as before.
         if (r.Enabled is { } enabled) node["Enabled"] = enabled;
         if (r.Mail is { } mail) node["Mail"] = mail;
+        if (r.CompressPdf is { } compress) node["CompressPdf"] = compress;
         if (r.Source is not null)
         {
             var sourceSettings = new JsonObject();
@@ -187,6 +191,28 @@ public static class SettingsFile
     }
 
     /// <summary>The stored Source of one company entry, for a save from a dashboard that does not send it.</summary>
+    /// <summary>The type's stored Compress PDF switch, for a save from a dashboard that does not send it (before 1.12.0).</summary>
+    public static bool StoredCompressPdf(JsonObject? section, string typeId)
+    {
+        static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+        if (section?["DocumentTypes"] is not JsonArray types) return false;
+        var type = types.OfType<JsonObject>().FirstOrDefault(t => DocumentTypeCatalog.SameId(Text(t["Id"]), typeId));
+        return type?["CompressPdf"] is JsonValue v && v.TryGetValue<bool>(out bool on) && on;
+    }
+
+    /// <summary>A company entry's stored Compress PDF switch (null = follows the type), matched like <see cref="StoredTargets"/>.</summary>
+    public static bool? StoredRouteCompressPdf(JsonObject? section, string typeId, string dataAreaId, string input)
+    {
+        static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+        static string Folder(string p) => p.Trim().TrimEnd('\\', '/');
+        if (section?["DocumentTypes"] is not JsonArray types) return null;
+        var type = types.OfType<JsonObject>().FirstOrDefault(t => DocumentTypeCatalog.SameId(Text(t["Id"]), typeId));
+        var entry = (type?["Companies"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c =>
+            string.Equals(Text(c["DataAreaId"]).Trim(), dataAreaId.Trim(), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Folder(Text(c["Input"])), Folder(input), StringComparison.OrdinalIgnoreCase));
+        return entry?["CompressPdf"] is JsonValue v && v.TryGetValue<bool>(out bool on) ? on : null;
+    }
+
     public static SourceOptions? StoredSource(JsonObject? section, string typeId, string dataAreaId, string input)
     {
         static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";

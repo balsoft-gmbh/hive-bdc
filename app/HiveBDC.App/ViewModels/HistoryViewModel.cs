@@ -35,6 +35,7 @@ public sealed record HistoryRow(string At, string DocumentId, string Document, s
             "received" => "Received",
             "read" => "Read",
             "produced" => "Produced",
+            "compressed" => "Compressed",
             "delivered" => "Delivered",
             "waiting" => "Waiting",
             "failed" => "Stopped",

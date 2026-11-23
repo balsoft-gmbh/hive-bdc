@@ -67,7 +67,8 @@ The service knows six types out of the box (AX terminology, English ids):
 
 Per type you set (dashboard: **Outbound >** a document type, or `DocumentTypes[]`
 in `appsettings.json`): the **party** ("Sent to"), the **handler** ("Produced
-as"), whether it is **enabled**, whether it is **mailed**, and its
+as"), whether it is **enabled**, whether it is **mailed**, whether its PDFs are
+**compressed** (see Compress PDF), and its
 **companies**: one entry per AX company the type is picked up for, each with
 its own input folder, output folder and SharePoint target (see Companies).
 
@@ -291,6 +292,25 @@ The service serves several AX companies at once, and the routing is defined
   URL), optional folder and the column templates for that company and type.
   Slashes are tidied on load and save: `…/sites/X/` and `…/sites/X` are the same
   site, `/Library/`, `Library/` and `Library` the same library.
+
+Mail and **Compress PDF** are switched per company in the same place (**Outbound >** a document type **>** a company,
+`Mail` and `CompressPdf` on the entry; without the key the entry follows the type).
+
+## Compress PDF
+
+With **Compress PDF** on (**Outbound >** a document type **>** a company **> Before delivery**), each PDF is made smaller
+once, before it goes to any destination, so SharePoint, the archive, the output folder and the mail get the same file.
+The PDF the ERP dropped stays as it was in `processed\`. What changes:
+
+- Fonts the PDF embeds in full keep only the glyphs it shows; glyph ids stay, so the text is drawn exactly as before.
+- Lossless images placed above 300 ppi are scaled to 200 ppi by area averaging. JPEG images keep their bytes.
+- Identical images and fonts are stored once, ASCII85 and ASCIIHex wrappers go, uncompressed streams get Flate.
+
+For an e-invoice it applies to ZUGFeRD: the carrier PDF is compressed and the fonts Hive BDC embeds for PDF/A are
+embedded as subsets, so an AX 2009 invoice whose PDF only names Arial no longer carries the whole font (in a test,
+945 KB became 138 KB, Mustang still accepts it). XRechnung XML is not changed. Signed, encrypted and PDF/A documents
+are left as they are, and so is any PDF that would not get smaller or whose page content would change; the document
+history says which, and the delivery goes ahead with the original.
 
 The SharePoint **app** (tenant / client / secret) and the **mail** app are
 shared and live under **Connections**. A settings file with the older

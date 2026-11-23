@@ -2,6 +2,15 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.12.0",
+      "date": "2026-11-23",
+      "changes": [
+        "Compress PDF, per document type and company under Outbound > Before delivery: each PDF is made smaller once, before it goes to SharePoint, the archive, the output folder and the mail. Fonts keep only the letters used, lossless images placed above 300 ppi are scaled to 200 ppi, identical images and fonts are stored once. Pages look the same; the PDF from the ERP stays as it was.",
+        "ZUGFeRD with Compress PDF on: the fonts embedded for PDF/A carry only the letters used. An AX 2009 invoice that only names Arial went from 945 KB to 138 KB in a test.",
+        "Signed, encrypted and PDF/A documents, and PDFs that would not get smaller, are delivered as they are; the document history says why."
+      ]
+    },
+    {
       "version": "1.11.3",
       "date": "2026-11-22",
       "changes": [

@@ -51,7 +51,7 @@ public static class OutputFileNames
 }
 
 /// <summary>What a handler produced: the file to deliver and a short format tag for the ledger ("xrechnung", "zugferd", "pdf").</summary>
-public sealed record DocumentOutput(string File, string Format);
+public sealed record DocumentOutput(string File, string Format, PdfCompression? Compression = null);
 
 /// <summary>
 /// One strategy per <see cref="DocumentHandlerKind"/>. A handler only PRODUCES the output
@@ -93,7 +93,8 @@ public sealed class EInvoiceHandler : IDocumentHandler
             string outFile = Path.Combine(ctx.OutputDir, ctx.FileStem + ".pdf");
             EInvoiceGenerator.WriteZugferd(invoice, ctx.PdfPath, outFile, ctx.Warn);
             ctx.Log.LogInformation("[zugferd] {Id} -> {Out}", ctx.DocumentId, outFile);
-            return new DocumentOutput(outFile, "zugferd");
+            var compression = ctx.Route.CompressesFor(ctx.Type) ? CompressZugferd(ctx, invoice, outFile) : null;
+            return new DocumentOutput(outFile, "zugferd", compression);
         }
 
         if (!data.IsXRechnung)
@@ -104,13 +105,52 @@ public sealed class EInvoiceHandler : IDocumentHandler
         ctx.Log.LogInformation("[xrechnung] {Id} -> {Out}", ctx.DocumentId, xml);
         return new DocumentOutput(xml, "xrechnung");
     }
+
+    /// <summary>
+    /// The ZUGFeRD again from a compressed copy of the carrier, with the fonts it embeds as subsets. It replaces the plain
+    /// one only when it is smaller; any failure keeps the plain one, so compression never stops a delivery.
+    /// </summary>
+    private static PdfCompression CompressZugferd(DocumentContext ctx, Balsoft.Hive.EInvoice.Invoice invoice, string outFile)
+    {
+        long plain = new FileInfo(outFile).Length;
+        string carrier = Path.Combine(Path.GetTempPath(), $"hivebdc-carrier-{Guid.NewGuid():N}.pdf");
+        string candidate = outFile + ".compressed.tmp";
+        try
+        {
+            File.Copy(ctx.PdfPath, carrier, overwrite: true);
+            var carrierResult = PdfCompressor.CompressFile(carrier, keepPdfA: false, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m));
+            if (!carrierResult.Compressed)
+                ctx.Log.LogInformation("{Id}: carrier PDF {Reason}; fonts are still embedded as subsets.", ctx.DocumentId, carrierResult.Summary);
+            EInvoiceGenerator.WriteZugferd(invoice, carrier, candidate, ctx.Warn, subsetFonts: true);
+            long compressed = new FileInfo(candidate).Length;
+            if (compressed >= plain) return new PdfCompression(plain, plain, "already compact");
+            File.Move(candidate, outFile, overwrite: true);
+            ctx.Log.LogInformation("[zugferd] {Id}: compressed {Before} to {After} bytes", ctx.DocumentId, plain, compressed);
+            return new PdfCompression(plain, compressed);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ctx.Warn($"The compressed ZUGFeRD could not be made, the uncompressed one is delivered: {ex.Message}");
+            return new PdfCompression(plain, plain, "the compressed version could not be made");
+        }
+        finally
+        {
+            foreach (var temp in new[] { carrier, candidate })
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+    }
 }
 
 /// <summary>
 /// Pass-through for every other document: the PDF the ERP rendered IS the deliverable.
 /// It is copied (not moved) into the output folder under the document id, so the ledger
 /// and the dashboard's double-click point at a file that outlives the processed\ inputs.
-/// Nothing inside the PDF is touched.
+/// Nothing inside the PDF is touched unless the type or company has Compress PDF on; then the
+/// copy is compressed (<see cref="PdfCompressor"/>) and the ERP's PDF stays as it was.
 /// </summary>
 public sealed class PdfHandler : IDocumentHandler
 {
@@ -127,7 +167,10 @@ public sealed class PdfHandler : IDocumentHandler
         string outFile = Path.Combine(ctx.OutputDir, ctx.FileStem + ".pdf");
         File.Copy(ctx.PdfPath, outFile, overwrite: true);
         ctx.Log.LogInformation("[pdf] {Id} ({Type}) -> {Out}", ctx.DocumentId, ctx.Type.Id, outFile);
-        return new DocumentOutput(outFile, "pdf");
+        if (!ctx.Route.CompressesFor(ctx.Type)) return new DocumentOutput(outFile, "pdf");
+        var compression = PdfCompressor.CompressFile(outFile, keepPdfA: true, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m));
+        ctx.Log.LogInformation("[pdf] {Id}: {Summary}", ctx.DocumentId, compression.Summary);
+        return new DocumentOutput(outFile, "pdf", compression);
     }
 }
 

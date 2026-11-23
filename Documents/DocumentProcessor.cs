@@ -277,6 +277,8 @@ public sealed partial class DocumentProcessor
         var produced = DocumentFile.FromPath(output.File);
         Note(input, documentId, EventSteps.Produced, EventStates.Ok,
             $"Produced {FormatLabel(output.Format)} {produced.Name} ({SizeLabel(new FileInfo(output.File).Length)}).");
+        if (output.Compression is { } compression)
+            Note(input, documentId, EventSteps.Compressed, EventStates.Ok, compression.Summary);
 
         // ── 4. deliver ────────────────────────────────────────────────────
         // Every target of the company entry gets the file, mail last. A failure throws, routes

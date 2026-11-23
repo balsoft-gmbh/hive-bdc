@@ -134,6 +134,9 @@ public sealed class DocumentTypeConfigDto
     [JsonPropertyName("handler")] public string? Handler { get; set; }
     [JsonPropertyName("enabled")] public bool Enabled { get; set; } = true;
     [JsonPropertyName("mail")] public bool Mail { get; set; } = true;
+    /// <summary>The type's own Compress PDF switch, passed back unchanged; the companies carry the effective value.
+    /// A service before 1.12.0 sends none.</summary>
+    [JsonPropertyName("compressPdf")] public bool? CompressPdf { get; set; }
     /// <summary>GET only: the service registered this type itself when the ERP first sent it.</summary>
     [JsonPropertyName("discovered")] public bool Discovered { get; set; }
     /// <summary>The AX companies this type is picked up for, each with folders and a SharePoint target.</summary>
@@ -152,6 +155,8 @@ public sealed class RouteConfigDto
     [JsonPropertyName("enabled")] public bool? Enabled { get; set; }
     /// <summary>Whether this company's documents are mailed. GET sends the effective value; a service before 1.5.0 sends none.</summary>
     [JsonPropertyName("mail")] public bool? Mail { get; set; }
+    /// <summary>Whether this company's PDFs are compressed before delivery. GET sends the effective value; a service before 1.12.0 sends none.</summary>
+    [JsonPropertyName("compressPdf")] public bool? CompressPdf { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
     [JsonPropertyName("targets")] public List<TargetConfigDto>? Targets { get; set; }
 }

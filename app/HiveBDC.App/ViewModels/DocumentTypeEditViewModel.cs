@@ -164,6 +164,7 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
         Handler = Handlers.FirstOrDefault(h => h.Equals(dto.Handler, StringComparison.OrdinalIgnoreCase)) ?? "Pdf";
         Enabled = dto.Enabled;
         Mail = dto.Mail;
+        _compressPdf = dto.CompressPdf;
         Discovered = dto.Discovered;
         if (dto.Companies is not null)
             foreach (var r in dto.Companies)
@@ -179,8 +180,12 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
         Handler = Handler,
         Enabled = Enabled,
         Mail = Mail,
+        CompressPdf = _compressPdf,
         Companies = Companies.Select(r => r.ToDto()).ToList(),
     };
+
+    /// <summary>The type's own Compress PDF switch as the service sent it; each company has its effective value.</summary>
+    private bool? _compressPdf;
 
     // ── company entries ───────────────────────────────────────────────────────
 

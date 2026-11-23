@@ -46,13 +46,13 @@ public static class EInvoiceGenerator
     /// Embed the CII XML into the carrier PDF as a PDF/A-3b hybrid and write it. On failure
     /// the caller routes the input pair to error\ and nothing is produced.
     /// </summary>
-    public static void WriteZugferd(Invoice invoice, string sourcePdfPath, string outPdfPath, Action<string> log)
+    public static void WriteZugferd(Invoice invoice, string sourcePdfPath, string outPdfPath, Action<string> log, bool subsetFonts = false)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outPdfPath)!);
         byte[] xml = BuildCiiXml(invoice);
         try
         {
-            Embed(invoice, xml, sourcePdfPath, outPdfPath, log);
+            Embed(invoice, xml, sourcePdfPath, outPdfPath, log, subsetFonts);
             return;
         }
         catch (Exception ex)
@@ -66,7 +66,7 @@ public static class EInvoiceGenerator
 
             try
             {
-                Embed(invoice, xml, repairedPath, outPdfPath, log);
+                Embed(invoice, xml, repairedPath, outPdfPath, log, subsetFonts);
                 log($"carrier PDF was malformed ({summary}) — repaired a copy and embedded successfully. " +
                     "The source PDF from the ERP is unchanged.");
             }
@@ -83,10 +83,11 @@ public static class EInvoiceGenerator
         }
     }
 
-    private static void Embed(Invoice invoice, byte[] xml, string sourcePdfPath, string outPdfPath, Action<string> log)
+    private static void Embed(Invoice invoice, byte[] xml, string sourcePdfPath, string outPdfPath, Action<string> log, bool subsetFonts)
     {
         var options = new HybridPdfOptions
         {
+            SubsetFonts = subsetFonts,
             Title = string.IsNullOrWhiteSpace(invoice.Number) ? "Invoice" : $"Invoice {invoice.Number}",
             Author = string.IsNullOrWhiteSpace(invoice.Seller.Name) ? null : invoice.Seller.Name,
             Creator = "Hive BDC, by Balsoft",

@@ -167,7 +167,7 @@ export function addCompany(body: any, typeId: any, company: any) {
   const type = findType(next, typeId);
   if (type.companies.some((c: any) => same(c.dataAreaId, clean))) throw new Error(`Company ${clean} is there already.`);
   type.companies.push({
-    dataAreaId: clean, input: '', inputFormat: 'Json', output: '', enabled: true, mail: false,
+    dataAreaId: clean, input: '', inputFormat: 'Json', output: '', enabled: true, mail: false, compressPdf: false,
     sharePoint: { enabled: false, siteUrl: '', library: '', folder: '', fields: {} }, targets: [],
   });
   return next;
@@ -223,6 +223,13 @@ export function setCompanyActive(body: any, typeId: any, company: any, on: any) 
 export function setMail(body: any, typeId: any, company: any, on: any) {
   const next = structuredClone(body);
   findEntry(next, typeId, company).mail = Boolean(on);
+  return next;
+}
+
+/** Compress PDF for one company, as in the Windows app: its PDFs are made smaller before they are delivered. */
+export function setCompressPdf(body: any, typeId: any, company: any, on: any) {
+  const next = structuredClone(body);
+  findEntry(next, typeId, company).compressPdf = Boolean(on);
   return next;
 }
 
@@ -366,6 +373,7 @@ export function draftChanges(original: any, draft: any) {
       if ((was.enabled !== false) !== (c.enabled !== false)) lines.push(`${where}: ${c.enabled !== false ? 'active' : 'off'}`);
       if (JSON.stringify(was.source || null) !== JSON.stringify(c.source || null)) lines.push(`${where}: comes from ${sourceWords(c.source)}`);
       if (Boolean(was.mail) !== Boolean(c.mail)) lines.push(`${where}: mail ${c.mail ? 'on' : 'off'}`);
+      if (Boolean(was.compressPdf) !== Boolean(c.compressPdf)) lines.push(`${where}: compress PDF ${c.compressPdf ? 'on' : 'off'}`);
       const spWas = was.sharePoint || {}, sp = c.sharePoint || {};
       const spOn = (x: any) => Boolean(x.enabled || x.siteUrl || x.library);
       if (spOn(spWas) && !spOn(sp)) lines.push(`${where}: SharePoint removed`);

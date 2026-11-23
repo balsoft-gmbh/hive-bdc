@@ -439,6 +439,30 @@
                     </StackPanel>
                 </Border>
 
+                <Border Style="{StaticResource Panel}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <Border Style="{StaticResource SectionHeading}">
+                            <TextBlock Text="Before delivery" Style="{StaticResource H2}"/>
+                        </Border>
+                        <Border Padding="12,6" MinHeight="44">
+                            <Grid VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="2.2*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Compress PDF" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Text="Smaller file, same look: fonts keep only the letters used, images above 300 ppi go to 200 ppi." TextWrapping="Wrap"/>
+                                    <TextBlock Text="E-invoices: applies to ZUGFeRD PDFs. Signed and PDF/A files stay as they are." Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox Grid.Column="2" IsChecked="{Binding CompressPdf}" Content="On" Width="64"
+                                          AutomationProperties.AutomationId="CompressPdf" AutomationProperties.Name="Compress PDF"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
                 <StackPanel Margin="0,14,0,0">
                     <Button Style="{StaticResource DangerLinkButton}" Click="OnAskRemove" AutomationProperties.AutomationId="RemoveCompany" AutomationProperties.Name="{Binding TabTitle, StringFormat=Remove {0}}"
                             Visibility="{Binding ConfirmRemove, Converter={StaticResource Match}, ConverterParameter=False}">

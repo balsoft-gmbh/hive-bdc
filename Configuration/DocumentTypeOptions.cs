@@ -55,6 +55,10 @@ public sealed class DocumentTypeOptions
     /// entry that does not set its own <see cref="DocumentRoute.Mail"/>.</summary>
     public bool Mail { get; set; } = true;
 
+    /// <summary>Whether the PDFs of this type are made smaller before delivery (<c>PdfCompressor</c>), for every company
+    /// entry that does not set its own <see cref="DocumentRoute.CompressPdf"/>. Off by default.</summary>
+    public bool CompressPdf { get; set; }
+
     /// <summary>The AX companies this type is picked up for, each with its own folders and SharePoint target.</summary>
     public List<DocumentRoute> Companies { get; set; } = new();
 
@@ -118,6 +122,11 @@ public sealed class DocumentRoute
     public bool? Mail { get; set; }
 
     public bool MailsFor(DocumentTypeOptions type) => Mail ?? type.Mail;
+
+    /// <summary>Whether this company's PDFs are compressed before delivery. Null (files written before 1.12.0) = as the type says.</summary>
+    public bool? CompressPdf { get; set; }
+
+    public bool CompressesFor(DocumentTypeOptions type) => CompressPdf ?? type.CompressPdf;
 
     /// <summary>
     /// Where the documents come from when not the input folder itself: Kind "blob" downloads them from Azure Blob

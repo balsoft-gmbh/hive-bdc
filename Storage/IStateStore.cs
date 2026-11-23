@@ -40,6 +40,7 @@ public static class EventSteps
     public const string Received = "received";
     public const string Read = "read";
     public const string Produced = "produced";
+    public const string Compressed = "compressed";
     public const string Delivered = "delivered";
     public const string Skipped = "skipped";
     public const string Waiting = "waiting";

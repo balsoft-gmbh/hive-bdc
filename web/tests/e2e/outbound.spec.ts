@@ -298,6 +298,21 @@ test("a destination and the company's mail are switched in the Goes to list", as
   expect(saved.body).toEqual(expected);
 });
 
+test("Compress PDF is switched under Before delivery and goes out with Save", async ({ page, request }) => {
+  await mock(request, { "GET /config": fullConfig() });
+  await page.goto(type("id=SalesInvoice&company=2000&tab=to"));
+  await opened(page);
+  await expect(page.getByRole("heading", { name: "Before delivery" })).toBeVisible();
+  await expect(page.getByText("fonts keep only the letters used, images above 300 ppi go to 200 ppi")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Compress PDF" }).check();
+  await expect(saveBar(page)).toContainText(/1 change/);
+  await page.screenshot({ path: test.info().outputPath("before-delivery.png"), fullPage: true });
+  await saveBar(page).getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText(/^Saved \d\d:\d\d$/)).toBeVisible();
+  const [saved] = await configPosts(request);
+  expect(saved.body).toEqual(X.setCompressPdf(postBody(fullConfig()), "SalesInvoice", "2000", true));
+});
+
 test("Discard puts every setting back and nothing is sent", async ({ page, request }) => {
   await page.goto(type("id=SalesInvoice"));
   await opened(page);

@@ -93,6 +93,7 @@ public sealed partial class LocalStatusServer
                 handler = t.Handler.ToString(),
                 enabled = t.Enabled,
                 mail = t.Mail,
+                compressPdf = t.CompressPdf,
                 discovered = t.Discovered,
                 companies = t.Companies.Select(r => new
                 {
@@ -102,6 +103,7 @@ public sealed partial class LocalStatusServer
                     output = r.Output,
                     enabled = r.IsOn,
                     mail = r.MailsFor(t),
+                    compressPdf = r.CompressesFor(t),
                     sharePoint = new
                     {
                         enabled = r.SharePoint.Enabled,
@@ -287,6 +289,7 @@ public sealed partial class LocalStatusServer
                     Handler = Enum.Parse<DocumentHandlerKind>(t.Handler!, ignoreCase: true),
                     Enabled = t.Enabled ?? true,
                     Mail = t.Mail ?? true,
+                    CompressPdf = t.CompressPdf ?? SettingsFile.StoredCompressPdf(prevSection, t.Id!.Trim()),
                     Discovered = false,   // saved from Settings => reviewed
                     Companies = (t.Companies ?? new()).Select(r => new DocumentRoute
                     {
@@ -322,6 +325,8 @@ public sealed partial class LocalStatusServer
                     if (posted[i].Targets is null)
                         opt.Companies[i].Targets = SettingsFile.StoredTargets(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
                     opt.Companies[i].Source = posted[i].Source ?? SettingsFile.StoredSource(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
+                    opt.Companies[i].CompressPdf = posted[i].CompressPdf
+                        ?? SettingsFile.StoredRouteCompressPdf(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
                 }
                 arr.Add(SettingsFile.DocumentTypeNode(opt));
             }
@@ -573,6 +578,8 @@ public sealed partial class LocalStatusServer
         public string? Handler { get; set; }
         public bool? Enabled { get; set; }
         public bool? Mail { get; set; }
+        /// <summary>Absent => the stored switch stays (a dashboard before 1.12.0).</summary>
+        public bool? CompressPdf { get; set; }
         public List<RoutePostDto>? Companies { get; set; }
     }
 
@@ -587,6 +594,8 @@ public sealed partial class LocalStatusServer
         public bool? Enabled { get; set; }
         /// <summary>Absent => the entry follows the type's Mail (a dashboard before 1.5.0).</summary>
         public bool? Mail { get; set; }
+        /// <summary>Absent => the stored switch stays (a dashboard before 1.12.0).</summary>
+        public bool? CompressPdf { get; set; }
         public CompanySpDto? SharePoint { get; set; }
         public List<TargetPostDto>? Targets { get; set; }
         /// <summary>Absent => keep the stored source (a dashboard that does not know sources).</summary>

@@ -43,6 +43,7 @@ const stepWords: Record<string, string> = {
   received: 'Received',
   read: 'Read',
   produced: 'Made',
+  compressed: 'Compressed',
   delivered: 'Delivered',
   waiting: 'Waiting',
   failed: 'Failed',
@@ -217,6 +218,7 @@ export function postBody(config: any) {
       handler: t.handler,
       enabled: t.enabled !== false,
       mail: t.mail !== false,
+      ...(t.compressPdf === undefined ? {} : { compressPdf: Boolean(t.compressPdf) }),
       companies: (t.companies || []).map((r: any) => {
         const entry: any = {
           dataAreaId: r.dataAreaId,
@@ -225,6 +227,7 @@ export function postBody(config: any) {
           output: r.output || '',
           enabled: r.enabled !== false,
           mail: Boolean(r.mail),
+          compressPdf: Boolean(r.compressPdf),
           sharePoint: {
             enabled: Boolean(r.sharePoint && r.sharePoint.enabled),
             siteUrl: (r.sharePoint && r.sharePoint.siteUrl) || '',
