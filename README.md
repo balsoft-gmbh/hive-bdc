@@ -294,7 +294,8 @@ The service serves several AX companies at once, and the routing is defined
   site, `/Library/`, `Library/` and `Library` the same library.
 
 Mail and **Compress PDF** are switched per company in the same place (**Outbound >** a document type **>** a company,
-`Mail` and `CompressPdf` on the entry; without the key the entry follows the type).
+`Mail` and `CompressPdf` on the entry; without the key the entry follows the type). The company's mail copies are set there
+too (`MailCc`, see Document mail).
 
 ## Compress PDF
 
@@ -504,7 +505,13 @@ recipients** from the settings instead, with `[Test]` on the subject and the add
 would have gone to named at the top of the body.
 
 Configure it in the dashboard under **Connections > Document mail**: the sending mailbox, the
-client ID and secret, and the test recipients. Mail can be switched off per document type.
+client ID and secret, and the test recipients (for all document types). Mail can be switched off per document type.
+
+**Cc per company:** each company of a document type can name its own addresses (**Outbound >** a document type **>** a
+company **> Goes to > Mail > Cc**, `MailCc` on the entry). They get every mail of that company as a copy: a Live mail goes
+to the customer or vendor with them in Cc (next to the ERP's own Cc), a test mail goes to the test recipients with them in
+Cc. An address that appears in more than one of these lists gets the mail once, compared without case. A Live document
+that names no recipient is not mailed, so its copies are not sent either.
 **Test mail** checks the app registration and the mailbox without sending anything, and
 `HiveBDC.exe --test-mail` does the same from the console.
 

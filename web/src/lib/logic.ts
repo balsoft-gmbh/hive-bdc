@@ -228,6 +228,7 @@ export function postBody(config: any) {
           enabled: r.enabled !== false,
           mail: Boolean(r.mail),
           compressPdf: Boolean(r.compressPdf),
+          mailCc: [...(r.mailCc || [])],
           sharePoint: {
             enabled: Boolean(r.sharePoint && r.sharePoint.enabled),
             siteUrl: (r.sharePoint && r.sharePoint.siteUrl) || '',

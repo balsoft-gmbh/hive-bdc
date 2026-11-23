@@ -12,7 +12,7 @@ namespace Balsoft.Hive.BDC.Delivery;
 /// one place, rather than being buried in the send call.
 /// </summary>
 /// <param name="To">Recipients of the mail as it will actually be sent.</param>
-/// <param name="Cc">Cc of the mail as it will actually be sent (empty when redirected).</param>
+/// <param name="Cc">Cc of the mail as it will actually be sent: the ERP Cc (Live only) and the company's copies.</param>
 /// <param name="Redirected">True when the customer addresses were replaced by the redirect list.</param>
 /// <param name="Environment">The AX environment reported by the document JSON, for the banner and the log.</param>
 /// <param name="OriginalTo">The partner To addresses from the document JSON, kept for the banner.</param>
@@ -167,16 +167,26 @@ public sealed partial class MailSender
     /// redirect list instead, because an export that cannot prove it came from production
     /// must never reach a customer or vendor.
     /// </summary>
-    public MailPlan PlanRecipients(string? environment, string? recipientEmail, string? recipientEmailCc)
+    public MailPlan PlanRecipients(string? environment, string? recipientEmail, string? recipientEmailCc,
+        IReadOnlyList<string>? companyCc = null)
     {
         var originalTo = MailAddresses.Split(recipientEmail);
         var originalCc = MailAddresses.Split(recipientEmailCc);
         string env = SourceEnvironment.Describe(environment);
+        var copies = companyCc ?? Array.Empty<string>();
 
         if (SourceEnvironment.IsLive(environment))
-            return new MailPlan(originalTo, originalCc, false, env, originalTo, originalCc);
+            return new MailPlan(originalTo, CopiesBesides(originalTo, originalCc.Concat(copies)), false, env, originalTo, originalCc);
 
-        return new MailPlan(_mail.CleanRedirectTo(), Array.Empty<string>(), true, env, originalTo, originalCc);
+        var to = _mail.CleanRedirectTo();
+        return new MailPlan(to, CopiesBesides(to, copies), true, env, originalTo, originalCc);
+    }
+
+    /// <summary>Cc without blanks, doubles and the addresses already in To; compared without case.</summary>
+    internal static IReadOnlyList<string> CopiesBesides(IReadOnlyList<string> to, IEnumerable<string> cc)
+    {
+        var inTo = new HashSet<string>(to, StringComparer.OrdinalIgnoreCase);
+        return MailAddresses.Clean(cc).Where(a => !inTo.Contains(a)).ToList();
     }
 
     /// <summary>Subject line as sent: the ERP subject with %1 filled in, prefixed when redirected.</summary>

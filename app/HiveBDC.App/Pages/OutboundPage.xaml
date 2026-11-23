@@ -427,6 +427,12 @@
                                 <TextBlock Text="Mail" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                                     <TextBlock Text="To the recipient the ERP names in the document." TextWrapping="Wrap"/>
+                                    <DockPanel Margin="0,8,0,0">
+                                        <TextBlock Text="Cc" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBox Text="{Binding MailCc, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.AutomationId="MailCc" AutomationProperties.Name="Cc addresses of this company"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Gets every mail of this company as a copy, from the Live ERP and from test systems. Separate with ;." TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,2,0,0"
                                                Visibility="{Binding DataContext.MailSetUp, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Match}, ConverterParameter=False}">
                                         <TextBlock Text="Document mail is not connected yet." Style="{StaticResource WarnText}" Margin="0,0,8,0"/>

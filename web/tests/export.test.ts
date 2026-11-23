@@ -452,3 +452,20 @@ test('Compress PDF is a company switch that the save body carries and the change
   assert.equal(sent.documentTypes[0].compressPdf, true);
   assert.equal(addCompany(start, 'SalesInvoice', '2000').documentTypes[0].companies.at(-1).compressPdf, false);
 });
+
+test('a company has its own Cc addresses: typed text becomes one list, the save body carries it, the change list names it', () => {
+  assert.deepEqual(X.mailCcList(' a@contoso.example; b@contoso.example,c@contoso.example\nA@CONTOSO.example ;; '), ['a@contoso.example', 'b@contoso.example', 'c@contoso.example']);
+  assert.deepEqual(X.mailCcList(''), []);
+
+  const start = postBody(config());
+  assert.deepEqual(start.documentTypes[0].companies[0].mailCc, []);
+  const withCc = X.setMailCc(start, 'SalesInvoice', '1000', 'x@contoso.example, y@contoso.example');
+  assert.deepEqual(withCc.documentTypes[0].companies[0].mailCc, ['x@contoso.example', 'y@contoso.example']);
+  assert.deepEqual(start.documentTypes[0].companies[0].mailCc, []);   // the draft is a copy
+  assert.deepEqual(draftChanges(start, withCc), ['Rechnung › 1000: mail Cc x@contoso.example, y@contoso.example']);
+  assert.deepEqual(draftChanges(withCc, X.setMailCc(withCc, 'SalesInvoice', '1000', '')), ['Rechnung › 1000: mail Cc none']);
+
+  const sent = postBody({ ...config(), documentTypes: [{ ...config().documentTypes[0], companies: [{ ...config().documentTypes[0].companies[0], mailCc: ['z@fabrikam.example'] }] }] });
+  assert.deepEqual(sent.documentTypes[0].companies[0].mailCc, ['z@fabrikam.example']);
+  assert.deepEqual(addCompany(start, 'SalesInvoice', '2000').documentTypes[0].companies.at(-1).mailCc, []);
+});

@@ -19,6 +19,9 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     /// <summary>Make each PDF of this company smaller before it is delivered (fonts reduced to the letters used, images above 300 ppi to 200 ppi).</summary>
     [ObservableProperty] private bool _compressPdf;
 
+    /// <summary>Addresses that get every mail of this company as a copy (Cc), as typed: separated by ; , space or new line.</summary>
+    [ObservableProperty] private string _mailCc = "";
+
     /// <summary>Whether this company of the document type runs; off = its folder is not read for this type.</summary>
     [ObservableProperty] private bool _enabled = true;
 
@@ -89,6 +92,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         Output = dto.Output ?? "";
         Mail = dto.Mail ?? true;
         CompressPdf = dto.CompressPdf ?? false;
+        MailCc = MailAddressText.Join(dto.MailCc);
         Enabled = dto.Enabled ?? true;
         var sp = dto.SharePoint;
         SharePointEnabled = sp?.Enabled ?? false;
@@ -164,6 +168,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         Output = Output?.Trim() ?? "",
         Mail = Mail,
         CompressPdf = CompressPdf,
+        MailCc = MailAddressText.Parse(MailCc),
         Enabled = Enabled,
         SharePoint = new CompanySharePointConfigDto
         {

@@ -60,13 +60,25 @@ export function DestinationsTab({
       label: "Where",
       render: (r) =>
         r.mail ? (
-          mailReady ? (
-            <span className="wrap-cell">To the recipient in the document, from {mail.from}</span>
-          ) : (
-            <span className="cell-muted wrap-cell">
-              Document mail is not connected yet. <Link href="/connections/">Connections</Link>
-            </span>
-          )
+          <div className="mail-where">
+            {mailReady ? (
+              <span className="wrap-cell">To the recipient in the document, from {mail.from}</span>
+            ) : (
+              <span className="cell-muted wrap-cell">
+                Document mail is not connected yet. <Link href="/connections/">Connections</Link>
+              </span>
+            )}
+            <label className="mail-cc">
+              <span className="cell-strong">Cc</span>
+              <CommitInput
+                aria-label="Cc addresses of this company"
+                value={(entry.mailCc || []).join(", ")}
+                readOnly={ro}
+                onCommit={(text) => change((d) => X.setMailCc(d, type.id, company, text))}
+              />
+            </label>
+            <span className="cell-muted wrap-cell">Gets every mail of this company as a copy, from the Live ERP and from test systems. Comma between addresses.</span>
+          </div>
         ) : r.summary ? (
           <span className="wrap-cell">{r.summary}</span>
         ) : (

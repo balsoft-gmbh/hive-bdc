@@ -264,7 +264,7 @@ test("document mail names what is missing before it takes the values, and Discar
   await onePrimaryAtMost(page);
   await expect(dialog(page).getByRole("checkbox", { name: "Send documents by mail" })).toBeChecked();
   await dialog(page).getByLabel("Sent from").fill("invoices@contoso.example");
-  await dialog(page).getByLabel("Documents of a test ERP go to").fill("test@contoso.example, nope");
+  await dialog(page).getByLabel("Test recipients").fill("test@contoso.example, nope");
   await dialog(page).getByRole("button", { name: "Apply" }).click();
   await expect(dialog(page)).toContainText("Enter the tenant ID.");
   await expect(dialog(page)).toContainText("Enter the client ID of the mail app.");
@@ -272,7 +272,7 @@ test("document mail names what is missing before it takes the values, and Discar
   await dialog(page).getByLabel("Tenant ID (empty: the SharePoint tenant)").fill("00000000-0000-0000-0000-000000000002");
   await dialog(page).getByLabel("Client ID of the mail app").fill("66666666-7777-8888-9999-000000000000");
   await dialog(page).getByLabel("Client secret").fill("made-up-secret");
-  await dialog(page).getByLabel("Documents of a test ERP go to").fill("test@contoso.example");
+  await dialog(page).getByLabel("Test recipients").fill("test@contoso.example");
   await dialog(page).getByRole("button", { name: "Apply" }).click();
   await expect(dialog(page)).toHaveCount(0);
   await expect(apps(page).getByRole("row", { name: /Document mail/ })).toContainText("From invoices@contoso.example");

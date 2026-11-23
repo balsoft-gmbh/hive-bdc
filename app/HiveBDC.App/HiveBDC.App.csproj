@@ -12,7 +12,7 @@
     <AssemblyTitle>Hive BDC Dashboard</AssemblyTitle>
     <Company>Balsoft GmbH</Company>
     <Copyright>© Balsoft GmbH</Copyright>
-    <Version>1.12.1</Version>
+    <Version>1.13.0</Version>
     <ApplicationIcon>Assets\hive-bdc.ico</ApplicationIcon>
     <!-- Embed the UAC manifest so the dashboard always runs elevated (Start/Stop service). -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -41,6 +41,7 @@
     <Compile Include="..\..\Configuration\SharePointFieldImport.cs" Link="Shared\SharePointFieldImport.cs" />
     <!-- Word input: the reader, the renderer and the template builder the service uses, so "Check a Word file" runs in the dashboard. -->
     <Compile Include="..\..\Configuration\InputFormats.cs" Link="Shared\InputFormats.cs" />
+    <Compile Include="..\..\Configuration\MailAddressText.cs" Link="Shared\MailAddressText.cs" />
     <Compile Include="..\..\Documents\Word\WordInvoiceReader.cs" Link="Shared\Word\WordInvoiceReader.cs" />
     <Compile Include="..\..\Documents\Word\WordTemplateBuilder.cs" Link="Shared\Word\WordTemplateBuilder.cs" />
     <Compile Include="..\..\Documents\Word\DocxModel.cs" Link="Shared\Word\DocxModel.cs" />

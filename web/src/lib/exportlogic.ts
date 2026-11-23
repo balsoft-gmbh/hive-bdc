@@ -167,7 +167,7 @@ export function addCompany(body: any, typeId: any, company: any) {
   const type = findType(next, typeId);
   if (type.companies.some((c: any) => same(c.dataAreaId, clean))) throw new Error(`Company ${clean} is there already.`);
   type.companies.push({
-    dataAreaId: clean, input: '', inputFormat: 'Json', output: '', enabled: true, mail: false, compressPdf: false,
+    dataAreaId: clean, input: '', inputFormat: 'Json', output: '', enabled: true, mail: false, compressPdf: false, mailCc: [],
     sharePoint: { enabled: false, siteUrl: '', library: '', folder: '', fields: {} }, targets: [],
   });
   return next;
@@ -224,6 +224,24 @@ export function setMail(body: any, typeId: any, company: any, on: any) {
   const next = structuredClone(body);
   findEntry(next, typeId, company).mail = Boolean(on);
   return next;
+}
+
+/** The Cc addresses of one company, as in the Windows app: every mail of this company goes to them as a copy. */
+export function setMailCc(body: any, typeId: any, company: any, text: any) {
+  const next = structuredClone(body);
+  findEntry(next, typeId, company).mailCc = mailCcList(text);
+  return next;
+}
+
+/** Typed Cc text to a list: separators comma, semicolon and white space, blanks and doubles (any case) dropped. */
+export function mailCcList(text: any): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of String(text || '').split(/[,;\s]+/)) {
+    const a = part.trim();
+    if (a && !seen.has(a.toLowerCase())) { seen.add(a.toLowerCase()); out.push(a); }
+  }
+  return out;
 }
 
 /** Compress PDF for one company, as in the Windows app: its PDFs are made smaller before they are delivered. */
@@ -374,6 +392,7 @@ export function draftChanges(original: any, draft: any) {
       if (JSON.stringify(was.source || null) !== JSON.stringify(c.source || null)) lines.push(`${where}: comes from ${sourceWords(c.source)}`);
       if (Boolean(was.mail) !== Boolean(c.mail)) lines.push(`${where}: mail ${c.mail ? 'on' : 'off'}`);
       if (Boolean(was.compressPdf) !== Boolean(c.compressPdf)) lines.push(`${where}: compress PDF ${c.compressPdf ? 'on' : 'off'}`);
+      if ((was.mailCc || []).join(',') !== (c.mailCc || []).join(',')) lines.push(`${where}: mail Cc ${(c.mailCc || []).join(', ') || 'none'}`);
       const spWas = was.sharePoint || {}, sp = c.sharePoint || {};
       const spOn = (x: any) => Boolean(x.enabled || x.siteUrl || x.library);
       if (spOn(spWas) && !spOn(sp)) lines.push(`${where}: SharePoint removed`);

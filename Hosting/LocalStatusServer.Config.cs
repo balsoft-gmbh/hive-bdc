@@ -104,6 +104,7 @@ public sealed partial class LocalStatusServer
                     enabled = r.IsOn,
                     mail = r.MailsFor(t),
                     compressPdf = r.CompressesFor(t),
+                    mailCc = r.MailCc,
                     sharePoint = new
                     {
                         enabled = r.SharePoint.Enabled,
@@ -264,6 +265,11 @@ public sealed partial class LocalStatusServer
                 errors.Add($"mail.redirectTo contains '{bad}', which is not a valid e-mail address.");
         }
 
+        foreach (var t in types ?? Enumerable.Empty<DocumentTypePostDto>())
+            foreach (var r in t.Companies ?? new())
+                foreach (var bad in MailAddresses.Clean(r.MailCc).Where(a => !MailAddresses.LooksLikeAddress(a)))
+                    errors.Add($"{t.Id} › {r.DataAreaId}: the Cc address '{bad}' is not a valid e-mail address.");
+
         if (errors.Count > 0) { Respond(call, 400, new { ok = false, errors }); return; }
 
         // ── build the new HiveBDC section ─────────────────────────────
@@ -327,6 +333,9 @@ public sealed partial class LocalStatusServer
                     opt.Companies[i].Source = posted[i].Source ?? SettingsFile.StoredSource(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
                     opt.Companies[i].CompressPdf = posted[i].CompressPdf
                         ?? SettingsFile.StoredRouteCompressPdf(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
+                    opt.Companies[i].MailCc = posted[i].MailCc is { } cc
+                        ? MailAddresses.Clean(cc).ToList()
+                        : SettingsFile.StoredRouteMailCc(prevSection, opt.Id, opt.Companies[i].DataAreaId, opt.Companies[i].Input);
                 }
                 arr.Add(SettingsFile.DocumentTypeNode(opt));
             }
@@ -596,6 +605,8 @@ public sealed partial class LocalStatusServer
         public bool? Mail { get; set; }
         /// <summary>Absent => the stored switch stays (a dashboard before 1.12.0).</summary>
         public bool? CompressPdf { get; set; }
+        /// <summary>Absent => the stored Cc addresses stay (a dashboard before 1.13.0).</summary>
+        public List<string>? MailCc { get; set; }
         public CompanySpDto? SharePoint { get; set; }
         public List<TargetPostDto>? Targets { get; set; }
         /// <summary>Absent => keep the stored source (a dashboard that does not know sources).</summary>

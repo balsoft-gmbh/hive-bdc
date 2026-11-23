@@ -123,6 +123,10 @@ public sealed class DocumentRoute
 
     public bool MailsFor(DocumentTypeOptions type) => Mail ?? type.Mail;
 
+    /// <summary>Addresses that get every mail of this company as a copy (Cc), from the Live ERP and from test systems.
+    /// Empty (also for files written before 1.13.0) = no copies.</summary>
+    public List<string> MailCc { get; set; } = new();
+
     /// <summary>Whether this company's PDFs are compressed before delivery. Null (files written before 1.12.0) = as the type says.</summary>
     public bool? CompressPdf { get; set; }
 
@@ -155,6 +159,7 @@ public sealed class DocumentRoute
         InputFormat = InputFormats.IsWord(InputFormat) ? InputFormats.Word : InputFormats.Json;
         SharePoint ??= new SharePointTargetOptions();
         SharePoint.Normalize();
+        MailCc = MailAddresses.Clean(MailCc).ToList();
         Targets ??= new();
         Targets.RemoveAll(t => t is null);
         foreach (var t in Targets) t.Normalize();

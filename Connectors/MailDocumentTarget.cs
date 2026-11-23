@@ -30,7 +30,7 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
             return new DeliveryResult(Summary: $"Not mailed: document mail is not switched on {SettingsPaths.Pick("in Settings", "under Connections")}.", Skipped: true);
         }
 
-        var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc);
+        var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc, ctx.Route.MailCc);
         string partyLabel = type.Party == DocumentParty.Vendor ? "vendor" : "customer";
 
         if (plan.Redirected && string.IsNullOrWhiteSpace(data.Environment))

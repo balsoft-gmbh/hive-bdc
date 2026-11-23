@@ -2,6 +2,15 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.13.0",
+      "date": "2026-11-23",
+      "changes": [
+        "Cc per company: under Outbound > a document type > a company > Goes to > Mail, each company names its own addresses. They get every mail of that company as a copy: Live mails go to the customer or vendor with them in Cc, test mails go to the test recipients with them in Cc.",
+        "An address that appears in more than one list (customer, the ERP's Cc, the company's Cc, test recipients) gets the mail once. An invalid address is refused when saving and named in the message.",
+        "The test recipients under Connections > Document mail apply to all document types; the web console now calls them Test recipients, as the Windows app does."
+      ]
+    },
+    {
       "version": "1.12.1",
       "date": "2026-11-23",
       "changes": [

@@ -313,6 +313,22 @@ test("Compress PDF is switched under Before delivery and goes out with Save", as
   expect(saved.body).toEqual(X.setCompressPdf(postBody(fullConfig()), "SalesInvoice", "2000", true));
 });
 
+test("each company has its own Cc addresses in the Mail row, and they go out with Save", async ({ page, request }) => {
+  await mock(request, { "GET /config": fullConfig() });
+  await page.goto(type("id=SalesInvoice&company=2000&tab=to"));
+  await opened(page);
+  await expect(page.getByText("Gets every mail of this company as a copy, from the Live ERP and from test systems.")).toBeVisible();
+  const cc = page.getByLabel("Cc addresses of this company");
+  await cc.fill("x@contoso.example; y@contoso.example, X@CONTOSO.example");
+  await cc.press("Enter");
+  await expect(saveBar(page)).toContainText("mail Cc x@contoso.example, y@contoso.example");
+  await page.screenshot({ path: test.info().outputPath("mail-cc.png"), fullPage: true });
+  await saveBar(page).getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText(/^Saved \d\d:\d\d$/)).toBeVisible();
+  const [saved] = await configPosts(request);
+  expect(saved.body).toEqual(X.setMailCc(postBody(fullConfig()), "SalesInvoice", "2000", "x@contoso.example; y@contoso.example"));
+});
+
 test("Discard puts every setting back and nothing is sent", async ({ page, request }) => {
   await page.goto(type("id=SalesInvoice"));
   await opened(page);

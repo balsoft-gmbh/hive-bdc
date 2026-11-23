@@ -157,6 +157,8 @@ public sealed class RouteConfigDto
     [JsonPropertyName("mail")] public bool? Mail { get; set; }
     /// <summary>Whether this company's PDFs are compressed before delivery. GET sends the effective value; a service before 1.12.0 sends none.</summary>
     [JsonPropertyName("compressPdf")] public bool? CompressPdf { get; set; }
+    /// <summary>Addresses that get every mail of this company as a copy. A service before 1.13.0 sends none.</summary>
+    [JsonPropertyName("mailCc")] public List<string>? MailCc { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
     [JsonPropertyName("targets")] public List<TargetConfigDto>? Targets { get; set; }
 }

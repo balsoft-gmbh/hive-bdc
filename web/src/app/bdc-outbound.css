@@ -593,3 +593,16 @@
   margin-top: 16px;
   padding: 14px;
 }
+.bdc-edit .mail-where {
+  display: grid;
+  gap: 6px;
+}
+.bdc-edit .mail-cc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bdc-edit .mail-cc input {
+  flex: 1;
+  min-width: 0;
+}

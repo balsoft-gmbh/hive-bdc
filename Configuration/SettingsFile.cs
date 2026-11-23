@@ -138,6 +138,7 @@ public static class SettingsFile
         if (r.Enabled is { } enabled) node["Enabled"] = enabled;
         if (r.Mail is { } mail) node["Mail"] = mail;
         if (r.CompressPdf is { } compress) node["CompressPdf"] = compress;
+        if (r.MailCc.Count > 0) node["MailCc"] = new JsonArray(r.MailCc.Select(a => (JsonNode?)JsonValue.Create(a)).ToArray());
         if (r.Source is not null)
         {
             var sourceSettings = new JsonObject();
@@ -211,6 +212,20 @@ public static class SettingsFile
             string.Equals(Text(c["DataAreaId"]).Trim(), dataAreaId.Trim(), StringComparison.OrdinalIgnoreCase)
             && string.Equals(Folder(Text(c["Input"])), Folder(input), StringComparison.OrdinalIgnoreCase));
         return entry?["CompressPdf"] is JsonValue v && v.TryGetValue<bool>(out bool on) ? on : null;
+    }
+
+    /// <summary>A company entry's stored Cc addresses, for a save from a dashboard that does not send them (before 1.13.0).</summary>
+    public static List<string> StoredRouteMailCc(JsonObject? section, string typeId, string dataAreaId, string input)
+    {
+        static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+        static string Folder(string p) => p.Trim().TrimEnd('\\', '/');
+        if (section?["DocumentTypes"] is not JsonArray types) return new List<string>();
+        var type = types.OfType<JsonObject>().FirstOrDefault(t => DocumentTypeCatalog.SameId(Text(t["Id"]), typeId));
+        var entry = (type?["Companies"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c =>
+            string.Equals(Text(c["DataAreaId"]).Trim(), dataAreaId.Trim(), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Folder(Text(c["Input"])), Folder(input), StringComparison.OrdinalIgnoreCase));
+        if (entry?["MailCc"] is not JsonArray list) return new List<string>();
+        return MailAddresses.Clean(list.Select(Text)).ToList();
     }
 
     public static SourceOptions? StoredSource(JsonObject? section, string typeId, string dataAreaId, string input)
