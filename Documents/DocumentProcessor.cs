@@ -229,7 +229,9 @@ public sealed partial class DocumentProcessor
         known.DataAreaId = shownArea;
         Note(input, documentId, EventSteps.Read, EventStates.Ok,
             $"Read as {type.EffectiveDisplayName} {documentNumber} for company {shownArea}" +
-            (type.Handler == DocumentHandlerKind.EInvoice ? $", e-invoice format {(data.IsZugferd ? "ZUGFeRD" : "XRechnung")}." : "."));
+            (type.Handler != DocumentHandlerKind.EInvoice ? "."
+             : data.IsNoEInvoice ? ", no e-invoice (NoEInvoice): the ERP's PDF goes out unchanged."
+             : $", e-invoice format {(data.IsZugferd ? "ZUGFeRD" : "XRechnung")}."));
 
         // ── 2. may it be processed? ───────────────────────────────────────
         if (!type.Enabled)
@@ -268,7 +270,7 @@ public sealed partial class DocumentProcessor
             if (target.Unavailable(options) is { } unavailable)
                 throw new PendingDocumentException(unavailable);
         }
-        if ((type.Handler == DocumentHandlerKind.Pdf || data.IsZugferd) && !File.Exists(pdfPath))
+        if ((type.Handler == DocumentHandlerKind.Pdf || data.IsZugferd || data.IsNoEInvoice) && !File.Exists(pdfPath))
             throw new PendingDocumentException("Waiting for the sibling PDF.");
         if (File.Exists(pdfPath)) EnsureReadable(pdfPath);
         var ctx = new DocumentContext(route, type, data, jsonPath, pdfPath, documentId, documentNumber,

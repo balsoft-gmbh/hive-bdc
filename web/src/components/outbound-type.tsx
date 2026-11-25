@@ -204,7 +204,7 @@ function TypePanel({ type, ro }: { type: any; ro: boolean }) {
               onChange={(v) => set({ handler: v })}
             />
             <span className="field-hint">
-              {type.handler === "EInvoice" ? "XRechnung or ZUGFeRD, as each export says." : "The PDF goes out as F&O made it."}
+              {type.handler === "EInvoice" ? "XRechnung or ZUGFeRD, as each document says. NoEInvoice: the ERP's PDF, unchanged." : "The PDF goes out as F&O made it."}
             </span>
           </div>
           <div className="field">

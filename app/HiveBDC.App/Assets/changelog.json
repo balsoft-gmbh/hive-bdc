@@ -2,6 +2,14 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.13.1",
+      "date": "2026-11-25",
+      "changes": [
+        "An invoice whose export says eInvoiceType NoEInvoice is no e-invoice: Hive BDC delivers the ERP's PDF as it is, with no XML embedded and no XML file. Until now such an invoice went out as XRechnung XML. Compress PDF applies when it is on.",
+        "A blank eInvoiceType still gives XRechnung, as before."
+      ]
+    },
+    {
       "version": "1.13.0",
       "date": "2026-11-23",
       "changes": [

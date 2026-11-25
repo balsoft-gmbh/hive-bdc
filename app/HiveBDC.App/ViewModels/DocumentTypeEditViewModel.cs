@@ -116,7 +116,7 @@ public sealed partial class DocumentTypeEditViewModel : ObservableObject
     public string ProducedText => Handler == "EInvoice" ? "E-invoice" : "PDF as it is";
 
     public string ProducedDetail => Handler == "EInvoice"
-        ? "XRechnung or ZUGFeRD, as each document says."
+        ? "XRechnung or ZUGFeRD, as each document says. NoEInvoice: the ERP's PDF, unchanged."
         : "The PDF the ERP made, unchanged.";
 
     public string PartyText => Party == "Vendor" ? "to vendors" : "to customers";

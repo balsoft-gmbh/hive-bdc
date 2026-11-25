@@ -44,10 +44,11 @@ public static class OutputFileNames
         return stem.Length == 0 ? documentId : stem;
     }
 
-    /// <summary>The file a document becomes: an e-invoice gives its XRechnung XML unless it is ZUGFeRD, everything else
-    /// a PDF, as <see cref="EInvoiceHandler"/> and <see cref="PdfHandler"/> write it.</summary>
+    /// <summary>The file a document becomes: an e-invoice gives its XRechnung XML unless it is ZUGFeRD or NoEInvoice,
+    /// everything else a PDF, as <see cref="EInvoiceHandler"/> and <see cref="PdfHandler"/> write it.</summary>
     public static string For(DocumentHandlerKind kind, AxDocument data, string documentId)
-        => Stem(data.ResolveNumber(documentId), documentId) + (kind == DocumentHandlerKind.EInvoice && !data.IsZugferd ? ".xml" : ".pdf");
+        => Stem(data.ResolveNumber(documentId), documentId)
+           + (kind == DocumentHandlerKind.EInvoice && !data.IsZugferd && !data.IsNoEInvoice ? ".xml" : ".pdf");
 }
 
 /// <summary>What a handler produced: the file to deliver and a short format tag for the ledger ("xrechnung", "zugferd", "pdf").</summary>
@@ -71,7 +72,8 @@ public interface IDocumentHandler
 /// <summary>
 /// The original Hive eInvoice feature: map the JSON to EN 16931 and write XRechnung XML,
 /// or embed the same CII XML into the ERP's PDF as a ZUGFeRD PDF/A-3 (Balsoft.Hive.EInvoice). Routes strictly by
-/// eInvoiceType: xrechnung -> {number}.xml only, zugferd -> {number}.pdf only.
+/// eInvoiceType: xrechnung -> {number}.xml only, zugferd -> {number}.pdf only, NoEInvoice -> the ERP's PDF as
+/// <see cref="PdfHandler"/> delivers it, without mapping or XML.
 /// </summary>
 public sealed class EInvoiceHandler : IDocumentHandler
 {
@@ -81,6 +83,8 @@ public sealed class EInvoiceHandler : IDocumentHandler
     public DocumentOutput Produce(DocumentContext ctx)
     {
         var data = ctx.Data;
+        if (data.IsNoEInvoice) return PdfHandler.PassThrough(ctx);
+
         var invoice = InvoiceMapper.Map(data, ctx.Warn, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m));
         EInvoiceGenerator.Preflight(invoice, ctx.Warn);
         Directory.CreateDirectory(ctx.OutputDir);
@@ -157,7 +161,10 @@ public sealed class PdfHandler : IDocumentHandler
     public DocumentHandlerKind Kind => DocumentHandlerKind.Pdf;
     public string RequiredFeature => LicenseFeatures.Documents;
 
-    public DocumentOutput Produce(DocumentContext ctx)
+    public DocumentOutput Produce(DocumentContext ctx) => PassThrough(ctx);
+
+    /// <summary>The copy and optional compression, shared with an e-invoice type's NoEInvoice documents.</summary>
+    internal static DocumentOutput PassThrough(DocumentContext ctx)
     {
         if (!File.Exists(ctx.PdfPath))
             throw new FileNotFoundException(

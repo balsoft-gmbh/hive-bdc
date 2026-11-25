@@ -105,7 +105,7 @@ for e-invoices:
   "emailSubject": "Bestellung %1",      // %1 => documentNumber
   "emailBody": "...",                   // plain text
   // SalesInvoice only (the e-invoice payload):
-  "eInvoiceType": "zugferd",            // xrechnung | zugferd
+  "eInvoiceType": "zugferd",            // xrechnung | zugferd | NoEInvoice
   "issueDate": "...", "dueDate": "...", "currency": "EUR", "sender*": "...", "vatRate": "19",
   "lineItems": [ { "description": "...", "quantity": "1", "unit": "piece", "unitPrice": "10.00",
                    "vatRate": "7", "vatCategory": "S" } ],   // per-line VAT optional; header vatRate is the default
@@ -208,7 +208,9 @@ Handlers:
 
 - **EInvoice** — `eInvoiceType = xrechnung` writes `{documentNumber}.xml` (EN 16931 /
   XRechnung 3.0.2, CII syntax); `eInvoiceType = zugferd` writes `{documentNumber}.pdf`
-  (PDF/A-3 carrier with the same CII XML embedded, ZUGFeRD 2.5.2 / Factur-X 1.09.2, profile XRECHNUNG). The
+  (PDF/A-3 carrier with the same CII XML embedded, ZUGFeRD 2.5.2 / Factur-X 1.09.2, profile XRECHNUNG);
+  `eInvoiceType = NoEInvoice` delivers the ERP's PDF unchanged as `{documentNumber}.pdf`, like the Pdf handler (no
+  mapping, no XML, Compress PDF if it is on). A blank or unknown `eInvoiceType` gives XRechnung. The
   mapping recomputes amounts from `quantity × unitPrice` (or `quantity × priceUnitPrice /
   priceUnit`) plus line charges minus line discounts, a header or per-line `vatRate`, tax
   category `S` (or `E` at rate 0), a country-name → ISO map, and a unit-code map. A cash

@@ -29,7 +29,7 @@ public sealed class AxDocument
     /// <summary>AX company (dataAreaId). Selects the company entry when a folder serves several companies.</summary>
     public string DataAreaId { get; set; } = "";
 
-    /// <summary>Output format of the e-invoice handler: "xrechnung" (XML) or "zugferd" (PDF/A-3). Other handlers ignore it.</summary>
+    /// <summary>Output format of the e-invoice handler: "xrechnung" (XML), "zugferd" (PDF/A-3) or "NoEInvoice" (the ERP's PDF unchanged). Other handlers ignore it.</summary>
     public string EInvoiceType { get; set; } = "";
 
     // ── e-invoice identification (Aktivbank Zentralregulierung and similar) ───
@@ -203,6 +203,10 @@ public sealed class AxDocument
 
     public bool IsXRechnung =>
         EInvoiceType.Contains("xrechnung", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The ERP says this invoice is not an e-invoice: its PDF is delivered as it is, without XML.</summary>
+    public bool IsNoEInvoice =>
+        string.Equals(EInvoiceType.Trim(), "NoEInvoice", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>One cash discount (Skonto) term as the ERP exports it.</summary>
