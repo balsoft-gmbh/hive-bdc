@@ -600,7 +600,7 @@ function Mailbox({ identity, ro, onClose }: { identity: any; ro: boolean; onClos
             onChange={(e) => setFrom(e.target.value)}
           />
         </Field>
-        <Field label="Test recipients" htmlFor="mail-redirect" hint="Every document from a test or development ERP goes here instead of to the customer or vendor, for all document types. The Cc addresses of a company get it as well. Comma between addresses." wide>
+        <Field label="Test recipients" htmlFor="mail-redirect" hint="Every document from a test or development ERP goes here instead of to the customer or vendor, for all document types. The Cc and Bcc addresses of a company get it as well. Comma between addresses." wide>
           <input
             id="mail-redirect"
             type="text"

@@ -75,6 +75,7 @@ public static class SampleData
           "recipientName": "{{(party == "Vendor" ? "Muster Lieferant GmbH" : "Muster Kunde GmbH")}}",
           "recipientEmail": "{{recipient}}",
           "recipientEmailCc": "",
+          "recipientEmailBcc": "",
           "emailSubject": "{{subject}}",
           "emailBody": {{System.Text.Json.JsonSerializer.Serialize(body)}},
           "environment": "Test",

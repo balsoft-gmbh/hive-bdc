@@ -127,6 +127,10 @@ public sealed class DocumentRoute
     /// Empty (also for files written before 1.13.0) = no copies.</summary>
     public List<string> MailCc { get; set; } = new();
 
+    /// <summary>Addresses that get every mail of this company as a blind copy (Bcc), from the Live ERP and from test systems.
+    /// Empty (also for files written before 1.14.0) = no blind copies.</summary>
+    public List<string> MailBcc { get; set; } = new();
+
     /// <summary>Whether this company's PDFs are compressed before delivery. Null (files written before 1.12.0) = as the type says.</summary>
     public bool? CompressPdf { get; set; }
 
@@ -160,6 +164,7 @@ public sealed class DocumentRoute
         SharePoint ??= new SharePointTargetOptions();
         SharePoint.Normalize();
         MailCc = MailAddresses.Clean(MailCc).ToList();
+        MailBcc = MailAddresses.Clean(MailBcc).ToList();
         Targets ??= new();
         Targets.RemoveAll(t => t is null);
         foreach (var t in Targets) t.Normalize();

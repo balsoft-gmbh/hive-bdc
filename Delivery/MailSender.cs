@@ -23,7 +23,15 @@ public sealed record MailPlan(
     bool Redirected,
     string Environment,
     IReadOnlyList<string> OriginalTo,
-    IReadOnlyList<string> OriginalCc);
+    IReadOnlyList<string> OriginalCc)
+{
+    /// <summary>Bcc of the mail as it will actually be sent: the ERP Bcc (Live only) and the company's blind copies,
+    /// none of them already in To or Cc.</summary>
+    public IReadOnlyList<string> Bcc { get; init; } = Array.Empty<string>();
+
+    /// <summary>The partner Bcc addresses from the document JSON, kept for the banner.</summary>
+    public IReadOnlyList<string> OriginalBcc { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>The mail body as sent, with the content type Graph is told.</summary>
 public sealed record MailBody(string Content, bool IsHtml);
@@ -168,21 +176,23 @@ public sealed partial class MailSender
     /// must never reach a customer or vendor.
     /// </summary>
     public MailPlan PlanRecipients(string? environment, string? recipientEmail, string? recipientEmailCc,
-        IReadOnlyList<string>? companyCc = null)
+        IReadOnlyList<string>? companyCc = null, string? recipientEmailBcc = null, IReadOnlyList<string>? companyBcc = null)
     {
         var originalTo = MailAddresses.Split(recipientEmail);
         var originalCc = MailAddresses.Split(recipientEmailCc);
+        var originalBcc = MailAddresses.Split(recipientEmailBcc);
         string env = SourceEnvironment.Describe(environment);
         var copies = companyCc ?? Array.Empty<string>();
+        var blindCopies = companyBcc ?? Array.Empty<string>();
+        bool live = SourceEnvironment.IsLive(environment);
 
-        if (SourceEnvironment.IsLive(environment))
-            return new MailPlan(originalTo, CopiesBesides(originalTo, originalCc.Concat(copies)), false, env, originalTo, originalCc);
-
-        var to = _mail.CleanRedirectTo();
-        return new MailPlan(to, CopiesBesides(to, copies), true, env, originalTo, originalCc);
+        var to = live ? originalTo : _mail.CleanRedirectTo();
+        var cc = CopiesBesides(to, live ? originalCc.Concat(copies) : copies);
+        var bcc = CopiesBesides(to.Concat(cc).ToList(), live ? originalBcc.Concat(blindCopies) : blindCopies);
+        return new MailPlan(to, cc, !live, env, originalTo, originalCc) { Bcc = bcc, OriginalBcc = originalBcc };
     }
 
-    /// <summary>Cc without blanks, doubles and the addresses already in To; compared without case.</summary>
+    /// <summary>Copies (Cc or Bcc) without blanks, doubles and the addresses the mail already goes to; compared without case.</summary>
     internal static IReadOnlyList<string> CopiesBesides(IReadOnlyList<string> to, IEnumerable<string> cc)
     {
         var inTo = new HashSet<string>(to, StringComparer.OrdinalIgnoreCase);
@@ -231,6 +241,7 @@ public sealed partial class MailSender
 
         string original = plan.OriginalTo.Count > 0 ? string.Join(", ", plan.OriginalTo) : "(no recipient in the document)";
         string cc = plan.OriginalCc.Count > 0 ? string.Join(", ", plan.OriginalCc) : "";
+        string bcc = plan.OriginalBcc.Count > 0 ? string.Join(", ", plan.OriginalBcc) : "";
 
         static string E(string s) => System.Net.WebUtility.HtmlEncode(s);
         if (!html) body = TextToHtml(body);
@@ -240,6 +251,7 @@ public sealed partial class MailSender
         block.Append($"{E(documentLabel)}: {E(documentNumber)}<br/>");
         block.Append($"Would have gone to: {E(original)}");
         if (cc.Length > 0) block.Append($"<br/>Copy to: {E(cc)}");
+        if (bcc.Length > 0) block.Append($"<br/>Blind copy to: {E(bcc)}");
         block.Append("</div>");
 
         var bodyTag = BodyTag().Match(body);
@@ -395,7 +407,7 @@ public sealed partial class MailSender
         }
     }
 
-    private static JsonObject BuildMessage(MailPlan plan, string subject, MailBody body)
+    internal static JsonObject BuildMessage(MailPlan plan, string subject, MailBody body)
     {
         var message = new JsonObject
         {
@@ -411,6 +423,8 @@ public sealed partial class MailSender
         };
         if (plan.Cc.Count > 0)
             message["ccRecipients"] = Recipients(plan.Cc);
+        if (plan.Bcc.Count > 0)
+            message["bccRecipients"] = Recipients(plan.Bcc);
         return message;
     }
 

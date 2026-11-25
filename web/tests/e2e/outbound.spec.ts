@@ -317,8 +317,8 @@ test("each company has its own Cc addresses in the Mail row, and they go out wit
   await mock(request, { "GET /config": fullConfig() });
   await page.goto(type("id=SalesInvoice&company=2000&tab=to"));
   await opened(page);
-  await expect(page.getByText("Gets every mail of this company as a copy, from the Live ERP and from test systems.")).toBeVisible();
-  const cc = page.getByLabel("Cc addresses of this company");
+  await expect(page.getByText("Cc and Bcc get every mail of this company, from the Live ERP and from test systems.")).toBeVisible();
+  const cc = page.getByLabel("Cc addresses of this company", { exact: true });
   await cc.fill("x@contoso.example; y@contoso.example, X@CONTOSO.example");
   await cc.press("Enter");
   await expect(saveBar(page)).toContainText("mail Cc x@contoso.example, y@contoso.example");
@@ -327,6 +327,23 @@ test("each company has its own Cc addresses in the Mail row, and they go out wit
   await expect(page.getByText(/^Saved \d\d:\d\d$/)).toBeVisible();
   const [saved] = await configPosts(request);
   expect(saved.body).toEqual(X.setMailCc(postBody(fullConfig()), "SalesInvoice", "2000", "x@contoso.example; y@contoso.example"));
+});
+
+test("each company has its own Bcc addresses under the Cc, and they go out with Save", async ({ page, request }) => {
+  await mock(request, { "GET /config": fullConfig() });
+  await page.goto(type("id=SalesInvoice&company=2000&tab=to"));
+  await opened(page);
+  await expect(page.getByText("Bcc addresses are hidden from the other recipients.", { exact: false })).toBeVisible();
+  const bcc = page.getByLabel("Bcc addresses of this company");
+  await bcc.fill("archiv@contoso.example; chef@contoso.example, ARCHIV@contoso.example");
+  await bcc.press("Enter");
+  await expect(saveBar(page)).toContainText("mail Bcc archiv@contoso.example, chef@contoso.example");
+  await expect(saveBar(page)).not.toContainText("mail Cc");
+  await page.screenshot({ path: test.info().outputPath("mail-bcc.png"), fullPage: true });
+  await saveBar(page).getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText(/^Saved \d\d:\d\d$/)).toBeVisible();
+  const [saved] = await configPosts(request);
+  expect(saved.body).toEqual(X.setMailBcc(postBody(fullConfig()), "SalesInvoice", "2000", "archiv@contoso.example; chef@contoso.example"));
 });
 
 test("Discard puts every setting back and nothing is sent", async ({ page, request }) => {

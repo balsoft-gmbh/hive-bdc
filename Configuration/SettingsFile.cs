@@ -139,6 +139,7 @@ public static class SettingsFile
         if (r.Mail is { } mail) node["Mail"] = mail;
         if (r.CompressPdf is { } compress) node["CompressPdf"] = compress;
         if (r.MailCc.Count > 0) node["MailCc"] = new JsonArray(r.MailCc.Select(a => (JsonNode?)JsonValue.Create(a)).ToArray());
+        if (r.MailBcc.Count > 0) node["MailBcc"] = new JsonArray(r.MailBcc.Select(a => (JsonNode?)JsonValue.Create(a)).ToArray());
         if (r.Source is not null)
         {
             var sourceSettings = new JsonObject();
@@ -216,6 +217,13 @@ public static class SettingsFile
 
     /// <summary>A company entry's stored Cc addresses, for a save from a dashboard that does not send them (before 1.13.0).</summary>
     public static List<string> StoredRouteMailCc(JsonObject? section, string typeId, string dataAreaId, string input)
+        => StoredRouteAddresses(section, typeId, dataAreaId, input, "MailCc");
+
+    /// <summary>A company entry's stored Bcc addresses, for a save from a dashboard that does not send them (before 1.14.0).</summary>
+    public static List<string> StoredRouteMailBcc(JsonObject? section, string typeId, string dataAreaId, string input)
+        => StoredRouteAddresses(section, typeId, dataAreaId, input, "MailBcc");
+
+    private static List<string> StoredRouteAddresses(JsonObject? section, string typeId, string dataAreaId, string input, string key)
     {
         static string Text(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
         static string Folder(string p) => p.Trim().TrimEnd('\\', '/');
@@ -224,7 +232,7 @@ public static class SettingsFile
         var entry = (type?["Companies"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c =>
             string.Equals(Text(c["DataAreaId"]).Trim(), dataAreaId.Trim(), StringComparison.OrdinalIgnoreCase)
             && string.Equals(Folder(Text(c["Input"])), Folder(input), StringComparison.OrdinalIgnoreCase));
-        if (entry?["MailCc"] is not JsonArray list) return new List<string>();
+        if (entry?[key] is not JsonArray list) return new List<string>();
         return MailAddresses.Clean(list.Select(Text)).ToList();
     }
 

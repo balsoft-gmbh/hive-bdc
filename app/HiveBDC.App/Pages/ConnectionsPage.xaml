@@ -186,7 +186,7 @@
                             <TextBlock Text="Test recipients" Style="{StaticResource FieldLabel}"/>
                             <TextBox Text="{Binding MailRedirectTo, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="76" Padding="8,6"
                                      VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" TextWrapping="NoWrap" AutomationProperties.Name="Test recipients"/>
-                            <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Text="Every document from a test or development ERP goes here instead of to the customer or vendor, for all document types. The Cc addresses of a company get it as well. Separate with ; or one per line."/>
+                            <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Text="Every document from a test or development ERP goes here instead of to the customer or vendor, for all document types. The Cc and Bcc addresses of a company get it as well. Separate with ; or one per line."/>
                             <CheckBox Content="Keep a copy in the sender's Sent Items" Margin="0,14,0,0" IsChecked="{Binding MailSaveToSentItems}"/>
                             <Border Style="{StaticResource Divider}"/>
                             <WrapPanel>

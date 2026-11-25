@@ -606,3 +606,6 @@
   flex: 1;
   min-width: 0;
 }
+.bdc-edit .mail-cc > .cell-strong {
+  min-width: 2.25em;
+}

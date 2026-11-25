@@ -30,7 +30,8 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
             return new DeliveryResult(Summary: $"Not mailed: document mail is not switched on {SettingsPaths.Pick("in Settings", "under Connections")}.", Skipped: true);
         }
 
-        var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc, ctx.Route.MailCc);
+        var plan = mailer.PlanRecipients(data.Environment, data.RecipientEmail, data.RecipientEmailCc, ctx.Route.MailCc,
+            data.RecipientEmailBcc, ctx.Route.MailBcc);
         string partyLabel = type.Party == DocumentParty.Vendor ? "vendor" : "customer";
 
         if (plan.Redirected && string.IsNullOrWhiteSpace(data.Environment))
@@ -75,11 +76,13 @@ public sealed class MailDocumentTarget(MailOptions mail, MailSender? mailer) : I
                 plan.OriginalTo.Count > 0 ? DocumentProcessor.MaskAddresses(plan.OriginalTo) : "(none)", body.IsHtml ? "HTML" : "text", ctx.Output.Name);
         else
             log.LogInformation(
-                "[mail] {Id} ({Type}) -> {To}{Cc}; from {From}, {Kind} body, attachment {File}",
+                "[mail] {Id} ({Type}) -> {To}{Cc}{Bcc}; from {From}, {Kind} body, attachment {File}",
                 documentId, type.Id, DocumentProcessor.MaskAddresses(plan.To),
                 plan.Cc.Count > 0 ? " cc " + DocumentProcessor.MaskAddresses(plan.Cc) : "",
+                plan.Bcc.Count > 0 ? " bcc " + DocumentProcessor.MaskAddresses(plan.Bcc) : "",
                 mailer.From, body.IsHtml ? "HTML" : "text", ctx.Output.Name);
-        string to = DocumentProcessor.MaskAddresses(plan.To) + (plan.Cc.Count > 0 ? ", copy to " + DocumentProcessor.MaskAddresses(plan.Cc) : "");
+        string to = DocumentProcessor.MaskAddresses(plan.To) + (plan.Cc.Count > 0 ? ", copy to " + DocumentProcessor.MaskAddresses(plan.Cc) : "")
+                    + (plan.Bcc.Count > 0 ? ", blind copy to " + DocumentProcessor.MaskAddresses(plan.Bcc) : "");
         return new DeliveryResult(Summary: plan.Redirected
             ? $"Sent to the test recipients {to} in place of the {(type.Party == DocumentParty.Vendor ? "vendor" : "customer")}: the document came from a '{plan.Environment}' system."
             : $"Sent to {to}.");

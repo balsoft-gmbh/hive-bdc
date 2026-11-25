@@ -81,6 +81,9 @@ public sealed class AxDocument
     public string RecipientEmail { get; set; } = "";
     public string RecipientEmailCc { get; set; } = "";
 
+    /// <summary>Blind copies the ERP names for the document; used on Live mails only, like <see cref="RecipientEmailCc"/>.</summary>
+    public string RecipientEmailBcc { get; set; } = "";
+
     /// <summary>Subject of the mail, from the Lasernet destination. May contain %1 for the document number.</summary>
     public string EmailSubject { get; set; } = "";
 

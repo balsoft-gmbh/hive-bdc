@@ -469,3 +469,18 @@ test('a company has its own Cc addresses: typed text becomes one list, the save 
   assert.deepEqual(sent.documentTypes[0].companies[0].mailCc, ['z@fabrikam.example']);
   assert.deepEqual(addCompany(start, 'SalesInvoice', '2000').documentTypes[0].companies.at(-1).mailCc, []);
 });
+
+test('a company has its own Bcc addresses next to the Cc: typed text becomes one list, the save body carries it, the change list names it', () => {
+  const start = postBody(config());
+  assert.deepEqual(start.documentTypes[0].companies[0].mailBcc, []);
+  const withBcc = X.setMailBcc(start, 'SalesInvoice', '1000', 'archiv@contoso.example; chef@contoso.example ARCHIV@contoso.example');
+  assert.deepEqual(withBcc.documentTypes[0].companies[0].mailBcc, ['archiv@contoso.example', 'chef@contoso.example']);
+  assert.deepEqual(withBcc.documentTypes[0].companies[0].mailCc, []);
+  assert.deepEqual(start.documentTypes[0].companies[0].mailBcc, []);   // the draft is a copy
+  assert.deepEqual(draftChanges(start, withBcc), ['Rechnung › 1000: mail Bcc archiv@contoso.example, chef@contoso.example']);
+  assert.deepEqual(draftChanges(withBcc, X.setMailBcc(withBcc, 'SalesInvoice', '1000', '')), ['Rechnung › 1000: mail Bcc none']);
+
+  const sent = postBody({ ...config(), documentTypes: [{ ...config().documentTypes[0], companies: [{ ...config().documentTypes[0].companies[0], mailBcc: ['z@fabrikam.example'] }] }] });
+  assert.deepEqual(sent.documentTypes[0].companies[0].mailBcc, ['z@fabrikam.example']);
+  assert.deepEqual(addCompany(start, 'SalesInvoice', '2000').documentTypes[0].companies.at(-1).mailBcc, []);
+});

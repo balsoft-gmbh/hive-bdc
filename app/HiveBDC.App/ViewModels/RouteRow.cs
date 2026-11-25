@@ -22,6 +22,9 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
     /// <summary>Addresses that get every mail of this company as a copy (Cc), as typed: separated by ; , space or new line.</summary>
     [ObservableProperty] private string _mailCc = "";
 
+    /// <summary>Addresses that get every mail of this company as a blind copy (Bcc), typed like the Cc.</summary>
+    [ObservableProperty] private string _mailBcc = "";
+
     /// <summary>Whether this company of the document type runs; off = its folder is not read for this type.</summary>
     [ObservableProperty] private bool _enabled = true;
 
@@ -93,6 +96,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         Mail = dto.Mail ?? true;
         CompressPdf = dto.CompressPdf ?? false;
         MailCc = MailAddressText.Join(dto.MailCc);
+        MailBcc = MailAddressText.Join(dto.MailBcc);
         Enabled = dto.Enabled ?? true;
         var sp = dto.SharePoint;
         SharePointEnabled = sp?.Enabled ?? false;
@@ -169,6 +173,7 @@ public sealed partial class RouteRow : ObservableObject, ISharePointFieldImportR
         Mail = Mail,
         CompressPdf = CompressPdf,
         MailCc = MailAddressText.Parse(MailCc),
+        MailBcc = MailAddressText.Parse(MailBcc),
         Enabled = Enabled,
         SharePoint = new CompanySharePointConfigDto
         {

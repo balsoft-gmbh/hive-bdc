@@ -2,6 +2,15 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.14.0",
+      "date": "2026-11-25",
+      "changes": [
+        "Bcc per company: under Outbound > a document type > a company > Goes to > Mail, a Bcc field sits under the Cc. Its addresses get every mail of that company as a blind copy, from the Live ERP and from test systems; the other recipients do not see them.",
+        "Live mails also go as a blind copy to the recipientEmailBcc the ERP writes into the export, as its recipientEmailCc already did for Cc. Mails from a test system never go to the ERP's addresses.",
+        "An address already in To or Cc is not repeated in Bcc, and every address gets the mail once. An invalid Bcc address is refused when saving and named in the message."
+      ]
+    },
+    {
       "version": "1.13.1",
       "date": "2026-11-25",
       "changes": [

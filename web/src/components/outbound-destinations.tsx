@@ -77,7 +77,16 @@ export function DestinationsTab({
                 onCommit={(text) => change((d) => X.setMailCc(d, type.id, company, text))}
               />
             </label>
-            <span className="cell-muted wrap-cell">Gets every mail of this company as a copy, from the Live ERP and from test systems. Comma between addresses.</span>
+            <label className="mail-cc">
+              <span className="cell-strong">Bcc</span>
+              <CommitInput
+                aria-label="Bcc addresses of this company"
+                value={(entry.mailBcc || []).join(", ")}
+                readOnly={ro}
+                onCommit={(text) => change((d) => X.setMailBcc(d, type.id, company, text))}
+              />
+            </label>
+            <span className="cell-muted wrap-cell">Cc and Bcc get every mail of this company, from the Live ERP and from test systems. Bcc addresses are hidden from the other recipients. Comma between addresses.</span>
           </div>
         ) : r.summary ? (
           <span className="wrap-cell">{r.summary}</span>

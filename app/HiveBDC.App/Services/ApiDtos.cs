@@ -159,6 +159,8 @@ public sealed class RouteConfigDto
     [JsonPropertyName("compressPdf")] public bool? CompressPdf { get; set; }
     /// <summary>Addresses that get every mail of this company as a copy. A service before 1.13.0 sends none.</summary>
     [JsonPropertyName("mailCc")] public List<string>? MailCc { get; set; }
+    /// <summary>Addresses that get every mail of this company as a blind copy. A service before 1.14.0 sends none.</summary>
+    [JsonPropertyName("mailBcc")] public List<string>? MailBcc { get; set; }
     [JsonPropertyName("sharePoint")] public CompanySharePointConfigDto? SharePoint { get; set; }
     [JsonPropertyName("targets")] public List<TargetConfigDto>? Targets { get; set; }
 }

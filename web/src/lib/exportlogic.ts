@@ -167,7 +167,7 @@ export function addCompany(body: any, typeId: any, company: any) {
   const type = findType(next, typeId);
   if (type.companies.some((c: any) => same(c.dataAreaId, clean))) throw new Error(`Company ${clean} is there already.`);
   type.companies.push({
-    dataAreaId: clean, input: '', inputFormat: 'Json', output: '', enabled: true, mail: false, compressPdf: false, mailCc: [],
+    dataAreaId: clean, input: '', inputFormat: 'Json', output: '', enabled: true, mail: false, compressPdf: false, mailCc: [], mailBcc: [],
     sharePoint: { enabled: false, siteUrl: '', library: '', folder: '', fields: {} }, targets: [],
   });
   return next;
@@ -233,7 +233,14 @@ export function setMailCc(body: any, typeId: any, company: any, text: any) {
   return next;
 }
 
-/** Typed Cc text to a list: separators comma, semicolon and white space, blanks and doubles (any case) dropped. */
+/** The Bcc addresses of one company, as in the Windows app: every mail of this company goes to them as a blind copy. */
+export function setMailBcc(body: any, typeId: any, company: any, text: any) {
+  const next = structuredClone(body);
+  findEntry(next, typeId, company).mailBcc = mailCcList(text);
+  return next;
+}
+
+/** Typed Cc or Bcc text to a list: separators comma, semicolon and white space, blanks and doubles (any case) dropped. */
 export function mailCcList(text: any): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -393,6 +400,7 @@ export function draftChanges(original: any, draft: any) {
       if (Boolean(was.mail) !== Boolean(c.mail)) lines.push(`${where}: mail ${c.mail ? 'on' : 'off'}`);
       if (Boolean(was.compressPdf) !== Boolean(c.compressPdf)) lines.push(`${where}: compress PDF ${c.compressPdf ? 'on' : 'off'}`);
       if ((was.mailCc || []).join(',') !== (c.mailCc || []).join(',')) lines.push(`${where}: mail Cc ${(c.mailCc || []).join(', ') || 'none'}`);
+      if ((was.mailBcc || []).join(',') !== (c.mailBcc || []).join(',')) lines.push(`${where}: mail Bcc ${(c.mailBcc || []).join(', ') || 'none'}`);
       const spWas = was.sharePoint || {}, sp = c.sharePoint || {};
       const spOn = (x: any) => Boolean(x.enabled || x.siteUrl || x.library);
       if (spOn(spWas) && !spOn(sp)) lines.push(`${where}: SharePoint removed`);
