@@ -190,11 +190,61 @@ written to the XML when it has a value. Keys are matched ignoring case, spaces,
 | BG-13 Deliver to (BT-70, 75, 77, 78, 80) | `deliveryName`, `deliveryStreet`, `deliveryCity`, `deliveryPostcode`, `deliveryCountry` (country falls back to the buyer's; BT-80 is required for intra-community supplies, BR-IC-12) |
 | BT-83 / BT-85 / BT-86 Payment | `paymentReference`, `bankAccountHolder`, `bankSwift` / `bic`; the same BT-85 and BT-86 keys, plus `bankIban` / `iban` / `BT-84`, inside each `bankAccounts` entry |
 | BT-99 / BT-104 Document level charge | `chargeTotalAmount` (the sum of the ERP's header charges: freight, small-quantity surcharge, ...), `chargeReason` (default "Zuschläge"); one header charge taxed with the header `vatCategory` / `vatRate`, counted in BT-108, BT-109 and the VAT breakdown. A negative value on a plain invoice is a document level allowance ("Rabatt"); credit notes take the absolute value |
+| BT-113 Paid amount | `prepaidAmount` (also `paidAmount`, `totalPrepaidAmount`, `anzahlungen`, `BT-113`): payments already made, e.g. the earlier partial invoices on a Schlussrechnung (877). The totals stay as they are; the amount due (BT-115) is the gross minus this amount. Credit notes take the absolute value |
 | Line BT-127, 132, 133 | `lineNote`, `orderLineReference`, `costCenter` |
 | Line BT-155, 156, 157, 159 | `itemId` / `sellerItemId`, `customerItemId`, `gtin` / `ean`, `originCountry` |
 | Line BT-149 / BT-146 price base quantity | `priceUnit` (an AX price unit such as 100) with `priceUnitPrice` (the price per that quantity); without the latter the per-piece `unitPrice` is scaled |
 | Line BT-141 / BT-144 charge | `lineChargeAmount`, `lineChargeReason` (an AX `SalesMarkup` the ERP folded into its line amount) |
 | Line BT-136 / BT-139 allowance | `lineDiscountAmount`, `lineDiscountReason` |
+| BT-6 / BT-111 VAT in accounting currency | `taxCurrency` with `taxAmountInTaxCurrency` (both or neither) |
+| BT-7 / BT-8 VAT point date or code | `taxPointDate`, `taxPointDateCode` (one of the two; with both the date is written) |
+| BT-18 Invoiced object | `invoicedObjectIdentifier`, scheme `invoicedObjectScheme` (BT-18-1) |
+| BT-21 / BT-22 Notes | `notes` with `notesSubjectCode`, `invoiceNote`, and the list `invoiceNotes` |
+| BT-22 Delivery terms note | `deliveryTerms` (else `deliveryTermsCode`) and `deliveryMode` become one note "Delivery terms: ...; Shipping method: ..." |
+| BT-28, 29-1, 30, 30-1, 33 Seller | `senderTradingName`, `senderIdScheme`, `senderLegalRegistrationId` with `senderLegalRegistrationScheme`, `senderAdditionalLegalInformation` |
+| BT-34 / BT-34-1 Seller electronic address | `senderElectronicAddress`, `senderElectronicAddressScheme` (else `senderEmail` with scheme EM) |
+| BT-36, 162, 39 Seller address | `senderStreet2`, `senderAddressLine3`, `senderCountrySubdivision` |
+| BT-41-0, 42, 43 Seller contact | `senderContactDepartment`, `senderContactPhone`, `senderContactEmail` (phone and mail fall back to `senderPhone` and `senderEmail`). XRechnung takes a contact name or a department: a department replaces the default contact name (the company name), an explicit `senderContactName` wins |
+| BT-45, 46-1, 47, 47-1, 49-1 Buyer | `recipientTradingName`, `recipientIdScheme`, `recipientLegalRegistrationId` with `recipientLegalRegistrationScheme`, `buyerElectronicAddressScheme` |
+| BT-51, 163, 54 Buyer address | `recipientStreet2`, `recipientAddressLine3`, `recipientCountrySubdivision` |
+| BT-56, 56-0, 57, 58 Buyer contact | `recipientContactName` or `recipientContactDepartment`, `recipientContactPhone`, `recipientContactEmail` |
+| BG-10 Payee (BT-59 to 61) | `payeeName` (required), `payeeIdentifier`, `payeeIdentifierScheme`, `payeeLegalRegistrationId` |
+| BG-11 Tax representative (BT-62 to 69, 164) | `taxRepresentativeName`, `taxRepresentativeVatId`, `taxRepresentativeCountry` (these three required), `taxRepresentativeStreet`, `taxRepresentativeAddressLine2`, `taxRepresentativeAddressLine3`, `taxRepresentativeCity`, `taxRepresentativePostcode`, `taxRepresentativeCountrySubdivision` |
+| BT-71, 76, 165, 79 Deliver to | `deliveryLocationId` with `deliveryLocationScheme` or `deliveryGln`, `deliveryStreet2`, `deliveryAddressLine3`, `deliveryCountrySubdivision` (the lines override the second and third line of `deliveryStreet`) |
+| BT-73 / BT-74 Invoicing period | `invoicingPeriodStart`, `invoicingPeriodEnd` (`servicePeriodFrom` / `servicePeriodTo` stay the line period) |
+| BT-81, 82 Payment means | `paymentMeansCode` (else derived: 58, 30, 59 for a direct debit, 48 for a card), `paymentMeansText` |
+| BT-87, 88 Payment card | `paymentCardNumber` (required), `paymentCardHolder` |
+| BT-89, 90, 91 Direct debit | `mandateReference`, `creditorIdentifier`, `debitedIban` (all three required) |
+| BT-92 to 98 Document level allowance | `documentAllowanceAmount` or `documentAllowanceBaseAmount` with `documentAllowancePercentage`, `documentAllowanceReason`, `documentAllowanceReasonCode`, `documentAllowanceVatCategory`, `documentAllowanceVatRate` (VAT defaults to the header's) |
+| BT-100 to 105 Document level charge | next to `chargeTotalAmount`: `documentChargeBaseAmount`, `documentChargePercentage`, `documentChargeReasonCode`, `documentChargeVatCategory`, `documentChargeVatRate` |
+| BT-114 Rounding amount | `roundingAmount` |
+| BT-121 VAT exemption reason code | `vatExemptionReasonCode` (next to `vatNote`, BT-120) |
+| BG-24 Supporting document (BT-122 to 125) | `supportingDocumentReference`, `supportingDocumentDescription`, `supportingDocumentUrl`, `attachmentContent` (base64) or `attachmentFileName`, `attachmentMimeCode`; and the list `supportingDocuments` |
+| Line BT-128, 134, 135 | `objectIdentifier` with `objectIdentifierScheme`, `linePeriodStart`, `linePeriodEnd` |
+| Line BT-137, 138, 140 / BT-142, 143, 145 | `lineDiscountBaseAmount`, `lineDiscountPercent`, `lineDiscountReasonCode` / `lineChargeBaseAmount`, `lineChargePercent`, `lineChargeReasonCode` (an amount is computed from base and percentage when it is missing) |
+| Line BT-147, 148, 150 | `itemPriceDiscount` (needs the gross price), `itemGrossPrice`, `priceBaseQuantityUnit` |
+| Line BT-154 Item description | `itemDescription`, `itemNote`, `longDescription` |
+| Line BT-157-1 GTIN scheme | `gtinScheme` (default 0160) |
+| Line BT-158 Item classification | `tariffCode` / `hsCode` / `zolltarifnummer` (scheme HS, spaces removed), `itemClassificationCode` with `itemClassificationScheme` and `itemClassificationSchemeVersion`, and the list `itemClassifications` |
+| Line BG-32 Item attributes (BT-160, 161) | `itemAttributes` as text, one `name: value` per line (split at the first colon); `batchNumber` / `chargennummer` as the attribute "Charge"; `itemAttributeName` with `itemAttributeValue`; or `itemAttributes` as a list |
+
+Repeating groups can also come as JSON lists of objects. Each entry takes the short keys shown, or the BT numbers:
+
+| List | Entry keys |
+|---|---|
+| `invoiceNotes` (BG-1) | `text`, `subjectCode` |
+| `precedingInvoices` (BG-3) | `number`, `issueDate` |
+| `allowancesCharges` (BG-20, BG-21) | `allowanceAmount` or `chargeAmount` (or `amount` with `isCharge`, else the sign decides), `baseAmount`, `percentage`, `reason`, `reasonCode`, `vatCategory`, `vatRate` |
+| `supportingDocuments` (BG-24) | `reference`, `description`, `url`, `content` (base64) or `fileName`, `mimeCode` |
+| line `itemClassifications` | `code`, `scheme`, `schemeVersion` |
+| line `itemAttributes` (BG-32) | `name`, `value` |
+
+A group whose required term is missing (a payee without a name, a tax representative without VAT id or country, a
+card without number, a direct debit without one of its three terms, an attribute without name or value, a
+classification without scheme) is left out with a warning, so the XML still passes the XRechnung validator. An
+attachment given by `fileName` must be a bare file name in the folder of the JSON (no path, no `..`), a type the
+EN 16931 code list allows (pdf, png, jpeg, csv, xlsx, ods) and at most 10 MB; otherwise only its reference is
+written. Amounts are read in invariant or German notation: `100,00`, `1.234,56` and `1,234.56` all work.
 
 When a term arrives under several keys, the first non-empty one in the JSON wins.
 BT-13 is the exception: `purchOrderReference` wins, then `purchaseOrderReference`,
@@ -252,7 +302,9 @@ file, the totals check and a PDF preview, without touching the service.
 
 **Checks before anything is produced.** BT-1, BT-2, BT-44 and one line are required; XRechnung also needs BT-10 and
 BT-49. When the document prints totals (`BT-109`, `BT-110`, `BT-112`), they must equal the sums of the lines to the
-cent, or the document is not converted.
+cent, or the document is not converted. A final invoice (Schlussrechnung) that deducts the payments on earlier partial
+invoices tags their sum `BT-113` and the remaining payment `BT-115`; then BT-115 must equal BT-112 minus BT-113. The
+XML keeps the full totals and lowers only the amount due.
 
 **PDF.** A PDF with the same name next to the `.docx` is used as it is. Otherwise Hive BDC renders the document with
 its own renderer (PDFsharp): page size and margins, header and footer, paragraphs with tab stops and line spacing,

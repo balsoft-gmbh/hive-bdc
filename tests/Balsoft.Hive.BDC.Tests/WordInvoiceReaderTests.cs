@@ -169,6 +169,57 @@ public class WordInvoiceReaderTests
     [InlineData("")]
     public void NonAmountsDoNotParse(string text) => Assert.False(WordInvoiceReader.TryParseAmount(text, out _));
 
+    // Schlussrechnung: gross 2.975,00 (see Filled), earlier partial invoices paid 2.000,00, so 975,00 is due.
+    [Fact]
+    public void PaidAmountAndAmountDueOfAFinalInvoiceReachTheXml()
+    {
+        var c = WordTestDocuments.Filled();
+        c.Fields["BT-3"] = "877";
+        var inv = WordTestDocuments.Read(AddFields(WordTestDocuments.Build(c), ("BT-113", "2.000,00"), ("BT-115", "975,00")));
+        Assert.Empty(inv.Problems);
+        Assert.Equal(2000m, (decimal?)inv.Json["prepaidAmount"]);
+        Assert.Equal(2975m, inv.Totals!.PrintedGross);
+        var mapped = InvoiceMapper.Map(AxDocument.Parse(inv.Json.ToJsonString()));
+        var totals = mapped.CalculateTotals();
+        Assert.Equal(2975m, totals.TaxInclusiveAmount);
+        Assert.Equal(975m, totals.AmountDue);
+    }
+
+    [Fact]
+    public void AmountDueThatIgnoresThePaidAmountIsAProblem()
+    {
+        var c = WordTestDocuments.Filled();
+        c.Fields["BT-3"] = "877";
+        var inv = WordTestDocuments.Read(AddFields(WordTestDocuments.Build(c), ("BT-113", "2.000,00"), ("BT-115", "2.975,00")));
+        Assert.Contains("Amount due (BT-115): printed 2.975,00, gross 2.975,00 minus paid amount (BT-113) 2.000,00 is 975,00.",
+            inv.Problems);
+    }
+
+    [Fact]
+    public void PaidAmountWithoutPrintedAmountDueIsNoProblem()
+    {
+        var inv = WordTestDocuments.Read(AddFields(WordTestDocuments.Build(WordTestDocuments.Filled()), ("BT-113", "500,00")));
+        Assert.Empty(inv.Problems);
+        Assert.Equal(2475m, InvoiceMapper.Map(AxDocument.Parse(inv.Json.ToJsonString())).CalculateTotals().AmountDue);
+    }
+
+    [Fact]
+    public void AmountDueWithoutPaidAmountStillStandsInForTheGross()
+    {
+        var c = WordTestDocuments.Filled();
+        c.Fields.Remove("BT-112");
+        var inv = WordTestDocuments.Read(AddFields(WordTestDocuments.Build(c), ("BT-115", "2.900,00")));
+        Assert.Contains("Gross amount (BT-112): printed 2.900,00, the lines add up to 2.975,00.", inv.Problems);
+    }
+
+    private static byte[] AddFields(byte[] docx, params (string Tag, string Value)[] fields) => Mutate(docx, main =>
+    {
+        foreach (var (tag, value) in fields)
+            main.Document!.Body!.AppendChild(new Paragraph(new SdtRun(
+                new SdtProperties(new SdtAlias { Val = tag }, new Tag { Val = tag }, new SdtContentText()),
+                new SdtContentRun(new Run(new Text(value))))));
+    });
+
     private static byte[] ReplaceText(byte[] docx, string tag, string text) => Mutate(docx, main =>
     {
         foreach (var root in new OpenXmlElement[] { main.Document!.Body! }.Concat(main.HeaderParts.Select(h => (OpenXmlElement)h.Header!)))

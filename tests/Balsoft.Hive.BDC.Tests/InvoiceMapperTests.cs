@@ -344,6 +344,32 @@ public class InvoiceMapperTests
         Assert.Equal(scheme, mapped.Buyer.ElectronicAddress.Scheme);
     }
 
+    // BT-113: a final construction invoice deducts the payments on the earlier partial invoices from the amount due only.
+    [Theory]
+    [InlineData("prepaidAmount", "100.00")]
+    [InlineData("BT-113", "100.00")]
+    [InlineData("anzahlungen", "100")]
+    public void PaidAmountLowersOnlyTheAmountDue(string key, string value)
+    {
+        var mapped = InvoiceMapper.Map(Invoice($""", "invoiceTypeCode": "877", "{key}": "{value}" """));
+        var totals = mapped.CalculateTotals();
+        Assert.Equal(100m, mapped.PrepaidAmount);
+        Assert.Equal(357m, totals.TaxInclusiveAmount);
+        Assert.Equal(257m, totals.AmountDue);
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.Contains("<ram:TotalPrepaidAmount>100.00</ram:TotalPrepaidAmount>", xml);
+        Assert.Contains("<ram:DuePayableAmount>257.00</ram:DuePayableAmount>", xml);
+    }
+
+    [Fact]
+    public void WithoutPaidAmountTheAmountDueIsTheGross()
+    {
+        var mapped = InvoiceMapper.Map(Invoice(""", "invoiceTypeCode": "877" """));
+        Assert.Null(mapped.PrepaidAmount);
+        Assert.Equal(357m, mapped.CalculateTotals().AmountDue);
+        Assert.DoesNotContain("TotalPrepaidAmount", System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped)));
+    }
+
     private static AxDocument Invoice(string extraJson = "", string lines = """
         [ { "description": "A", "quantity": "2", "unit": "piece", "unitPrice": "150.00" } ]
         """) => AxDocument.Parse($$"""

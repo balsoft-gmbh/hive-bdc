@@ -342,13 +342,29 @@ public sealed class TolerantDecimalConverter : JsonConverter<decimal>
     {
         if (string.IsNullOrWhiteSpace(s)) return 0m;
         s = s.Trim();
-        // Try invariant ('.' decimal) first; then swap ',' for '.' as a fallback.
-        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-            return d;
-        var swapped = s.Replace(".", "").Replace(',', '.');
-        if (decimal.TryParse(swapped, NumberStyles.Any, CultureInfo.InvariantCulture, out d))
-            return d;
+        if (TryParseNumber(s, out var d)) return d;
         throw new JsonException($"Cannot parse decimal from '{s}'.");
+    }
+
+    /// <summary>
+    /// A number in invariant or German notation: with both separators the last one is the decimal separator
+    /// ("1.234,56", "1,234.56"), a comma alone is the decimal separator ("100,00" is 100), a point alone is one too
+    /// unless it groups thousands more than once ("1.234.567").
+    /// </summary>
+    public static bool TryParseNumber(string? s, out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        string t = s.Trim().Replace(" ", "").Replace("\u00A0", "");
+        int comma = t.LastIndexOf(','), point = t.LastIndexOf('.');
+        if (comma >= 0 && point >= 0)
+            t = comma > point ? t.Replace(".", "").Replace(',', '.') : t.Replace(",", "");
+        else if (comma >= 0)
+            t = t.Count(c => c == ',') == 1 ? t.Replace(',', '.') : t.Replace(",", "");
+        else if (point >= 0 && t.Count(c => c == '.') > 1)
+            t = t.Replace(".", "");
+        return decimal.TryParse(t, NumberStyles.Any & ~NumberStyles.AllowThousands,
+            CultureInfo.InvariantCulture, out value);
     }
 
     public override void Write(Utf8JsonWriter writer, decimal value, JsonSerializerOptions options)

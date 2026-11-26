@@ -74,7 +74,7 @@ public static class WordInvoiceReader
         ["BT-118"] = "vatCategory", ["BT-119"] = "vatRate",
         // printed totals: checked against the lines, recomputed for the XML
         ["BT-106"] = "lineTotalAmount", ["BT-109"] = "netAmount", ["BT-110"] = "taxAmount",
-        ["BT-112"] = "grossAmount", ["BT-115"] = "amountDue",
+        ["BT-112"] = "grossAmount", ["BT-113"] = "prepaidAmount", ["BT-115"] = "amountDue",
     };
 
     private static readonly Dictionary<string, string> LineKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -87,7 +87,7 @@ public static class WordInvoiceReader
         { "BT-2", "BT-9", "BT-26", "BT-72", "BT-73", "BT-74" };
 
     private static readonly HashSet<string> AmountTags = new(StringComparer.OrdinalIgnoreCase)
-        { "BT-106", "BT-109", "BT-110", "BT-112", "BT-115", "BT-119", "BT-129", "BT-131", "BT-146", "BT-152" };
+        { "BT-106", "BT-109", "BT-110", "BT-112", "BT-113", "BT-115", "BT-119", "BT-129", "BT-131", "BT-146", "BT-152" };
 
     // Several values allowed in the document, the first is used (a letterhead often lists more than one bank).
     private static readonly HashSet<string> FirstWins = new(StringComparer.OrdinalIgnoreCase) { "BT-84", "BT-86", "BT-85" };
@@ -358,8 +358,13 @@ public static class WordInvoiceReader
 
         decimal netTotal = byRate.Values.Sum();
         decimal tax = byRate.Sum(kv => Math.Round(kv.Value * kv.Key / 100m, 2, MidpointRounding.AwayFromZero));
+        // With BT-113 (payments already made) the amount due BT-115 is the gross minus those payments, so it no longer
+        // stands in for a missing gross amount.
+        decimal? prepaid = Dec(json["prepaidAmount"]);
+        decimal? printedDue = Dec(json["amountDue"]);
         var totals = new WordTotals(netTotal, tax, netTotal + tax,
-            Dec(json["netAmount"]) ?? Dec(json["lineTotalAmount"]), Dec(json["taxAmount"]), Dec(json["grossAmount"]) ?? Dec(json["amountDue"]));
+            Dec(json["netAmount"]) ?? Dec(json["lineTotalAmount"]), Dec(json["taxAmount"]),
+            Dec(json["grossAmount"]) ?? (prepaid is null ? printedDue : null));
         result.Totals = totals;
 
         void Compare(string label, decimal? printed, decimal computed)
@@ -370,6 +375,9 @@ public static class WordInvoiceReader
         Compare("Net amount (BT-109)", totals.PrintedNet, totals.Net);
         Compare("VAT amount (BT-110)", totals.PrintedTax, totals.Tax);
         Compare("Gross amount (BT-112)", totals.PrintedGross, totals.Gross);
+        if (prepaid is { } paid && printedDue is { } due && due != totals.Gross - paid)
+            result.Problems.Add($"Amount due (BT-115): printed {Fmt(due)}, gross {Fmt(totals.Gross)} minus paid amount (BT-113) "
+                                + $"{Fmt(paid)} is {Fmt(totals.Gross - paid)}.");
     }
 
     private static decimal? Dec(JsonNode? node) => node is JsonValue v && v.TryGetValue<decimal>(out var d) ? d : null;

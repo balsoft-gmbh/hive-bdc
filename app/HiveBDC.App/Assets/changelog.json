@@ -2,6 +2,18 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.15.0",
+      "date": "2026-11-26",
+      "changes": [
+        "Every EN 16931 business term can now come from the ERP export: seller and buyer details (trading name, legal registration, address lines 2 and 3, country subdivision, contact), payee, tax representative, deliver to location, invoicing period, VAT point date, VAT in accounting currency, payment means text and code, payment card, SEPA direct debit, document level allowances and charges with base and percentage, rounding amount, VAT exemption reason code, supporting documents with attachments, and on the line the object identifier, line period, price discount and gross price, item classifications and item attributes. The README lists the keys.",
+        "tariffCode becomes the item classification with scheme HS, itemAttributes (one 'name: value' per line) and batchNumber become item attributes, itemNote the item description, deliveryTerms and deliveryMode one invoice note, and senderContactEmail the seller contact mail (senderEmail stays the electronic address).",
+        "Repeating groups can come as JSON lists: invoiceNotes, precedingInvoices, allowancesCharges, supportingDocuments, and per line itemClassifications and itemAttributes.",
+        "A group with a required term missing is left out with a warning instead of producing an invoice the XRechnung validator rejects.",
+        "Paid amount (BT-113) for a Schlussrechnung: prepaidAmount lowers the amount due while the totals stay as they are, also from a filled Word invoice.",
+        "Amounts written with a decimal comma, such as 100,00, are read as 100 instead of 10000."
+      ]
+    },
+    {
       "version": "1.14.0",
       "date": "2026-11-25",
       "changes": [

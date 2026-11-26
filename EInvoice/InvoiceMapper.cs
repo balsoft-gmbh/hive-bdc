@@ -12,7 +12,7 @@ namespace Balsoft.Hive.BDC.EInvoice;
 /// identifiers plus the ZR contract reference that a settlement house (Aktivbank) requires
 /// are written when the export supplies them.
 /// </summary>
-public static class InvoiceMapper
+public static partial class InvoiceMapper
 {
     public const string BusinessProcess = Invoice.PeppolBillingProcess;
 
@@ -51,13 +51,14 @@ public static class InvoiceMapper
     }.Select(InvoiceFieldAliases.Normalize).ToHashSet();
 
     /// <param name="info">Receives one line per EN 16931 term taken from an extra JSON key, and the keys left out of the XML.</param>
-    public static Invoice Map(AxDocument data, Action<string>? warn = null, Action<string>? info = null)
+    /// <param name="attachmentFolder">The folder of the JSON: a supporting document named by file name (BT-125-2) is read from it.</param>
+    public static Invoice Map(AxDocument data, Action<string>? warn = null, Action<string>? info = null, string? attachmentFolder = null)
     {
         var (extra, unusedHeader) = InvoiceFieldAliases.ReadHeader(data.Extra);
         string? Pick(InvoiceFieldAliases.Term term)
         {
             if (!extra.TryGetValue(term.Bt, out var f)) return null;
-            info?.Invoke($"e-invoice {term.Bt} {term.Label} = '{f.Value}' (from JSON '{f.SourceKey}')");
+            info?.Invoke($"e-invoice {term.Bt} {term.Label} = '{Loggable(term, f.Value)}' (from JSON '{f.SourceKey}')");
             return f.Value;
         }
 
@@ -85,9 +86,11 @@ public static class InvoiceMapper
         };
 
         if (!string.IsNullOrWhiteSpace(data.Notes))
-            inv.Notes.Add(new InvoiceNote(data.Notes.Trim()));
+            inv.Notes.Add(new InvoiceNote(data.Notes.Trim(), Pick(InvoiceFieldAliases.NoteSubjectCode)));
         if (!string.IsNullOrWhiteSpace(data.LegalNotice))
             inv.Notes.Add(new InvoiceNote(data.LegalNotice.Trim(), "REG"));
+        AddNotes(inv, data, Pick, warn, unusedHeader);
+        AddDocumentTerms(inv, Pick, warn);
 
         // ── Seller ──────────────────────────────────────────────────────────
         // BT-29 identifier and BT-29-0 GLN are what a settlement house (Aktivbank
@@ -107,13 +110,14 @@ public static class InvoiceMapper
             Contact = new Contact
             {
                 Name = Pick(InvoiceFieldAliases.SellerContactName) ?? NullIfEmpty(data.SenderName),
-                Email = NullIfEmpty(data.SenderEmail),
-                Phone = NullIfEmpty(data.SenderPhone),
+                Email = Pick(InvoiceFieldAliases.SellerContactEmail) ?? NullIfEmpty(data.SenderEmail),
+                Phone = Pick(InvoiceFieldAliases.SellerContactPhone) ?? NullIfEmpty(data.SenderPhone),
             },
             ElectronicAddress = string.IsNullOrWhiteSpace(data.SenderEmail)
                 ? null : new SchemedIdentifier(data.SenderEmail.Trim(), ElectronicAddressScheme.Email),
         };
-        if (NullIfEmpty(data.SenderId) is { } senderId) inv.Seller.Identifiers.Add(new SchemedIdentifier(senderId.Trim()));
+        CompletePartyTerms(inv.Seller, Pick, seller: true, warn);
+        if (NullIfEmpty(data.SenderId) is { } senderId) inv.Seller.Identifiers.Add(new SchemedIdentifier(senderId.Trim(), Pick(InvoiceFieldAliases.SellerIdScheme)));
         if (Gln(data.SenderGln, "senderGln", warn) is { } senderGln) inv.Seller.Identifiers.Add(senderGln);
 
         // ── Buyer ───────────────────────────────────────────────────────────
@@ -133,8 +137,9 @@ public static class InvoiceMapper
             VatIdentifier = NullIfEmpty(data.RecipientVatId)?.Trim(),
             ElectronicAddress = BuyerElectronicAddress(Pick(InvoiceFieldAliases.BuyerElectronicAddress) ?? data.RecipientEmail),
         };
+        CompletePartyTerms(inv.Buyer, Pick, seller: false, warn);
         var recipientGln = Gln(data.RecipientGln, "recipientGln", warn);
-        if (NullIfEmpty(data.RecipientId) is { } recipientId) inv.Buyer.Identifiers.Add(new SchemedIdentifier(recipientId.Trim()));
+        if (NullIfEmpty(data.RecipientId) is { } recipientId) inv.Buyer.Identifiers.Add(new SchemedIdentifier(recipientId.Trim(), Pick(InvoiceFieldAliases.BuyerIdScheme)));
         else if (recipientGln is not null) inv.Buyer.Identifiers.Add(recipientGln);
 
         // BT-10 and BT-13: a dedicated key (buyerReference, purchOrderReference, "purchase order
@@ -164,6 +169,8 @@ public static class InvoiceMapper
                 Number = preceding,
                 IssueDate = ParseDate(Pick(InvoiceFieldAliases.PrecedingInvoiceDate)),
             });
+        AddPrecedingInvoices(inv, data.Extra, warn, unusedHeader);
+        AddPayeeAndTaxRepresentative(inv, Pick, warn);
 
         // BT-12 contract reference = the Aktivbank ZR-Kennzeichen (Verband/Kampagne), 4 digits
         // zero-padded. Padded here rather than in AX so "42" and "0042" both come out right.
@@ -189,17 +196,23 @@ public static class InvoiceMapper
         string? shipCity = Pick(InvoiceFieldAliases.ShipToCity);
         string? shipPostcode = Pick(InvoiceFieldAliases.ShipToPostcode);
         string? shipCountry = Pick(InvoiceFieldAliases.ShipToCountry);
-        if (shipName is not null || shipStreet is not null || shipCity is not null || shipPostcode is not null || shipCountry is not null)
+        string? shipLine2 = Pick(InvoiceFieldAliases.ShipToAddressLine2);
+        string? shipLine3 = Pick(InvoiceFieldAliases.ShipToAddressLine3);
+        string? shipSubdivision = Pick(InvoiceFieldAliases.ShipToSubdivision);
+        inv.Delivery.LocationIdentifier = DeliveryLocation(Pick, warn);
+        if (shipName is not null || shipStreet is not null || shipCity is not null || shipPostcode is not null || shipCountry is not null
+            || shipLine2 is not null || shipLine3 is not null || shipSubdivision is not null)
         {
             var streetLines = (shipStreet ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             inv.Delivery.PartyName = shipName;
             inv.Delivery.Address = new PostalAddress
             {
                 Line1 = streetLines.Length > 0 ? streetLines[0] : null,
-                Line2 = streetLines.Length > 1 ? streetLines[1] : null,
-                Line3 = streetLines.Length > 2 ? string.Join(", ", streetLines.Skip(2)) : null,
+                Line2 = shipLine2 ?? (streetLines.Length > 1 ? streetLines[1] : null),
+                Line3 = shipLine3 ?? (streetLines.Length > 2 ? string.Join(", ", streetLines.Skip(2)) : null),
                 PostCode = shipPostcode,
                 City = shipCity,
+                CountrySubdivision = shipSubdivision,
                 CountryCode = ResolveCountry(shipCountry ?? data.RecipientCountry),
             };
         }
@@ -224,11 +237,14 @@ public static class InvoiceMapper
                 RemittanceInformation = Pick(InvoiceFieldAliases.RemittanceInformation),
             };
             inv.PaymentInstructions.CreditTransfers.AddRange(accounts);
+            inv.PaymentInstructions.MeansText = Pick(InvoiceFieldAliases.PaymentMeansText);
             info?.Invoke($"e-invoice BG-17: {accounts.Count} account{(accounts.Count == 1 ? "" : "s")} from '{accountSource}' ({string.Join(", ", accounts.Select(a => LastFour(a.AccountIdentifier)))})");
             if (accountSource != "bankIban" && Compact(data.BankIban) is { Length: > 0 } flat
                 && !Iban.Compact(flat).Equals(Iban.Compact(accounts[0].AccountIdentifier), StringComparison.Ordinal))
                 info?.Invoke($"e-invoice BG-17: bankIban {LastFour(flat)} differs from the first '{accountSource}' entry {LastFour(accounts[0].AccountIdentifier)}; the list is written");
         }
+
+        AddCardAndDirectDebit(inv, Pick, warn);
 
         // ── Lines ───────────────────────────────────────────────────────────
         var periodStart = ParseDate(data.ServicePeriodFrom);
@@ -262,11 +278,12 @@ public static class InvoiceMapper
                 OrderLineReference = L(InvoiceFieldAliases.OrderLineReference),
                 BuyerAccountingReference = L(InvoiceFieldAliases.LineAccountingReference),
             };
+            CompleteLineTerms(line, item.Extra, L, warn, unusedLine);
             line.Item.SellersIdentifier = L(InvoiceFieldAliases.SellersItemId);
             line.Item.Description = L(InvoiceFieldAliases.ItemDescription);
             line.Item.BuyersIdentifier = L(InvoiceFieldAliases.BuyersItemId);
             if (L(InvoiceFieldAliases.Gtin) is { } gtin)
-                line.Item.StandardIdentifier = new SchemedIdentifier(gtin, IdentifierScheme.Gtin);
+                line.Item.StandardIdentifier = new SchemedIdentifier(gtin, L(InvoiceFieldAliases.GtinScheme) ?? IdentifierScheme.Gtin);
             if (L(InvoiceFieldAliases.OriginCountry) is { } origin)
             {
                 string iso = ResolveCountry(origin);
@@ -284,20 +301,30 @@ public static class InvoiceMapper
                 line.PriceBaseQuantity = baseQuantity;
                 line.NetPrice = pricePerBase > 0m ? Math.Abs(pricePerBase) : Math.Round(line.NetPrice * baseQuantity, 4, MidpointRounding.AwayFromZero);
             }
-            decimal charge = Decimal(L(InvoiceFieldAliases.LineChargeAmount), "line charge", warn);
+            decimal chargeBase = Decimal(L(InvoiceFieldAliases.LineChargeBase), "line charge base amount", warn);
+            decimal chargePercent = Decimal(L(InvoiceFieldAliases.LineChargePercentage), "line charge percentage", warn);
+            decimal charge = AmountOrPercentOfBase(Decimal(L(InvoiceFieldAliases.LineChargeAmount), "line charge", warn), chargeBase, chargePercent);
             if (charge != 0m)
                 line.AllowancesAndCharges.Add(new AllowanceCharge
                 {
                     IsCharge = charge > 0m, Amount = Math.Abs(charge),
+                    BaseAmount = chargeBase != 0m ? Math.Abs(chargeBase) : null,
+                    Percentage = chargePercent != 0m ? Math.Abs(chargePercent) : null,
                     Reason = L(InvoiceFieldAliases.LineChargeReason) ?? (charge > 0m ? "Zuschlag" : "Rabatt"),
+                    ReasonCode = L(charge > 0m ? InvoiceFieldAliases.LineChargeReasonCode : InvoiceFieldAliases.LineAllowanceReasonCode),
                     VatCategory = category, VatRate = line.VatRate,
                 });
-            decimal allowance = Decimal(L(InvoiceFieldAliases.LineAllowanceAmount), "line discount", warn);
+            decimal allowanceBase = Decimal(L(InvoiceFieldAliases.LineAllowanceBase), "line discount base amount", warn);
+            decimal allowancePercent = Decimal(L(InvoiceFieldAliases.LineAllowancePercentage), "line discount percentage", warn);
+            decimal allowance = AmountOrPercentOfBase(Decimal(L(InvoiceFieldAliases.LineAllowanceAmount), "line discount", warn), allowanceBase, allowancePercent);
             if (allowance != 0m)
                 line.AllowancesAndCharges.Add(new AllowanceCharge
                 {
                     IsCharge = allowance < 0m, Amount = Math.Abs(allowance),
+                    BaseAmount = allowanceBase != 0m ? Math.Abs(allowanceBase) : null,
+                    Percentage = allowancePercent != 0m ? Math.Abs(allowancePercent) : null,
                     Reason = L(InvoiceFieldAliases.LineAllowanceReason) ?? (allowance > 0m ? "Rabatt" : "Zuschlag"),
+                    ReasonCode = L(allowance > 0m ? InvoiceFieldAliases.LineAllowanceReasonCode : InvoiceFieldAliases.LineChargeReasonCode),
                     VatCategory = category, VatRate = line.VatRate,
                 });
             inv.AddLine(line);
@@ -305,28 +332,42 @@ public static class InvoiceMapper
         if (lineTerms.Count > 0)
             info?.Invoke("e-invoice line fields from the JSON: " + string.Join("; ", lineTerms));
 
+        // BT-99 / BT-104: the ERP's header charges (AX misc charges: freight, small-quantity surcharge,
+        // ...) as one document level charge, taxed with the header category and rate. Absolute-value
+        // documents keep the sign in BT-3; on a plain invoice a negative total is an allowance (BG-20).
+        decimal headerChargeBase = Decimal(Pick(InvoiceFieldAliases.DocumentChargeBase), "header charge base amount", warn);
+        decimal headerChargePercent = Decimal(Pick(InvoiceFieldAliases.DocumentChargePercentage), "header charge percentage", warn);
+        decimal headerCharge = AmountOrPercentOfBase(Decimal(Pick(InvoiceFieldAliases.DocumentChargeAmount), "header charge total", warn), headerChargeBase, headerChargePercent);
+        if (absolute) headerCharge = Math.Abs(headerCharge);
+        if (headerCharge != 0m)
+        {
+            var (headerCategory, headerRate) = DocumentVat(Pick(InvoiceFieldAliases.DocumentChargeVatCategory), Pick(InvoiceFieldAliases.DocumentChargeVatRate), data, warn);
+            inv.AllowancesAndCharges.Add(new AllowanceCharge
+            {
+                IsCharge = headerCharge > 0m, Amount = Math.Abs(headerCharge),
+                BaseAmount = headerChargeBase != 0m ? Math.Abs(headerChargeBase) : null,
+                Percentage = headerChargePercent != 0m ? Math.Abs(headerChargePercent) : null,
+                Reason = Pick(InvoiceFieldAliases.DocumentChargeReason) ?? (headerCharge > 0m ? "Zuschläge" : "Rabatt"),
+                ReasonCode = Pick(InvoiceFieldAliases.DocumentChargeReasonCode),
+                VatCategory = headerCategory,
+                VatRate = headerRate,
+            });
+        }
+        AddDocumentAllowance(inv, Pick, data, absolute, warn);
+        AddListedAllowancesCharges(inv, data, absolute, warn, unusedHeader);
+        AddSupportingDocuments(inv, data.Extra, Pick, attachmentFolder, warn, unusedHeader);
+
         var leftOut = unusedHeader.Concat(unusedAccount).Concat(unusedLine.Select(k => "lineItems." + k))
             .Where(k => !NotForTheXml.Contains(InvoiceFieldAliases.Normalize(k.Replace("lineItems.", ""))))
             .ToList();
         if (leftOut.Count > 0)
             info?.Invoke("JSON fields not written to the e-invoice (no EN 16931 term for them): " + string.Join(", ", leftOut));
 
-        // BT-99 / BT-104: the ERP's header charges (AX misc charges: freight, small-quantity surcharge,
-        // ...) as one document level charge, taxed with the header category and rate. Absolute-value
-        // documents keep the sign in BT-3; on a plain invoice a negative total is an allowance (BG-20).
-        decimal headerCharge = Decimal(Pick(InvoiceFieldAliases.DocumentChargeAmount), "header charge total", warn);
-        if (absolute) headerCharge = Math.Abs(headerCharge);
-        if (headerCharge != 0m)
-        {
-            var headerCategory = ResolveCategory(data.VatCategory, data.VatRate, warn);
-            inv.AllowancesAndCharges.Add(new AllowanceCharge
-            {
-                IsCharge = headerCharge > 0m, Amount = Math.Abs(headerCharge),
-                Reason = Pick(InvoiceFieldAliases.DocumentChargeReason) ?? (headerCharge > 0m ? "Zuschläge" : "Rabatt"),
-                VatCategory = headerCategory,
-                VatRate = headerCategory == VatCategory.NotSubjectToVat ? null : data.VatRate,
-            });
-        }
+        // BT-113: payments already made on a final construction invoice (the earlier partial invoices). The XML keeps
+        // the full totals and only the amount due (BT-115) drops by this amount.
+        decimal prepaid = Decimal(Pick(InvoiceFieldAliases.PrepaidAmount), "prepaid amount", warn);
+        if (absolute) prepaid = Math.Abs(prepaid);
+        if (prepaid != 0m) inv.PrepaidAmount = prepaid;
 
         // After the lines and the header charge: a cash discount given as an amount only needs the gross total.
         AddPaymentTerms(inv, data, issueDate, warn);
@@ -340,6 +381,7 @@ public static class InvoiceMapper
             {
                 Category = category,
                 Reason = string.IsNullOrWhiteSpace(data.VatNote) ? "Exempt from VAT" : data.VatNote.Trim(),
+                ReasonCode = Pick(InvoiceFieldAliases.VatExemptionReasonCode),
             });
         }
 
@@ -442,6 +484,14 @@ public static class InvoiceMapper
                 warn?.Invoke($"bank account {LastFour(account.AccountIdentifier)} looks like an IBAN but its check digits are wrong; written as an account number with payment means 30.");
         }
         return sepa ? PaymentMeansCode.SepaCreditTransfer : PaymentMeansCode.CreditTransfer;
+    }
+
+    /// <summary>The log form of a term value: card number and debited account by their last four characters, an attachment by its size.</summary>
+    internal static string Loggable(InvoiceFieldAliases.Term term, string value)
+    {
+        if (term == InvoiceFieldAliases.SupportingDocumentContent) return $"{value.Length} base64 characters";
+        if (term == InvoiceFieldAliases.CardNumber || term == InvoiceFieldAliases.DebitedAccount) return LastFour(value);
+        return value;
     }
 
     private static string Compact(string? value) => new((value ?? "").Where(c => !char.IsWhiteSpace(c)).ToArray());
@@ -586,8 +636,7 @@ public static class InvoiceMapper
     {
         if (string.IsNullOrWhiteSpace(s)) return 0m;
         s = s.Trim();
-        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d)) return d;
-        if (decimal.TryParse(s.Replace(".", "").Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out d)) return d;
+        if (TolerantDecimalConverter.TryParseNumber(s, out var d)) return d;
         warn?.Invoke($"{what} '{s}' is not a number; ignored.");
         return 0m;
     }

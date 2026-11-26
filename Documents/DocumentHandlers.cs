@@ -85,7 +85,8 @@ public sealed class EInvoiceHandler : IDocumentHandler
         var data = ctx.Data;
         if (data.IsNoEInvoice) return PdfHandler.PassThrough(ctx);
 
-        var invoice = InvoiceMapper.Map(data, ctx.Warn, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m));
+        var invoice = InvoiceMapper.Map(data, ctx.Warn, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m),
+            string.IsNullOrWhiteSpace(ctx.JsonPath) ? null : Path.GetDirectoryName(ctx.JsonPath));
         EInvoiceGenerator.Preflight(invoice, ctx.Warn);
         Directory.CreateDirectory(ctx.OutputDir);
 
