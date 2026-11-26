@@ -169,6 +169,8 @@ available to the SharePoint column templates.
 
 ### Extra e-invoice fields
 
+The guide for ERP developers, with every key, the required fields and a complete example: [docs/erp-json-fields.md](docs/erp-json-fields.md).
+
 Any additional key in the invoice JSON that names an EN 16931 business term is
 written to the XML when it has a value. Keys are matched ignoring case, spaces,
 `-`, `_` and `.`, so AX can map a field to `purchase order reference`,

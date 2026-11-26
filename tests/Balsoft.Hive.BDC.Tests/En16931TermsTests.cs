@@ -352,6 +352,34 @@ public class En16931TermsTests
         Assert.Contains("12 base64 characters", log);
     }
 
+    // The complete example of the ERP guide must stay a valid invoice that says what the guide promises.
+    [Fact]
+    public void TheErpGuideExampleIsAValidInvoice()
+    {
+        string dir = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(dir, "HiveBDC.sln"))) dir = Path.GetDirectoryName(dir) ?? throw new FileNotFoundException("HiveBDC.sln");
+        string guide = File.ReadAllText(Path.Combine(dir, "docs", "erp-json-fields.md"));
+        int start = guide.IndexOf("## Complete example", StringComparison.Ordinal);
+        int open = guide.IndexOf("```json", start, StringComparison.Ordinal) + "```json".Length;
+        string json = guide[open..guide.IndexOf("```", open, StringComparison.Ordinal)];
+
+        var warnings = new List<string>();
+        var info = new List<string>();
+        var inv = InvoiceMapper.Map(AxDocument.Parse(json), warnings.Add, info.Add);
+        Assert.Empty(warnings);
+        Assert.DoesNotContain(info, i => i.StartsWith("JSON fields not written"));
+        var result = EInvoiceGenerator.Preflight(inv, _ => { });
+        Assert.True(result.IsValid, string.Join("\n", result.Issues));
+
+        var item = inv.Lines.Single().Item;
+        Assert.Equal("Nozzle, complete, PEEK", item.Description);
+        Assert.Equal(("39269097", "HS"), (item.Classifications.Single().Code, item.Classifications.Single().Scheme));
+        Assert.Equal(new[] { "Material code", "Drawing-No. / Index / Date", "Charge" }, item.Attributes.Select(a => a.Name).ToArray());
+        Assert.Contains(inv.Notes, n => n.Text == "Delivery terms: DDP, delivered duty paid, incl. packaging; Shipping method: UPS");
+        Assert.Equal("erika.muster@example.com", inv.Seller.Contact!.Email);
+        Assert.Equal("SET", inv.Lines.Single().UnitCode);
+    }
+
     // ── failure cases ──
 
     [Fact]
