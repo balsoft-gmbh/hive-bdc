@@ -244,6 +244,35 @@ Groups that can repeat may also come as a JSON list of objects:
 The list entries also take the BT numbers as keys. In `allowancesCharges` the key `chargeAmount` or `allowanceAmount`
 says what the entry is; with a plain `amount`, `isCharge` decides, else a positive amount is a charge.
 
+The keys of each list entry (first spelling recommended, the others accepted too):
+
+| List key | Entry key | BT | Notes |
+|---|---|---|---|
+| `invoiceNotes`, `notesList` (BG-1) | `text`, `content`, `note` | BT-22 | required |
+| | `subjectCode` | BT-21 | UNTDID 4451 code (`SUR`, `AAI`, `REG`, ...) |
+| `precedingInvoices`, `precedingInvoiceReferences` (BG-3) | `number`, `invoiceNumber`, `reference` | BT-25 | required |
+| | `issueDate`, `date` | BT-26 | |
+| `allowancesCharges`, `allowanceCharges`, `documentAllowancesCharges` (BG-20, BG-21) | `allowanceAmount`, `discountAmount` | BT-92 | the entry is an allowance |
+| | `chargeAmount` | BT-99 | the entry is a charge |
+| | `amount` with `isCharge` or `chargeIndicator` (`true`/`false`) | BT-92 or BT-99 | without `isCharge` a positive amount is a charge |
+| | `baseAmount` | BT-93, BT-100 | |
+| | `percentage`, `percent` | BT-94, BT-101 | with `baseAmount` and no amount, the amount is computed |
+| | `vatCategory` | BT-95, BT-102 | default: the invoice's VAT category |
+| | `vatRate` | BT-96, BT-103 | |
+| | `reason` | BT-97, BT-104 | without `reason` and `reasonCode`, Hive BDC writes "Rabatt" or "Zuschlag" |
+| | `reasonCode` | BT-98, BT-105 | UNTDID 5189 (allowance) or 7161 (charge) |
+| `supportingDocuments`, `attachments`, `additionalDocuments` (BG-24) | `reference`, `id`, `documentReference` | BT-122 | required |
+| | `description` | BT-123 | |
+| | `url`, `uri`, `externalLocation` | BT-124 | |
+| | `content`, `base64`, `contentBase64` | BT-125 | the file as base64 |
+| | `fileName`, `file` | BT-125-2 | without `content`: a file in the same folder as the JSON, no path |
+| | `mimeCode`, `mimeType`, `contentType` | BT-125-1 | derived from the file extension when missing; at most 10 MB |
+| `itemAttributes`, `productCharacteristics`, `merkmale` in a line (BG-32) | `name`, `description` | BT-160 | required |
+| | `value` | BT-161 | required |
+| `itemClassifications`, `classifications` in a line | `code`, `classCode` | BT-158 | required |
+| | `scheme`, `schemeId`, `listId` | BT-158-1 | required, UNTDID 7143 (`HS`, `TST`, ...) |
+| | `schemeVersion`, `version`, `listVersionId` | BT-158-2 | |
+
 ## Rules worth knowing
 
 - **A group is written whole or not at all.** A payee without name, a tax representative without VAT id or country, a
