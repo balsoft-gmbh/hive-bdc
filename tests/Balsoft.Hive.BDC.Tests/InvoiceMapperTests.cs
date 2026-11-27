@@ -71,7 +71,7 @@ public class InvoiceMapperTests
         Assert.Equal(2524m, totals.LineNetTotal);
         Assert.Equal(479.56m, totals.VatTotal);
         Assert.Equal(3003.56m, totals.TaxInclusiveAmount);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         Assert.Contains("<ram:BasisQuantity unitCode=\"H87\">100</ram:BasisQuantity>", xml);
         Assert.Contains("<ram:ChargeIndicator>", xml);
     }
@@ -109,7 +109,7 @@ public class InvoiceMapperTests
         Assert.Equal("Industriestraße 5", mapped.Delivery.Address.Line2);
         Assert.Equal("12345", mapped.Delivery.Address.PostCode);
         Assert.Equal("DE", mapped.Delivery.Address.CountryCode);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         Assert.Contains("<ram:ShipToTradeParty>", xml);
         Assert.Contains("<ram:CountryID>DE</ram:CountryID>", xml);
     }
@@ -175,8 +175,8 @@ public class InvoiceMapperTests
         Assert.Equal(387.35m, totals.TaxInclusiveAmount);
         Assert.Equal(325.5m, Assert.Single(totals.VatBreakdown).TaxableAmount);
 
-        Assert.True(EInvoiceGenerator.Preflight(mapped, warnings.Add).IsValid, string.Join("\n", warnings));
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        Assert.True(EInvoiceGenerator.Preflight(mapped, InvoiceProfile.XRechnung, warnings.Add).IsValid, string.Join("\n", warnings));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         Assert.Contains("<ram:ChargeTotalAmount>25.50</ram:ChargeTotalAmount>", xml);
         Assert.Contains("<ram:TaxBasisTotalAmount>325.50</ram:TaxBasisTotalAmount>", xml);
         Assert.Contains("<ram:GrandTotalAmount>387.35</ram:GrandTotalAmount>", xml);
@@ -200,7 +200,7 @@ public class InvoiceMapperTests
     {
         var mapped = InvoiceMapper.Map(Invoice(extraJson));
         Assert.Empty(mapped.AllowancesAndCharges);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         Assert.DoesNotContain("ChargeTotalAmount", xml);
         Assert.DoesNotContain("<ram:SpecifiedTradeAllowanceCharge>", xml);
     }
@@ -228,7 +228,7 @@ public class InvoiceMapperTests
         var totals = mapped.CalculateTotals();
         Assert.Equal(10m, totals.AllowanceTotal);
         Assert.Equal(290m, totals.TaxExclusiveAmount);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         Assert.Contains("<ram:AllowanceTotalAmount>10.00</ram:AllowanceTotalAmount>", xml);
         Assert.DoesNotContain("ChargeTotalAmount", xml);
     }
@@ -252,7 +252,7 @@ public class InvoiceMapperTests
         var exempt = totals.VatBreakdown.Single(b => b.Category == VatCategory.Exempt);
         Assert.Equal(12m, exempt.TaxableAmount);
         Assert.Equal("Steuerfrei nach § 4 UStG", exempt.ExemptionReason);
-        Assert.True(EInvoiceGenerator.Preflight(mapped, warnings.Add).IsValid, string.Join("\n", warnings));
+        Assert.True(EInvoiceGenerator.Preflight(mapped, InvoiceProfile.XRechnung, warnings.Add).IsValid, string.Join("\n", warnings));
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public class InvoiceMapperTests
             [ { "description": "A", "quantity": "1", "unitPrice": "10", "{{key}}": "4711" } ]
             """));
         Assert.Equal("4711", mapped.Lines[0].Item.SellersIdentifier);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         int product = xml.IndexOf("<ram:SpecifiedTradeProduct>", StringComparison.Ordinal);
         int id = xml.IndexOf("<ram:SellerAssignedID>4711</ram:SellerAssignedID>", StringComparison.Ordinal);
         Assert.True(product >= 0 && id > product && id < xml.IndexOf("</ram:SpecifiedTradeProduct>", product, StringComparison.Ordinal));
@@ -356,7 +356,7 @@ public class InvoiceMapperTests
         Assert.Equal(100m, mapped.PrepaidAmount);
         Assert.Equal(357m, totals.TaxInclusiveAmount);
         Assert.Equal(257m, totals.AmountDue);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung));
         Assert.Contains("<ram:TotalPrepaidAmount>100.00</ram:TotalPrepaidAmount>", xml);
         Assert.Contains("<ram:DuePayableAmount>257.00</ram:DuePayableAmount>", xml);
     }
@@ -367,7 +367,7 @@ public class InvoiceMapperTests
         var mapped = InvoiceMapper.Map(Invoice(""", "invoiceTypeCode": "877" """));
         Assert.Null(mapped.PrepaidAmount);
         Assert.Equal(357m, mapped.CalculateTotals().AmountDue);
-        Assert.DoesNotContain("TotalPrepaidAmount", System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped)));
+        Assert.DoesNotContain("TotalPrepaidAmount", System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(mapped, InvoiceProfile.XRechnung)));
     }
 
     private static AxDocument Invoice(string extraJson = "", string lines = """
@@ -492,7 +492,7 @@ public class InvoiceMapperTests
         Assert.Equal("COBADEFFXXX", inv.PaymentInstructions!.CreditTransfers[0].ServiceProviderIdentifier);
         Assert.Equal("W-100", inv.Lines[0].Item.SellersIdentifier);
 
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>45001234</ram:IssuerAssignedID>", xml);
         Assert.Contains("<ram:BuyerReference>LW-4711</ram:BuyerReference>", xml);
         Assert.Matches(@"<ram:SellerOrderReferencedDocument>\s*<ram:IssuerAssignedID>2026120033</ram:IssuerAssignedID>", xml);
@@ -522,7 +522,7 @@ public class InvoiceMapperTests
         Assert.Equal("4500123456", inv.PurchaseOrderReference);
         Assert.Equal("4500123456", inv.BuyerReference);
         Assert.Equal("SO-2026-0042", inv.SalesOrderReference);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>4500123456</ram:IssuerAssignedID>", xml);
         Assert.DoesNotMatch(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>RE-2026-0815<", xml);
     }
@@ -542,7 +542,7 @@ public class InvoiceMapperTests
         Assert.Equal("PO-4711", inv.PurchaseOrderReference);
         Assert.Equal("CUST-REF-1", inv.BuyerReference);
         Assert.Contains(info, m => m.Contains("BT-13") && m.Contains("'purchOrderReference'"));
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Matches(@"<ram:BuyerOrderReferencedDocument>\s*<ram:IssuerAssignedID>PO-4711</ram:IssuerAssignedID>", xml);
     }
 
@@ -563,7 +563,7 @@ public class InvoiceMapperTests
         Assert.Null(inv.PurchaseOrderReference);
         Assert.Equal("re-77", inv.BuyerReference);
         Assert.Contains(info, m => m.Contains("BT-13") && m.Contains("invoice number"));
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.DoesNotContain("<ram:BuyerOrderReferencedDocument>", xml);
     }
 
@@ -585,7 +585,7 @@ public class InvoiceMapperTests
         Assert.Equal("Muster Lieferant GmbH mit Sitz in Musterstadt.\nAmtsgericht Musterstadt - HRB 12345\nGeschäftsführer: Max Muster", inv.Notes[1].Text);
         Assert.DoesNotContain(info, m => m.Contains("not written") && m.Contains("legalNotice"));
 
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Matches(@"<ram:IncludedNote>\s*<ram:Content>Muster Lieferant GmbH[^<]*HRB 12345[^<]*</ram:Content>\s*<ram:SubjectCode>REG</ram:SubjectCode>\s*</ram:IncludedNote>", xml);
         Assert.Matches(@"<ram:IncludedNote>\s*<ram:Content>Es gelten unsere AGB.</ram:Content>\s*</ram:IncludedNote>", xml);
     }
@@ -605,7 +605,7 @@ public class InvoiceMapperTests
         Assert.Equal("Reparaturen Kleinaufträge", inv.ProjectName);
         Assert.Contains(info, m => m.Contains("Project name") && m.Contains("'projectName'"));
         Assert.DoesNotContain(info, m => m.StartsWith("JSON fields not written", StringComparison.Ordinal) && m.Contains("projectName"));
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Matches(@"<ram:SpecifiedProcuringProject>\s*<ram:ID>001-PRJ-0815</ram:ID>\s*<ram:Name>Reparaturen Kleinaufträge</ram:Name>", xml);
     }
 
@@ -624,7 +624,7 @@ public class InvoiceMapperTests
     {
         var inv = InvoiceMapper.Map(Invoice(""", "projectReference": "PRJ-1", "projectName": " " """));
         Assert.Null(inv.ProjectName);
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Matches(@"<ram:ID>PRJ-1</ram:ID>\s*<ram:Name>Project reference</ram:Name>", xml);
     }
 
@@ -634,7 +634,7 @@ public class InvoiceMapperTests
         var info = new List<string>();
         var inv = InvoiceMapper.Map(Invoice(""", "projectName": "Werk Süd" """), null, info.Add);
         Assert.Contains(info, m => m.Contains("project name left out"));
-        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        string xml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.DoesNotContain("SpecifiedProcuringProject", xml);
         Assert.DoesNotContain("Werk Süd", xml);
     }
@@ -652,11 +652,11 @@ public class InvoiceMapperTests
     private static readonly System.Xml.Linq.XNamespace Cbc = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
 
     private static List<System.Xml.Linq.XElement> CiiPaymentMeans(Invoice inv)
-        => System.Xml.Linq.XDocument.Parse(System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv)))
+        => System.Xml.Linq.XDocument.Parse(System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung)))
             .Descendants(Ram + "SpecifiedTradeSettlementPaymentMeans").ToList();
 
     private static System.Xml.Linq.XDocument Ubl(Invoice inv)
-        => System.Xml.Linq.XDocument.Parse(Balsoft.Hive.EInvoice.Ubl.UblWriter.WriteToString(inv, EInvoiceGenerator.Profile, new Balsoft.Hive.EInvoice.Cii.WriterOptions { ValidateBeforeWriting = false }));
+        => System.Xml.Linq.XDocument.Parse(Balsoft.Hive.EInvoice.Ubl.UblWriter.WriteToString(inv, InvoiceProfile.XRechnung, new Balsoft.Hive.EInvoice.Cii.WriterOptions { ValidateBeforeWriting = false }));
 
     [Fact]
     public void BankAccountsMissingKeepsTheFlatAccount()
@@ -691,7 +691,7 @@ public class InvoiceMapperTests
     {
         var flat = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat()));
         var listed = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Flat() + ", " + BankAccountSamples.List(1)));
-        Assert.Equal(EInvoiceGenerator.BuildCiiXml(flat), EInvoiceGenerator.BuildCiiXml(listed));
+        Assert.Equal(EInvoiceGenerator.BuildCiiXml(flat, InvoiceProfile.XRechnung), EInvoiceGenerator.BuildCiiXml(listed, InvoiceProfile.XRechnung));
     }
 
     [Theory]
@@ -713,7 +713,7 @@ public class InvoiceMapperTests
         Assert.Equal(count, cii.Count);
         Assert.All(cii, m => Assert.Equal("58", m.Element(Ram + "TypeCode")!.Value));
         Assert.Equal(BankAccountSamples.Ibans.Take(count), cii.Select(m => m.Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "IBANID")!.Value));
-        var ciiXml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv));
+        var ciiXml = System.Text.Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung));
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(ciiXml, "<ram:PaymentReference>"));
 
         var ubl = Ubl(inv).Root!.Elements(Cac + "PaymentMeans").ToList();
@@ -721,7 +721,7 @@ public class InvoiceMapperTests
         Assert.All(ubl, m => Assert.Equal("58", m.Element(Cbc + "PaymentMeansCode")!.Value));
         Assert.All(ubl, m => Assert.Equal("RE-2026-0101", m.Element(Cbc + "PaymentID")!.Value));
         Assert.Equal(BankAccountSamples.Ibans.Take(count), ubl.Select(m => m.Element(Cac + "PayeeFinancialAccount")!.Element(Cbc + "ID")!.Value));
-        Assert.Empty(EInvoiceGenerator.Preflight(inv, _ => { }).Issues);
+        Assert.Empty(EInvoiceGenerator.Preflight(inv, InvoiceProfile.XRechnung, _ => { }).Issues);
     }
 
     [Theory]
@@ -772,7 +772,7 @@ public class InvoiceMapperTests
         Assert.Null(inv.PaymentInstructions);
         Assert.Empty(CiiPaymentMeans(inv));
         var findings = new List<string>();
-        EInvoiceGenerator.Preflight(inv, findings.Add);
+        EInvoiceGenerator.Preflight(inv, InvoiceProfile.XRechnung, findings.Add);
         Assert.Contains(findings, f => f.Contains("BR-DE-1"));
         Assert.Null(InvoiceMapper.Map(BankAccountSamples.Invoice("")).PaymentInstructions);
     }
@@ -806,7 +806,7 @@ public class InvoiceMapperTests
         Assert.NotNull(cii[1].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "AccountName"));
         Assert.Null(cii[2].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "AccountName"));
         Assert.Equal("TESTGB2LXXX", cii[2].Element(Ram + "PayeeSpecifiedCreditorFinancialInstitution")!.Element(Ram + "BICID")!.Value);
-        Assert.Empty(EInvoiceGenerator.Preflight(inv, _ => { }).Issues);
+        Assert.Empty(EInvoiceGenerator.Preflight(inv, InvoiceProfile.XRechnung, _ => { }).Issues);
     }
 
     [Fact]
@@ -822,7 +822,7 @@ public class InvoiceMapperTests
         Assert.Equal(BankAccountSamples.Ibans[0], cii[0].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "IBANID")!.Value);
         Assert.Equal("1234567890", cii[1].Element(Ram + "PayeePartyCreditorFinancialAccount")!.Element(Ram + "ProprietaryID")!.Value);
         var findings = new List<string>();
-        EInvoiceGenerator.Preflight(inv, findings.Add);
+        EInvoiceGenerator.Preflight(inv, InvoiceProfile.XRechnung, findings.Add);
         Assert.DoesNotContain(findings, f => f.Contains("BR-DE-19") || f.Contains("BR-DE-23"));
     }
 
@@ -842,7 +842,7 @@ public class InvoiceMapperTests
         Assert.Equal(BankAccountSamples.WrongCheckDigits, wrong.Element(Ram + "ProprietaryID")!.Value);
         Assert.Null(wrong.Element(Ram + "IBANID"));
         var findings = new List<string>();
-        EInvoiceGenerator.Preflight(inv, findings.Add);
+        EInvoiceGenerator.Preflight(inv, InvoiceProfile.XRechnung, findings.Add);
         Assert.DoesNotContain(findings, f => f.Contains("BR-DE-19"));
     }
 

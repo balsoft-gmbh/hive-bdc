@@ -2,6 +2,22 @@
   "product": "Hive BDC",
   "releases": [
     {
+      "version": "1.15.1",
+      "date": "2026-11-27",
+      "changes": [
+        "ZUGFeRD PDFs now carry Factur-X / ZUGFeRD profile EN 16931: specification identifier urn:cen.eu:en16931:2017, no Peppol business process, XMP conformance level EN 16931 and the attachment factur-x.xml. Before, they declared XRechnung 3.0, so receivers checked business invoices against the German public-sector rules and rejected those without buyer reference or buyer electronic address.",
+        "eInvoiceType ZUGFeRD-XRechnung (any value with both words) keeps an XRechnung 3.0 inside the PDF for public buyers who accept a PDF.",
+        "The pre-flight check of a ZUGFeRD invoice uses the EN 16931 rules; the history shows the profile, for example \"e-invoice format ZUGFeRD (EN 16931)\". XRechnung XML files are unchanged.",
+        "The XMP metadata of a ZUGFeRD-XRechnung PDF carries fx:Version 1.0 (e-invoice library 1.2.2), the value Factur-X requires.",
+        "A direct debit or payment card next to the seller's IBAN now sets payment means 59 or 48 and leaves the bank account out, so XRechnung no longer rejects the invoice (BR-DE-23 to BR-DE-25).",
+        "A line with VAT category E, Z, AE, K or G no longer takes over the header VAT rate; an intra-community supply gets the buyer's country as deliver-to country; every exempt category gets its own reason text.",
+        "VAT identifiers get their country prefix when the ERP leaves it out, countries also come as three-letter codes, and an unknown country is a warning instead of a silent DE.",
+        "German dates such as 05.03.2026 are read day first (they were read as 3 May). The VAT point date code 3, 35 or 432 is written in the CII code list (5, 29, 72).",
+        "Allowances and charges: the chargeAmount or allowanceAmount key decides, then isCharge (also yes/no, ja/nein), then the sign; on a credit note a line discount stays an allowance. A Leitweg-ID in reference no longer becomes the purchase order number.",
+        "An attachment that cannot be read, a list key sent as text and a seller electronic address without scheme are warnings now; MIME types are compared without case. Opposite line signs on a credit note are reported in the log."
+      ]
+    },
+    {
       "version": "1.15.0",
       "date": "2026-11-26",
       "changes": [

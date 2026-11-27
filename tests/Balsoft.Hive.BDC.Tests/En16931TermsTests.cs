@@ -126,7 +126,7 @@ public class En16931TermsTests
     {
         var warnings = new List<string>();
         var inv = InvoiceMapper.Map(AxDocument.Parse(TariffExport), warnings.Add);
-        var xml = XDocument.Parse(Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv)));
+        var xml = XDocument.Parse(Encoding.UTF8.GetString(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.EN16931)));
         XNamespace ram = "urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100";
 
         var product = xml.Descendants(ram + "SpecifiedTradeProduct").Single();
@@ -152,7 +152,7 @@ public class En16931TermsTests
         var sellerEndpoint = xml.Descendants(ram + "SellerTradeParty").Single().Element(ram + "URIUniversalCommunication")!;
         Assert.Equal("info@example.com", sellerEndpoint.Element(ram + "URIID")!.Value);
 
-        var result = EInvoiceGenerator.Preflight(inv, warnings.Add);
+        var result = EInvoiceGenerator.Preflight(inv, InvoiceProfile.EN16931, warnings.Add);
         Assert.True(result.IsValid, string.Join("\n", result.Issues));
     }
 
@@ -221,7 +221,7 @@ public class En16931TermsTests
         Assert.Empty(warnings);
         Assert.DoesNotContain(info, i => i.StartsWith("JSON fields not written"));
 
-        var back = CiiReader.Read(EInvoiceGenerator.BuildCiiXml(inv)).Invoice;
+        var back = CiiReader.Read(EInvoiceGenerator.BuildCiiXml(inv, InvoiceProfile.XRechnung)).Invoice;
 
         Assert.Contains(back.Notes, n => n.Text == "Allgemeiner Hinweis" && n.SubjectCode == "AAI");
         Assert.Contains(back.Notes, n => n.Text == "Zweiter Hinweis" && n.SubjectCode == "SUR");
@@ -282,7 +282,7 @@ public class En16931TermsTests
             line.Item.Classifications.Select(c => (c.Code, c.Scheme, c.SchemeVersion)).ToArray());
         Assert.Equal(new[] { ("Werkstoff", "1.4404"), ("Farbe", "Blau") }, line.Item.Attributes.Select(a => (a.Name, a.Value)).ToArray());
 
-        var preflight = EInvoiceGenerator.Preflight(inv, _ => { });
+        var preflight = EInvoiceGenerator.Preflight(inv, InvoiceProfile.XRechnung, _ => { });
         Assert.True(preflight.IsValid, string.Join("\n", preflight.Issues));
         Assert.Empty(preflight.Warnings);
     }
@@ -296,13 +296,16 @@ public class En16931TermsTests
         var debit = InvoiceMapper.Map(Doc(""", "mandateReference": "M-1", "creditorIdentifier": "DE98ZZZ09999999999", "debitedIban": "DE89 3704 0044 0532 0130 00" """));
         var dd = debit.PaymentInstructions!;
         Assert.Equal(("59", "M-1", "DE98ZZZ09999999999", "DE89370400440532013000"), (dd.MeansCode, dd.DirectDebit!.MandateReference, dd.DirectDebit.CreditorIdentifier, dd.DirectDebit.DebitedAccountIdentifier));
-        var back = CiiReader.Read(EInvoiceGenerator.BuildCiiXml(debit)).Invoice.PaymentInstructions!;
+        var back = CiiReader.Read(EInvoiceGenerator.BuildCiiXml(debit, InvoiceProfile.XRechnung)).Invoice.PaymentInstructions!;
         Assert.Equal(("59", "M-1"), (back.MeansCode, back.DirectDebit?.MandateReference));
     }
 
     private const string BankLine = "\"bankIban\": \"DE89370400440532013000\", \"bankSwift\": \"COBADEFFXXX\", \"bankAccountHolder\": \"Muster Lieferant GmbH\",";
 
     public static IEnumerable<object[]> KositSamples => new[] { "all-terms", "tariff-attributes", "card", "direct-debit" }.Select(n => new object[] { n });
+
+    // The tariff sample is a ZUGFeRD export (Factur-X profile EN 16931), the others are XRechnung.
+    internal static InvoiceProfile SampleProfile(string name) => name == "tariff-attributes" ? InvoiceProfile.EN16931 : InvoiceProfile.XRechnung;
 
     internal static Invoice Sample(string name) => InvoiceMapper.Map(AxDocument.Parse(name switch
     {
@@ -332,7 +335,7 @@ public class En16931TermsTests
         try
         {
             string file = Path.Combine(folder, name + ".xml");
-            File.WriteAllBytes(file, EInvoiceGenerator.BuildCiiXml(Sample(name)));
+            File.WriteAllBytes(file, EInvoiceGenerator.BuildCiiXml(Sample(name), SampleProfile(name)));
             var outcome = ExternalValidators.Kosit(ExternalValidators.Directory!, new[] { file })[name];
             Assert.True(outcome.Accepted, outcome.ToString());
         }
@@ -368,8 +371,13 @@ public class En16931TermsTests
         var inv = InvoiceMapper.Map(AxDocument.Parse(json), warnings.Add, info.Add);
         Assert.Empty(warnings);
         Assert.DoesNotContain(info, i => i.StartsWith("JSON fields not written"));
-        var result = EInvoiceGenerator.Preflight(inv, _ => { });
+        var doc = AxDocument.Parse(json);
+        var result = EInvoiceGenerator.Preflight(inv, EInvoiceGenerator.ProfileFor(doc), _ => { });
         Assert.True(result.IsValid, string.Join("\n", result.Issues));
+        // The same export as XRechnung meets the XRechnung rules too, as the guide's required fields promise.
+        var asXRechnung = InvoiceMapper.Map(AxDocument.Parse(json.Replace("\"eInvoiceType\": \"ZUGFeRD\"", "\"eInvoiceType\": \"XRechnung\"")));
+        var xr = EInvoiceGenerator.Preflight(asXRechnung, InvoiceProfile.XRechnung, _ => { });
+        Assert.True(xr.IsValid, string.Join("\n", xr.Issues));
 
         var item = inv.Lines.Single().Item;
         Assert.Equal("Nozzle, complete, PEEK", item.Description);

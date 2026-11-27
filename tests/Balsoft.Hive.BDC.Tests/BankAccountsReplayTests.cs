@@ -55,7 +55,7 @@ public class BankAccountsReplayTests
                 int expected = ExpectedAccounts(json, out bool listed);
                 var invoice = InvoiceMapper.Map(AxDocument.Parse(json));
                 var accounts = invoice.PaymentInstructions?.CreditTransfers ?? new List<CreditTransferAccount>();
-                byte[] xml = EInvoiceGenerator.BuildCiiXml(invoice);
+                byte[] xml = EInvoiceGenerator.BuildCiiXml(invoice, InvoiceProfile.XRechnung);
                 var means = XDocument.Parse(System.Text.Encoding.UTF8.GetString(xml)).Descendants(Ram + "SpecifiedTradeSettlementPaymentMeans").ToList();
                 var codes = means.Select(m => m.Element(Ram + "TypeCode")?.Value).Distinct().ToList();
                 _output.WriteLine($"{name}: {(listed ? "list" : "flat")}, {accounts.Count} account(s), {means.Count} payment means, code {string.Join("/", codes)}");

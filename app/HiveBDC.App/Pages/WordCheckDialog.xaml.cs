@@ -63,7 +63,7 @@ public partial class WordCheckDialog : UserControl
                          ". Remove them, or save the PDF from Word with the same name next to the .docx.");
         Notes.AddRange(invoice.Notes);
 
-        string format = invoice.Format == "zugferd" ? "ZUGFeRD" : "XRechnung";
+        string format = invoice.FormatName;
         string type = (string?)invoice.Json["invoiceTypeCode"] ?? "380";
         Verdict = Problems.Count == 0
             ? $"Ready: Hive BDC produces {format} (invoice type {type}) with {invoice.Lines.Count} line(s)."
@@ -76,7 +76,7 @@ public partial class WordCheckDialog : UserControl
         }
 
         foreach (var f in invoice.Fields)
-            Fields.Add(new FieldRow(f.Tag, f.Title, f.IsPlaceholder ? "" : f.Value, Status(f, invoice.Format)));
+            Fields.Add(new FieldRow(f.Tag, f.Title, f.IsPlaceholder ? "" : f.Value, Status(f, invoice.XRechnungRules)));
         foreach (var line in invoice.Lines)
         {
             string V(string tag) => line.FirstOrDefault(f => string.Equals(f.Tag, tag, StringComparison.OrdinalIgnoreCase))?.Value ?? "";
@@ -85,9 +85,9 @@ public partial class WordCheckDialog : UserControl
         DataContext = this;
     }
 
-    private static string Status(WordField f, string format)
+    private static string Status(WordField f, bool xrechnungRules)
     {
-        bool required = Required.Contains(f.Tag) || (format == "xrechnung" && RequiredForXRechnung.Contains(f.Tag));
+        bool required = Required.Contains(f.Tag) || (xrechnungRules && RequiredForXRechnung.Contains(f.Tag));
         if (f.IsPlaceholder) return required ? "required, still placeholder" : "placeholder (empty)";
         if (f.Value.Length == 0) return required ? "required, empty" : "empty";
         return "ok";

@@ -87,7 +87,8 @@ public sealed class EInvoiceHandler : IDocumentHandler
 
         var invoice = InvoiceMapper.Map(data, ctx.Warn, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m),
             string.IsNullOrWhiteSpace(ctx.JsonPath) ? null : Path.GetDirectoryName(ctx.JsonPath));
-        EInvoiceGenerator.Preflight(invoice, ctx.Warn);
+        var profile = EInvoiceGenerator.ProfileFor(data);
+        EInvoiceGenerator.Preflight(invoice, profile, ctx.Warn);
         Directory.CreateDirectory(ctx.OutputDir);
 
         if (data.IsZugferd)
@@ -96,9 +97,9 @@ public sealed class EInvoiceHandler : IDocumentHandler
                 throw new FileNotFoundException($"ZUGFeRD requires sibling PDF '{Path.GetFileName(ctx.PdfPath)}' but it is missing.");
 
             string outFile = Path.Combine(ctx.OutputDir, ctx.FileStem + ".pdf");
-            EInvoiceGenerator.WriteZugferd(invoice, ctx.PdfPath, outFile, ctx.Warn);
-            ctx.Log.LogInformation("[zugferd] {Id} -> {Out}", ctx.DocumentId, outFile);
-            var compression = ctx.Route.CompressesFor(ctx.Type) ? CompressZugferd(ctx, invoice, outFile) : null;
+            EInvoiceGenerator.WriteZugferd(invoice, profile, ctx.PdfPath, outFile, ctx.Warn);
+            ctx.Log.LogInformation("[zugferd] {Id} -> {Out} ({Profile})", ctx.DocumentId, outFile, EInvoiceGenerator.FormatName(data));
+            var compression = ctx.Route.CompressesFor(ctx.Type) ? CompressZugferd(ctx, invoice, profile, outFile) : null;
             return new DocumentOutput(outFile, "zugferd", compression);
         }
 
@@ -115,7 +116,7 @@ public sealed class EInvoiceHandler : IDocumentHandler
     /// The ZUGFeRD again from a compressed copy of the carrier, with the fonts it embeds as subsets. It replaces the plain
     /// one only when it is smaller; any failure keeps the plain one, so compression never stops a delivery.
     /// </summary>
-    private static PdfCompression CompressZugferd(DocumentContext ctx, Balsoft.Hive.EInvoice.Invoice invoice, string outFile)
+    private static PdfCompression CompressZugferd(DocumentContext ctx, Balsoft.Hive.EInvoice.Invoice invoice, Balsoft.Hive.EInvoice.InvoiceProfile profile, string outFile)
     {
         long plain = new FileInfo(outFile).Length;
         string carrier = Path.Combine(Path.GetTempPath(), $"hivebdc-carrier-{Guid.NewGuid():N}.pdf");
@@ -126,7 +127,7 @@ public sealed class EInvoiceHandler : IDocumentHandler
             var carrierResult = PdfCompressor.CompressFile(carrier, keepPdfA: false, m => ctx.Log.LogInformation("{Id}: {Message}", ctx.DocumentId, m));
             if (!carrierResult.Compressed)
                 ctx.Log.LogInformation("{Id}: carrier PDF {Reason}; fonts are still embedded as subsets.", ctx.DocumentId, carrierResult.Summary);
-            EInvoiceGenerator.WriteZugferd(invoice, carrier, candidate, ctx.Warn, subsetFonts: true);
+            EInvoiceGenerator.WriteZugferd(invoice, profile, carrier, candidate, ctx.Warn, subsetFonts: true);
             long compressed = new FileInfo(candidate).Length;
             if (compressed >= plain) return new PdfCompression(plain, plain, "already compact");
             File.Move(candidate, outFile, overwrite: true);

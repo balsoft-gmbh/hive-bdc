@@ -33,12 +33,13 @@ public class ParityTests
     {
         var warnings = new List<string>();
         var doc = AxDocument.Parse(File.ReadAllText(Path.Combine(Root, "Fixtures", name + ".json")));
-        byte[] current = EInvoiceGenerator.BuildCiiXml(InvoiceMapper.Map(doc, warnings.Add));
+        var profile = EInvoiceGenerator.ProfileFor(doc);
+        byte[] current = EInvoiceGenerator.BuildCiiXml(InvoiceMapper.Map(doc, warnings.Add), profile);
         byte[] golden = File.ReadAllBytes(Path.Combine(Root, "Golden", name + ".xml"));
 
         var now = CiiReader.Read(current);
         var then = CiiReader.Read(golden);
-        ApplyIntendedDifferences(then.Invoice);
+        ApplyIntendedDifferences(then.Invoice, profile);
 
         Assert.Equal(Canonical(then.Invoice), Canonical(now.Invoice));
         Assert.Empty(now.TotalsDiscrepancies());
@@ -49,8 +50,11 @@ public class ParityTests
     }
 
     /// <summary>What 2.2.0 writes differently on purpose.</summary>
-    private static void ApplyIntendedDifferences(Invoice golden)
+    private static void ApplyIntendedDifferences(Invoice golden, InvoiceProfile profile)
     {
+        // 0. ZUGFeRD is Factur-X profile EN 16931 since 1.15.1 and carries no BT-23 (design 2026-11-27).
+        if (profile == InvoiceProfile.EN16931) golden.BusinessProcess = null;
+
         // 1. One buyer identifier (BT-46 occurs once). 2.1.3 wrote the Anschlusshaus number AND the
         //    GLN, which triggers CII-SR-450; Aktivbank needs one of them and validates the number.
         if (golden.Buyer.Identifiers.Count > 1)
@@ -60,10 +64,14 @@ public class ParityTests
             golden.Buyer.Identifiers.Add(first);
         }
 
+        // 1b. A buyer VAT identifier without its country prefix gets it (BR-CO-09, review 2026-11-27).
+        if (golden.Buyer.VatIdentifier is { } vat && vat.Length >= 2 && !(char.IsAsciiLetter(vat[0]) && char.IsAsciiLetter(vat[1])))
+            golden.Buyer.VatIdentifier = golden.Buyer.Address.CountryCode + vat;
+
         // 2. BT-20 groups the #SKONTO# lines after the readable text instead of interleaving them;
         //    the reader separates both, so no adjustment is needed here (listed for completeness).
     }
 
     private static string Canonical(Invoice invoice)
-        => CiiWriter.WriteToString(invoice, EInvoiceGenerator.Profile, new WriterOptions { ValidateBeforeWriting = false });
+        => CiiWriter.WriteToString(invoice, InvoiceProfile.XRechnung, new WriterOptions { ValidateBeforeWriting = false });
 }

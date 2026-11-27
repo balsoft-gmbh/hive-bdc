@@ -31,7 +31,7 @@ public static class WordTemplateBuilder
         ("pauschal", "LS"), ("Stück", "H87"), ("m²", "MTK"), ("m", "MTR"), ("Std.", "HUR"), ("kg", "KGM"),
     };
 
-    public static readonly (string Display, string Code)[] Formats = { ("XRechnung", "xrechnung"), ("ZUGFeRD", "zugferd") };
+    public static readonly (string Display, string Code)[] Formats = { ("XRechnung", "xrechnung"), ("ZUGFeRD", "zugferd"), ("ZUGFeRD-XRechnung", "zugferd-xrechnung") };
 
     /// <summary>Seller data of the template (fictitious), used where the caller gives none.</summary>
     public static readonly IReadOnlyDictionary<string, string> SampleSeller = new Dictionary<string, string>

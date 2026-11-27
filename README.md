@@ -106,7 +106,7 @@ for e-invoices:
   "emailSubject": "Bestellung %1",      // %1 => documentNumber
   "emailBody": "...",                   // plain text
   // SalesInvoice only (the e-invoice payload):
-  "eInvoiceType": "zugferd",            // xrechnung | zugferd | NoEInvoice
+  "eInvoiceType": "zugferd",            // xrechnung | zugferd | zugferd-xrechnung | NoEInvoice
   "issueDate": "...", "dueDate": "...", "currency": "EUR", "sender*": "...", "vatRate": "19",
   "lineItems": [ { "description": "...", "quantity": "1", "unit": "piece", "unitPrice": "10.00",
                    "vatRate": "7", "vatCategory": "S" } ],   // per-line VAT optional; header vatRate is the default
@@ -236,7 +236,7 @@ Repeating groups can also come as JSON lists of objects. Each entry takes the sh
 |---|---|
 | `invoiceNotes` (BG-1) | `text`, `subjectCode` |
 | `precedingInvoices` (BG-3) | `number`, `issueDate` |
-| `allowancesCharges` (BG-20, BG-21) | `allowanceAmount` or `chargeAmount` (or `amount` with `isCharge`, else the sign decides), `baseAmount`, `percentage`, `reason`, `reasonCode`, `vatCategory`, `vatRate` |
+| `allowancesCharges` (BG-20, BG-21) | `allowanceAmount` or `chargeAmount` (or `amount` with `isCharge`, else the sign decides; on a credit note `isCharge` is required), `baseAmount`, `percentage`, `reason`, `reasonCode`, `vatCategory`, `vatRate` |
 | `supportingDocuments` (BG-24) | `reference`, `description`, `url`, `content` (base64) or `fileName`, `mimeCode` |
 | line `itemClassifications` | `code`, `scheme`, `schemeVersion` |
 | line `itemAttributes` (BG-32) | `name`, `value` |
@@ -261,12 +261,17 @@ Handlers:
 
 - **EInvoice** — `eInvoiceType = xrechnung` writes `{documentNumber}.xml` (EN 16931 /
   XRechnung 3.0.2, CII syntax); `eInvoiceType = zugferd` writes `{documentNumber}.pdf`
-  (PDF/A-3 carrier with the same CII XML embedded, ZUGFeRD 2.5.2 / Factur-X 1.09.2, profile XRECHNUNG);
+  (PDF/A-3 carrier with CII XML of ZUGFeRD 2.5.2 / Factur-X 1.09.2 profile EN 16931 embedded as `factur-x.xml`,
+  BT-24 `urn:cen.eu:en16931:2017`, no BT-23, so the receiver checks EN 16931 and not the German BR-DE rules);
+  `eInvoiceType = zugferd-xrechnung` (any value with both words) writes the PDF with an XRechnung 3.0 inside
+  (`xrechnung.xml`, level XRECHNUNG) for public buyers who accept a PDF;
   `eInvoiceType = NoEInvoice` delivers the ERP's PDF unchanged as `{documentNumber}.pdf`, like the Pdf handler (no
   mapping, no XML, Compress PDF if it is on). A blank or unknown `eInvoiceType` gives XRechnung. The
   mapping recomputes amounts from `quantity × unitPrice` (or `quantity × priceUnitPrice /
   priceUnit`) plus line charges minus line discounts, a header or per-line `vatRate`, tax
-  category `S` (or `E` at rate 0), a country-name → ISO map, and a unit-code map. A cash
+  category `S` (or `E` at rate 0; `E`, `Z`, `AE`, `K`, `G` always at rate 0), a country-name and alpha-3 → ISO map (an
+  unknown country is a warning), VAT identifiers with their country prefix, and a unit-code map. The ERP guide
+  [docs/erp-json-fields.md](docs/erp-json-fields.md) has every rule. A cash
   discount given as an amount only gets its percent derived from the gross total. AX 2009 PDFs that lack a closing `endobj` are repaired
   on a temp copy before embedding.
 - **Pdf** — the ERP's PDF is copied to the output folder as `{documentNumber}.pdf`
@@ -296,7 +301,7 @@ share needs the service under a domain account).
 `BT-153`, ...) or a key of the ERP JSON (`documentType`, `recipientEmail`, `emailSubject`, ...). Nothing is read by
 position or label. The invoice lines are a **repeating section** tagged `lines`; each item holds the line tags
 (`BT-126`, `BT-153`, `BT-154`, `BT-129`, `BT-130`, `BT-146`, `BT-152`, `BT-131`). The control tagged `eInvoiceType`
-(a drop-down with the values `xrechnung` and `zugferd`) decides the format; without it, XRechnung is produced, as for
+(a drop-down with the values `xrechnung`, `zugferd` and `zugferd-xrechnung`) decides the format; without it, XRechnung is produced, as for
 a JSON without `eInvoiceType`. Date pickers deliver their ISO date; typed dates are read as `dd.MM.yyyy`. Amounts are
 read in German notation (`721.613,72 EUR`, `19,0 %`). A control that still shows its placeholder counts as empty.
 **Word template...** on that company's screen saves a generic template; **Check a Word file...** shows what Hive BDC reads from a

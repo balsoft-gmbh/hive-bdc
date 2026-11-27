@@ -159,8 +159,8 @@ public sealed class BankAccountsKositFixture
                 var invoice = InvoiceMapper.Map(BankAccountSamples.Invoice(BankAccountSamples.Export(count)));
                 string file = Path.Combine(OutputDirectory, $"{syntax}-{count}.xml");
                 File.WriteAllBytes(file, syntax == "ubl"
-                    ? UblWriter.Write(invoice, EInvoiceGenerator.Profile, new WriterOptions { ValidateBeforeWriting = false })
-                    : EInvoiceGenerator.BuildCiiXml(invoice));
+                    ? UblWriter.Write(invoice, InvoiceProfile.XRechnung, new WriterOptions { ValidateBeforeWriting = false })
+                    : EInvoiceGenerator.BuildCiiXml(invoice, InvoiceProfile.XRechnung));
                 files.Add(file);
             }
         Outcomes = ExternalValidators.Kosit(tools, files);

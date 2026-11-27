@@ -42,8 +42,15 @@ public sealed class WordInvoice
 
     public WordTotals? Totals { get; set; }
 
-    /// <summary>"zugferd" or "xrechnung" (the default when the document names none).</summary>
+    /// <summary>"zugferd" (also for zugferd-xrechnung) or "xrechnung" (the default when the document names none).</summary>
     public string Format { get; set; } = "xrechnung";
+
+    /// <summary>True when the XRechnung rules apply: the XML output and a ZUGFeRD-XRechnung PDF.</summary>
+    public bool XRechnungRules => Format == "xrechnung"
+        || ((Json[WordInvoiceReader.FormatTag] as JsonValue)?.GetValue<string>() ?? "").Contains("xrechnung", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The output as the history names it: XRechnung, ZUGFeRD (EN 16931) or ZUGFeRD (XRechnung).</summary>
+    public string FormatName => Format != "zugferd" ? "XRechnung" : XRechnungRules ? "ZUGFeRD (XRechnung)" : "ZUGFeRD (EN 16931)";
 
     public bool HasFields => Fields.Count > 0 || Lines.Count > 0;
 }
@@ -292,7 +299,7 @@ public static class WordInvoiceReader
         if (string.Equals(f.Tag, FormatTag, StringComparison.OrdinalIgnoreCase))
         {
             string v = f.Value.ToLowerInvariant();
-            if (v.Contains("zugferd")) return "zugferd";
+            if (v.Contains("zugferd")) return v.Contains("xrechnung") ? "zugferd-xrechnung" : "zugferd";
             if (v.Contains("xrechnung")) return "xrechnung";
             result.Problems.Add($"{f.Title}: '{f.Value}' is neither XRechnung nor ZUGFeRD.");
             return null;
@@ -311,7 +318,7 @@ public static class WordInvoiceReader
         Need("documentNumber", "BT-1 invoice number");
         Need("issueDate", "BT-2 invoice date");
         Need("recipientName", "BT-44 buyer name");
-        if (result.Format == "xrechnung")
+        if (result.XRechnungRules)
         {
             Need("BT-10", "BT-10 buyer reference (Leitweg-ID or order reference)");
             if (json["BT-49"] is null && json["recipientEmail"] is null) missing.Add("BT-49 buyer e-invoice address");

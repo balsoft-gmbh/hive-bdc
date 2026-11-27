@@ -382,7 +382,8 @@ public static class InvoiceFieldAliases
             if (!group.IsListKey(key) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) continue;
             if (value.ValueKind != JsonValueKind.Array)
             {
-                if (value.ValueKind != JsonValueKind.String) warn?.Invoke($"'{key}' is not a list ({group.Id}); ignored.");
+                // itemAttributes may be one text with a 'name: value' per line (term BG-32 text); every other list key is lost here.
+                if (value.ValueKind != JsonValueKind.String || group != ItemAttributes) warn?.Invoke($"'{key}' is not a list ({group.Id}); ignored.");
                 continue;
             }
             int position = 0;

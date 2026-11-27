@@ -2,7 +2,7 @@
 
 This guide is for the developer who writes the ERP export (AX 2009, AX 2012, D365FO or any other system). It lists
 every JSON key Hive BDC reads for an invoice and the EN 16931 business term (BT) it fills, so the XRechnung XML and
-the XML inside a ZUGFeRD PDF come out complete and valid. Valid from Hive BDC 1.15.0.
+the XML inside a ZUGFeRD PDF come out complete and valid. Valid from Hive BDC 1.15.1.
 
 ## How the export works
 
@@ -15,37 +15,59 @@ Rules that apply to every key:
   and `sender_contact_email` are the same key. Every term also takes its BT number as key (`"BT-43": "..."`).
 - An empty value is the same as a missing key. Send only what the invoice has.
 - Values are strings. Numbers may also be JSON numbers.
-- Dates: `yyyy-MM-dd` (preferred), `dd.MM.yyyy`, `yyyy/MM/dd` or `yyyyMMdd`.
+- Dates: `yyyy-MM-dd` (preferred), `dd.MM.yyyy` (also `d.M.yyyy`), `yyyy/MM/dd`, `yyyyMMdd`, or an ISO date with a time
+  (`2026-11-20T00:00:00`). A German date is always read day first.
 - Amounts and percentages: `1234.56`, `1234,56`, `1.234,56` and `1,234.56` all work. With both separators the last
   one is the decimal separator; a comma alone is a decimal comma.
-- Countries: ISO 3166 code (`DE`, `PL`) or the English or German name (`Poland`, `Polen`).
+- Countries: ISO 3166 code (`DE`, `PL`, also the three-letter `DEU`, `POL`) or the English or German name (`Poland`,
+  `Polen`). An unknown value becomes `DE` with a warning in the log.
+- VAT identifiers (`senderVatId`, `recipientVatId`, the tax representative's) are written without spaces and dots, in
+  upper case and with their country prefix; a number without prefix gets the party's country (`U12345678` for an
+  Austrian buyer becomes `ATU12345678`, Greece `EL`).
 - Text with several lines uses `\n`.
 - Hive BDC computes all totals (line amounts, VAT, gross, amount due) from the lines. Totals in the JSON
   (`netAmount`, `taxAmount`, `grossAmount`, `amountDue`, `lineNetAmount`, ...) are only used for a plausibility check.
-- When a term comes under two keys, the first non-empty key in the file wins.
+- When a term comes under two keys, the first non-empty key in the file wins. One exception: for BT-13 `purchOrderReference`
+  wins, then `purchaseOrderReference`, wherever they stand in the file (`purchOrderReference` is the customer's order
+  number in the AX 2012 export).
 
 After each run the Hive BDC log shows what it took: `e-invoice BT-43 Seller contact email address = '...' (from JSON
 'senderContactEmail')`, and the keys it did not use: `JSON fields not written to the e-invoice: ...`. Check this line
 after a change to the export: a key in that list has a typo or no EN 16931 term.
 
-## What XRechnung requires
+## What each output requires
 
-Without these the receiver's validator rejects the invoice, and the Hive BDC pre-flight warns:
+`eInvoiceType` decides the profile, and the profile decides the rules the receiver checks:
 
-| Key | BT | Why |
-|---|---|---|
-| `buyerReference` (or `reference`) | BT-10 | BR-DE-15: buyer reference, the Leitweg-ID for public buyers |
-| `senderName`, `senderStreet`, `senderPostcode`, `senderCity`, `senderCountry` | BT-27, 35, 38, 37, 40 | seller and address |
-| `senderVatId` or `senderTaxId` | BT-31 / BT-32 | seller tax registration |
-| `senderPhone` (or `senderContactPhone`) | BT-42 | BR-DE-6: seller contact phone |
-| `senderEmail` (or `senderContactEmail`) | BT-43 | BR-DE-7: seller contact mail |
-| `recipientName`, `recipientPostcode`, `recipientCity`, `recipientCountry` | BT-44, 53, 52, 55 | buyer and address |
-| `recipientEmail` (or `buyerElectronicAddress`) | BT-49 | PEPPOL-EN16931-R010: buyer electronic address |
-| `paymentTermsText` or `dueDate` | BT-20 / BT-9 | BR-CO-25: payment terms or due date when an amount is due |
-| `bankIban` or `bankAccounts` | BT-84 | payment account for a bank transfer |
-| `deliveryDate` | BT-72 | delivery date (the issue date is used without it) |
-| `deliveryCity`, `deliveryPostcode` | BT-77, 78 | BR-DE-10/11: only when a deliver-to address is sent |
-| `vatNote` | BT-120 | the exemption reason for VAT category E, AE, K, G or O |
+| `eInvoiceType` | Output | Profile (BT-24) | Rules |
+|---|---|---|---|
+| `XRechnung` (also blank or unknown) | `{number}.xml` | XRechnung 3.0 (`urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0`) | EN 16931 and the German CIUS (BR-DE) |
+| `ZUGFeRD` | `{number}.pdf` with `factur-x.xml` | Factur-X / ZUGFeRD profile EN 16931 (`urn:cen.eu:en16931:2017`) | EN 16931 |
+| `ZUGFeRD-XRechnung` | `{number}.pdf` with `xrechnung.xml` | XRechnung 3.0, ZUGFeRD level XRECHNUNG | EN 16931 and BR-DE, for public buyers who accept a PDF |
+| `NoEInvoice` | the ERP's PDF | none | none |
+
+Only the XRechnung profiles carry the business process BT-23 (`urn:fdc:peppol.eu:2017:poacc:billing:01:1.0`), which
+XRechnung requires (PEPPOL-EN16931-R001); a ZUGFeRD EN 16931 invoice leaves it out.
+
+Without these keys the receiver's validator rejects the invoice, and the Hive BDC pre-flight warns:
+
+| Key | BT | XRechnung | ZUGFeRD (EN 16931) |
+|---|---|---|---|
+| `buyerReference` (or `reference`) | BT-10 | required, BR-DE-15 (the Leitweg-ID for public buyers) | optional |
+| `senderName`, `senderCountry` | BT-27, BT-40 | required | required (BR-06, BR-09) |
+| `senderPostcode`, `senderCity` | BT-38, BT-37 | required, BR-DE-4, BR-DE-3 | optional |
+| `senderStreet` | BT-35 | recommended | optional |
+| `senderVatId` or `senderTaxId` | BT-31 / BT-32 | required | required for VAT category S and the other categories that need a seller VAT id (BR-S-02 and the same rule per category) |
+| `senderPhone` (or `senderContactPhone`) | BT-42 | required, BR-DE-6 | optional |
+| `senderEmail` (or `senderContactEmail`) | BT-43 | required, BR-DE-7 | optional |
+| `recipientName`, `recipientCountry` | BT-44, BT-55 | required | required (BR-07, BR-11) |
+| `recipientPostcode`, `recipientCity` | BT-53, BT-52 | required, BR-DE-8, BR-DE-9 | optional |
+| `recipientEmail` (or `buyerElectronicAddress`) | BT-49 | required, PEPPOL-EN16931-R010 | optional |
+| `paymentTermsText` or `dueDate` | BT-20 / BT-9 | required when an amount is due, BR-CO-25 | the same |
+| `bankIban` or `bankAccounts` | BT-84 | payment instructions are required (BR-DE-1), the account for a bank transfer (BR-61) | the account for a bank transfer (BR-61) |
+| `deliveryDate` | BT-72 | the issue date is used without it | the same |
+| `deliveryCity`, `deliveryPostcode` | BT-77, BT-78 | only when a deliver-to address is sent, BR-DE-10, BR-DE-11 | optional |
+| `vatNote` | BT-120 | the exemption reason for VAT category E, AE, K, G or O; without it Hive BDC writes the category's default ("Exempt from VAT", "Reverse charge", "Intra-community supply", "Export outside the EU", "Not subject to VAT") | the same |
 
 ## Core fields
 
@@ -53,7 +75,7 @@ Without these the receiver's validator rejects the invoice, and the Hive BDC pre
 |---|---|---|
 | `documentType` | | `SalesInvoice` |
 | `documentNumber` / `invoiceNumber` | BT-1 | invoice number, also the file name |
-| `eInvoiceType` | | `XRechnung` (XML file), `ZUGFeRD` (PDF with the XML inside), `NoEInvoice` (the PDF only) |
+| `eInvoiceType` | | `XRechnung` (XML file), `ZUGFeRD` (PDF with the EN 16931 XML inside), `ZUGFeRD-XRechnung` (PDF with an XRechnung inside), `NoEInvoice` (the PDF only); see the table above |
 | `invoiceTypeCode` | BT-3 | UNTDID 1001: `380` invoice, `381` credit note, `384` corrected, `875`, `876`, `877` construction invoices; a credit note keeps positive amounts |
 | `issueDate` | BT-2 | |
 | `dueDate` | BT-9 | |
@@ -63,7 +85,7 @@ Without these the receiver's validator rejects the invoice, and the Hive BDC pre
 | `recipientId`, `recipientGln` | BT-46, BT-46-0 | buyer number, GLN |
 | `recipientVatId` | BT-48 | |
 | `vatRate`, `vatCategory` | BT-119, BT-118 | header default for the lines; category UNTDID 5305: `S`, `Z`, `E`, `AE`, `K`, `G`, `O`, `L`, `M` |
-| `vatNote` | BT-120 | VAT exemption reason text |
+| `vatNote` | BT-120 | VAT exemption reason text; with several exempt categories on one invoice it belongs to the first, the others get their default |
 | `notes` | BT-22 | free invoice note |
 | `legalNotice` | BT-22 | legal information, written as note with subject `REG` |
 | `servicePeriodFrom`, `servicePeriodTo` | BT-134, BT-135 | service period of every line |
@@ -80,7 +102,7 @@ Without these the receiver's validator rejects the invoice, and the Hive BDC pre
 | `quantity` | BT-129 | |
 | `unit` | BT-130 | UN/ECE Rec 20 code (`C62`, `H87`, `HUR`, `KGM`, `SET`, ...) or `piece`, `stk`, `hour`, `kg`, `m`, `l`; anything else becomes `C62` with a warning |
 | `unitPrice` | BT-146 | net price per unit |
-| `vatRate`, `vatCategory` | BT-152, BT-151 | line VAT, else the header's |
+| `vatRate`, `vatCategory` | BT-152, BT-151 | line VAT, else the header's. `E`, `Z`, `AE`, `K` and `G` have the rate 0: a header rate is not taken over, a different rate on the line is a warning and becomes 0. With `K` and no deliver-to address the buyer's country is the deliver-to country (BR-IC-12) |
 | `priceUnit`, `priceUnitPrice` | BT-149, BT-146 | AX price unit (for example 100) and the price per that quantity |
 
 ## All further terms
@@ -106,7 +128,7 @@ Every key below is optional. The first spelling is the recommended one; the othe
 | `deliveryTerms` (else `deliveryTermsCode`), `deliveryMode` | BT-22 | written as one note: `Delivery terms: DDP, delivered duty paid; Shipping method: UPS` |
 | `precedingInvoiceNumber`, `precedingInvoiceDate` | BT-25, BT-26 | the invoice a credit note or correction refers to |
 | `taxCurrency`, `taxAmountInTaxCurrency` | BT-6, BT-111 | VAT in a second currency; both or neither |
-| `taxPointDate` or `taxPointDateCode` | BT-7 / BT-8 | one of the two |
+| `taxPointDate` or `taxPointDateCode` | BT-7 / BT-8 | one of the two; the code is `5` (invoice date), `29` (delivery date) or `72` (paid to date), the EN 16931 values `3`, `35`, `432` work too |
 | `invoicingPeriodStart`, `invoicingPeriodEnd` | BT-73, BT-74 | invoicing period of the whole invoice |
 | `roundingAmount` | BT-114 | |
 | `prepaidAmount` | BT-113 | amount already paid; the amount due becomes gross minus this |
@@ -165,7 +187,7 @@ Every key below is optional. The first spelling is the recommended one; the othe
 
 | Key | BT | Notes |
 |---|---|---|
-| `paymentMeansCode` | BT-81 | UNTDID 4461; default `58` (SEPA transfer, valid IBAN) or `30`, `59` with a direct debit, `48` with a card |
+| `paymentMeansCode` | BT-81 | UNTDID 4461; default `58` (SEPA transfer, valid IBAN) or `30`, `59` with a direct debit, `48` with a card, also when `bankIban` is sent too. One means per invoice: with `59` or `48` the seller's bank account is left out, and a card or direct debit that does not fit an explicit code is left out with a warning |
 | `paymentMeansText` | BT-82 | |
 | `remittanceInformation` (`paymentReference`) | BT-83 | |
 | `paymentCardNumber`, `paymentCardHolder` | BT-87, BT-88 | send only the last digits of the card number |
@@ -202,7 +224,7 @@ Every key below is optional. The first spelling is the recommended one; the othe
 | `lineAccountingReference` (`costCenter`) | BT-133 | |
 | `linePeriodStart`, `linePeriodEnd` | BT-134, BT-135 | overrides `servicePeriodFrom` / `servicePeriodTo` for this line |
 | `lineDiscountAmount`, `lineDiscountReason`, `lineDiscountReasonCode` | BT-136, 139, 140 | |
-| `lineDiscountBaseAmount`, `lineDiscountPercent` | BT-137, BT-138 | |
+| `lineDiscountBaseAmount`, `lineDiscountPercent` | BT-137, BT-138 | the amount is base × percent when no amount is sent; on a credit note a line discount stays an allowance whatever its sign |
 | `lineChargeAmount`, `lineChargeReason`, `lineChargeReasonCode` | BT-141, 144, 145 | |
 | `lineChargeBaseAmount`, `lineChargePercent` | BT-142, BT-143 | |
 | `itemGrossPrice`, `itemPriceDiscount` | BT-148, BT-147 | the discount needs the gross price |
@@ -242,7 +264,10 @@ Groups that can repeat may also come as a JSON list of objects:
 ```
 
 The list entries also take the BT numbers as keys. In `allowancesCharges` the key `chargeAmount` or `allowanceAmount`
-says what the entry is; with a plain `amount`, `isCharge` decides, else a positive amount is a charge.
+says what the entry is (a contradicting `isCharge` is a warning); with a plain `amount`, `isCharge` decides, else a positive
+amount is a charge. `isCharge` takes `true`/`false`, `1`/`0`, `yes`/`no`, `ja`/`nein`. On a credit note or another
+document written with absolute amounts the sign says nothing: send `chargeAmount`, `allowanceAmount` or `isCharge`, a
+plain `amount` without `isCharge` is left out with a warning.
 
 The keys of each list entry (first spelling recommended, the others accepted too):
 
@@ -254,7 +279,7 @@ The keys of each list entry (first spelling recommended, the others accepted too
 | | `issueDate`, `date` | BT-26 | |
 | `allowancesCharges`, `allowanceCharges`, `documentAllowancesCharges` (BG-20, BG-21) | `allowanceAmount`, `discountAmount` | BT-92 | the entry is an allowance |
 | | `chargeAmount` | BT-99 | the entry is a charge |
-| | `amount` with `isCharge` or `chargeIndicator` (`true`/`false`) | BT-92 or BT-99 | without `isCharge` a positive amount is a charge |
+| | `amount` with `isCharge` or `chargeIndicator` (`true`/`false`) | BT-92 or BT-99 | without `isCharge` a positive amount is a charge (not on a credit note, see above) |
 | | `baseAmount` | BT-93, BT-100 | |
 | | `percentage`, `percent` | BT-94, BT-101 | with `baseAmount` and no amount, the amount is computed |
 | | `vatCategory` | BT-95, BT-102 | default: the invoice's VAT category |

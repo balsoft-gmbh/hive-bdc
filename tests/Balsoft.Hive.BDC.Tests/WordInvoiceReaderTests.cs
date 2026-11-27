@@ -90,6 +90,18 @@ public class WordInvoiceReaderTests
         Assert.Equal("einkauf@kunde.example", (string?)inv.Json["recipientEmail"]);
     }
 
+    [Fact]
+    public void ZugferdWithXRechnungStillNeedsTheLeitwegId()
+    {
+        var c = WordTestDocuments.Filled();
+        c.Fields["eInvoiceType"] = "zugferd-xrechnung";
+        c.Fields.Remove("BT-10");
+        c.Fields["BT-49"] = "einkauf@kunde.example";
+        var inv = WordTestDocuments.Read(WordTestDocuments.Build(c));
+        Assert.Equal("zugferd", inv.Format);
+        Assert.Contains(inv.Problems, p => p.StartsWith("Required field") && p.Contains("BT-10"));
+    }
+
     [Theory]
     [InlineData("BT-112", "2.975,01", "Gross amount (BT-112): printed 2.975,01, the lines add up to 2.975,00.")]
     [InlineData("BT-109", "2.400,00", "Net amount (BT-109): printed 2.400,00, the lines add up to 2.500,00.")]

@@ -78,7 +78,14 @@ public static partial class InvoiceMapper
         string? taxPointCode = pick(InvoiceFieldAliases.TaxPointDateCode);
         if (taxPointCode is not null && inv.TaxPointDate is not null)
             warn?.Invoke("VAT point date (BT-7) and its code (BT-8) exclude each other; the date is written.");
-        else inv.TaxPointDateCode = taxPointCode;
+        else inv.TaxPointDateCode = taxPointCode switch
+        {
+            // EN 16931 names BT-8 in UNTDID 2005 (3, 35, 432); CII writes it as UNTDID 2475 (5, 29, 72).
+            "3" => "5",
+            "35" => "29",
+            "432" => "72",
+            _ => taxPointCode,
+        };
 
         if (pick(InvoiceFieldAliases.InvoicedObject) is { } invoicedObject)
             inv.InvoicedObjectIdentifier = new SchemedIdentifier(invoicedObject, pick(InvoiceFieldAliases.InvoicedObjectScheme));
@@ -112,7 +119,14 @@ public static partial class InvoiceMapper
             party.AdditionalLegalInformation = pick(InvoiceFieldAliases.SellerAdditionalLegalInfo);
             string? scheme = pick(InvoiceFieldAliases.SellerElectronicAddressScheme);
             if (pick(InvoiceFieldAliases.SellerElectronicAddress) is { } address)
-                party.ElectronicAddress = new SchemedIdentifier(address, scheme ?? (address.Contains('@') ? ElectronicAddressScheme.Email : null));
+            {
+                // BR-62: the address needs its scheme. Without BT-34-1 it is derived (mail EM, 13 digits GLN 0088); for anything
+                // else the senderEmail address stays.
+                string? derived = scheme ?? (address.Contains('@') ? ElectronicAddressScheme.Email
+                    : address.Length == 13 && address.All(char.IsAsciiDigit) ? IdentifierScheme.Gln : null);
+                if (derived is not null) party.ElectronicAddress = new SchemedIdentifier(address, derived);
+                else warn?.Invoke($"seller electronic address '{address}' needs its scheme (BT-34-1, sellerElectronicAddressScheme); not written.");
+            }
             else if (scheme is not null && party.ElectronicAddress is not null)
                 party.ElectronicAddress.Scheme = scheme;
             return;
@@ -188,7 +202,7 @@ public static partial class InvoiceMapper
         inv.SellerTaxRepresentative = new TaxRepresentative
         {
             Name = repName!,
-            VatIdentifier = repVat!.Replace(" ", ""),
+            VatIdentifier = NormalizeVat(repVat!, ResolveCountry(repCountry!)),
             Address = new PostalAddress
             {
                 Line1 = repLine1,
@@ -254,9 +268,35 @@ public static partial class InvoiceMapper
                 RemittanceInformation = pick(InvoiceFieldAliases.RemittanceInformation),
             };
         }
-        else if (code is not null) inv.PaymentInstructions.MeansCode = code;
-        inv.PaymentInstructions.Card = card;
-        inv.PaymentInstructions.DirectDebit = debit;
+        else
+        {
+            // Most exports send the seller's IBAN with every invoice; a direct debit or card then decides the means.
+            string? derived = code ?? (debit is not null ? PaymentMeansCode.SepaDirectDebit : card is not null ? PaymentMeansCode.BankCard : null);
+            if (derived is not null) inv.PaymentInstructions.MeansCode = derived;
+            if (text is not null) inv.PaymentInstructions.MeansText ??= text;
+        }
+
+        // One payment means per invoice (BR-DE-23-a, BR-DE-24-a, BR-DE-25-a): only the group the code names is written.
+        var p = inv.PaymentInstructions;
+        bool cardCode = p.MeansCode is PaymentMeansCode.BankCard or "54" or "55";
+        bool debitCode = p.MeansCode == PaymentMeansCode.SepaDirectDebit;
+        if ((cardCode || debitCode) && p.CreditTransfers.Count > 0)
+        {
+            warn?.Invoke($"payment means {p.MeansCode} is not a bank transfer; the seller's bank account (BG-17) is not written.");
+            p.CreditTransfers.Clear();
+        }
+        if (card is not null && !cardCode)
+        {
+            warn?.Invoke($"payment card (BG-18) given, but the payment means is {p.MeansCode}; card not written.");
+            card = null;
+        }
+        if (debit is not null && !debitCode)
+        {
+            warn?.Invoke($"direct debit (BG-19) given, but the payment means is {p.MeansCode}; direct debit not written.");
+            debit = null;
+        }
+        p.Card = card;
+        p.DirectDebit = debit;
     }
 
     private static decimal AmountOrPercentOfBase(decimal amount, decimal baseAmount, decimal percent)
@@ -265,8 +305,10 @@ public static partial class InvoiceMapper
     /// <summary>VAT of a document level allowance or charge: its own category and rate when given, else the header's.</summary>
     private static (VatCategory Category, decimal? Rate) DocumentVat(string? categoryText, string? rateText, AxDocument data, Action<string>? warn)
     {
-        decimal rate = OptionalDecimal(rateText, "allowance or charge VAT rate", warn) ?? data.VatRate;
+        decimal? own = OptionalDecimal(rateText, "allowance or charge VAT rate", warn);
+        decimal rate = own ?? data.VatRate;
         var category = ResolveCategory(categoryText ?? data.VatCategory, rate, warn);
+        rate = RateForCategory(category, rate, own is not null, "allowance or charge", warn);
         return (category, category == VatCategory.NotSubjectToVat ? null : rate);
     }
 
@@ -301,19 +343,21 @@ public static partial class InvoiceMapper
             decimal baseAmount = Decimal(Value(found, InvoiceFieldAliases.DocumentAllowanceBase), where + " base amount", warn);
             decimal percent = Decimal(Value(found, InvoiceFieldAliases.DocumentAllowancePercentage), where + " percentage", warn);
 
-            // The sign of "amount" decides unless the entry says what it is: isCharge, or an allowanceAmount / chargeAmount key.
-            bool? isCharge = Value(found, InvoiceFieldAliases.EntryIsCharge) is { } flag
-                ? flag.Equals("true", StringComparison.OrdinalIgnoreCase) || flag == "1" : null;
+            // What the entry is: a chargeAmount or allowanceAmount key decides; a plain amount follows isCharge, else its
+            // sign (positive is a charge). On a plain invoice a negative keyed amount turns it round, like chargeTotalAmount;
+            // a document with absolute values (credit note) ignores every sign, so a plain amount there needs isCharge.
+            bool? flag = Flag(Value(found, InvoiceFieldAliases.EntryIsCharge), where, warn);
             decimal amount;
+            bool? keyed = null;
             if (Value(found, InvoiceFieldAliases.DocumentChargeAmount) is { } chargeText)
             {
                 amount = Decimal(chargeText, where + " charge amount", warn);
-                isCharge ??= true;
+                keyed = true;
             }
             else if (Value(found, InvoiceFieldAliases.DocumentAllowanceAmount) is { } allowanceText)
             {
                 amount = Decimal(allowanceText, where + " allowance amount", warn);
-                isCharge ??= false;
+                keyed = false;
             }
             else amount = Decimal(Value(found, InvoiceFieldAliases.EntryAmount), where + " amount", warn);
             amount = AmountOrPercentOfBase(amount, baseAmount, percent);
@@ -322,9 +366,17 @@ public static partial class InvoiceMapper
                 warn?.Invoke($"{where} has no amount and no base amount with percentage; skipped.");
                 continue;
             }
-            // Like chargeTotalAmount: a document with absolute values keeps the sign in BT-3, on a plain invoice a
-            // negative charge is an allowance and the other way round.
-            bool charge = absolute ? isCharge ?? true : isCharge is { } given ? (amount < 0m ? !given : given) : amount > 0m;
+            if (keyed is { } k && flag is { } f && f != k)
+                warn?.Invoke($"{where}: isCharge {f.ToString().ToLowerInvariant()} contradicts its {(k ? "chargeAmount" : "allowanceAmount")} key; the key decides.");
+            bool charge;
+            if (keyed is { } byKey) charge = absolute ? byKey : amount < 0m ? !byKey : byKey;
+            else if (flag is { } byFlag) charge = byFlag;
+            else if (!absolute) charge = amount > 0m;
+            else
+            {
+                warn?.Invoke($"{where}: on a document with absolute amounts the sign of 'amount' says nothing; send isCharge, chargeAmount or allowanceAmount. Skipped.");
+                continue;
+            }
 
             string? reason = Value(found, InvoiceFieldAliases.DocumentAllowanceReason);
             string? reasonCode = Value(found, InvoiceFieldAliases.DocumentAllowanceReasonCode);
@@ -341,6 +393,20 @@ public static partial class InvoiceMapper
                 VatCategory = category,
                 VatRate = rate,
             });
+        }
+    }
+
+    /// <summary>A yes/no value: true, false, 1, 0, yes, no, ja, nein (any case); anything else is a warning and no value.</summary>
+    private static bool? Flag(string? text, string where, Action<string>? warn)
+    {
+        if (text is null) return null;
+        switch (text.Trim().ToLowerInvariant())
+        {
+            case "true" or "1" or "yes" or "ja" or "y" or "j": return true;
+            case "false" or "0" or "no" or "nein" or "n": return false;
+            default:
+                warn?.Invoke($"{where}: '{text}' is not true or false; ignored.");
+                return null;
         }
     }
 
@@ -384,7 +450,8 @@ public static partial class InvoiceMapper
 
         string? base64 = Value(found, InvoiceFieldAliases.SupportingDocumentContent);
         if (base64 is null && fileName is null) return;
-        string? mime = Value(found, InvoiceFieldAliases.SupportingDocumentMimeCode)
+        // MIME types are case-insensitive (RFC 2045); the EN 16931 code list holds them in lower case.
+        string? mime = Value(found, InvoiceFieldAliases.SupportingDocumentMimeCode)?.Trim().ToLowerInvariant()
             ?? (fileName is not null && MimeByExtension.TryGetValue(Path.GetExtension(fileName), out var byExtension) ? byExtension : null);
         if (mime is null || !CodeList.IsMimeCode(mime))
         {
@@ -438,7 +505,12 @@ public static partial class InvoiceMapper
             warn?.Invoke($"{where}: attachment '{fileName}' has {file.Length} bytes, more than {MaxAttachmentBytes}; only the reference is written.");
             return null;
         }
-        return File.ReadAllBytes(file.FullName);
+        try { return File.ReadAllBytes(file.FullName); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            warn?.Invoke($"{where}: attachment '{fileName}' cannot be read ({ex.Message}); only the reference is written.");
+            return null;
+        }
     }
 
     private static void CompleteLineTerms(InvoiceLine line, IReadOnlyDictionary<string, JsonElement> extra, Func<Term, string?> l,

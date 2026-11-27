@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Balsoft.Hive.BDC.EInvoice;
 
 namespace Balsoft.Hive.BDC.Documents;
 
@@ -231,7 +232,7 @@ public sealed partial class DocumentProcessor
             $"Read as {type.EffectiveDisplayName} {documentNumber} for company {shownArea}" +
             (type.Handler != DocumentHandlerKind.EInvoice ? "."
              : data.IsNoEInvoice ? ", no e-invoice (NoEInvoice): the ERP's PDF goes out unchanged."
-             : $", e-invoice format {(data.IsZugferd ? "ZUGFeRD" : "XRechnung")}."));
+             : $", e-invoice format {EInvoiceGenerator.FormatName(data)}."));
 
         // ── 2. may it be processed? ───────────────────────────────────────
         if (!type.Enabled)

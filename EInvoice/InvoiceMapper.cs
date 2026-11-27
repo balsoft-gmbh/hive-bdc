@@ -14,6 +14,7 @@ namespace Balsoft.Hive.BDC.EInvoice;
 /// </summary>
 public static partial class InvoiceMapper
 {
+    /// <summary>BT-23 of the XRechnung profile (PEPPOL-EN16931-R001); EN 16931 and so ZUGFeRD leave it out.</summary>
     public const string BusinessProcess = Invoice.PeppolBillingProcess;
 
     // mirror of UNIT_CODE_MAP in mapper.ts (+ a few lenient aliases for D365 units)
@@ -62,8 +63,8 @@ public static partial class InvoiceMapper
             return f.Value;
         }
 
-        string sellerCountry = ResolveCountry(data.SenderCountry);
-        string buyerCountry = ResolveCountry(data.RecipientCountry);
+        string sellerCountry = ResolveCountry(data.SenderCountry, warn, "senderCountry");
+        string buyerCountry = ResolveCountry(data.RecipientCountry, warn, "recipientCountry");
         var issueDate = ParseDate(data.IssueDate) ?? DateTime.Today;
 
         // ── Document type + sign ───────────────────────────────────────────
@@ -74,6 +75,10 @@ public static partial class InvoiceMapper
         decimal rawTotal = data.LineItems.Sum(i => i.Quantity * i.UnitPrice);
         var type = ResolveInvoiceType(data.InvoiceTypeCode, rawTotal, warn);
         bool absolute = (type != InvoiceTypeCode.CommercialInvoice && !KeepsLineSigns(type)) || rawTotal < 0m;
+        // Absolute values drop the ERP's relative signs: a line with the opposite sign (a fee kept on a credit note) is then
+        // added instead of deducted, and the total differs from the ERP's. Not silent.
+        if (absolute && data.LineItems.Any(i => i.Quantity * i.UnitPrice > 0m) && data.LineItems.Any(i => i.Quantity * i.UnitPrice < 0m))
+            warn?.Invoke($"lines with opposite signs on a document written with absolute amounts (type {type.ToCode()}): the e-invoice total is {data.LineItems.Sum(i => Math.Abs(i.Quantity * i.UnitPrice)):0.00} net, the ERP's {Math.Abs(rawTotal):0.00}.");
 
         var inv = new Invoice
         {
@@ -81,7 +86,7 @@ public static partial class InvoiceMapper
             IssueDate = issueDate,
             TypeCode = type,
             Currency = ResolveCurrency(data.Currency),
-            BusinessProcess = BusinessProcess,
+            BusinessProcess = EInvoiceGenerator.ProfileFor(data) == InvoiceProfile.XRechnung ? BusinessProcess : null,
             DueDate = ParseDate(data.DueDate),
         };
 
@@ -134,7 +139,7 @@ public static partial class InvoiceMapper
                 City = NullIfEmpty(data.RecipientCity),
                 CountryCode = buyerCountry,
             },
-            VatIdentifier = NullIfEmpty(data.RecipientVatId)?.Trim(),
+            VatIdentifier = string.IsNullOrWhiteSpace(data.RecipientVatId) ? null : NormalizeVat(data.RecipientVatId, buyerCountry),
             ElectronicAddress = BuyerElectronicAddress(Pick(InvoiceFieldAliases.BuyerElectronicAddress) ?? data.RecipientEmail),
         };
         CompletePartyTerms(inv.Buyer, Pick, seller: false, warn);
@@ -150,8 +155,9 @@ public static partial class InvoiceMapper
         bool referenceIsInvoiceNumber = reference is not null
             && string.Equals(reference, NullIfEmpty(data.InvoiceNumber)?.Trim(), StringComparison.OrdinalIgnoreCase);
         inv.BuyerReference = Pick(InvoiceFieldAliases.BuyerReference) ?? reference;
+        // A Leitweg-ID in "reference" is the public buyer's routing id (BT-10), never its purchase order.
         inv.PurchaseOrderReference = Pick(InvoiceFieldAliases.PurchaseOrderReference)
-            ?? (referenceIsInvoiceNumber ? null : reference);
+            ?? (referenceIsInvoiceNumber || (reference is not null && LeitwegId.IsMatch(reference)) ? null : reference);
         if (referenceIsInvoiceNumber && inv.PurchaseOrderReference is null)
             info?.Invoke("e-invoice BT-13 Purchase order reference left empty: 'reference' holds the invoice number and no purchase order key (purchOrderReference, purchaseOrderReference, ...) was sent");
         inv.ProjectReference = Pick(InvoiceFieldAliases.ProjectReference);
@@ -188,6 +194,8 @@ public static partial class InvoiceMapper
         var deliveryDate = ParseDate(deliveryText);
         if (deliveryText is not null && deliveryDate is null)
             warn?.Invoke($"delivery date '{deliveryText}' is not a recognizable date; the issue date is used.");
+        // BT-72 falls back to the issue date: CII has to write the delivery element, and an empty one is refused
+        // (PEPPOL-EN16931-R008); an invoicing period does not fill it.
         inv.Delivery = new DeliveryInformation { ActualDeliveryDate = deliveryDate ?? issueDate };
         // BG-13 deliver-to: name and address when the ERP sends any of them. BT-80 (country) is
         // what BR-IC-12 wants on intra-community supplies; the buyer's country is the fallback.
@@ -255,6 +263,7 @@ public static partial class InvoiceMapper
         {
             decimal rate = item.HasOwnVatRate ? item.VatRate : data.VatRate;
             var category = ResolveCategory(item.VatCategory, rate, warn);
+            rate = RateForCategory(category, rate, item.HasOwnVatRate, $"line '{item.Description}'", warn);
             var (lx, lunused) = InvoiceFieldAliases.ReadLine(item.Extra);
             foreach (var k in lunused) unusedLine.Add(k);
             string? L(InvoiceFieldAliases.Term t)
@@ -307,11 +316,11 @@ public static partial class InvoiceMapper
             if (charge != 0m)
                 line.AllowancesAndCharges.Add(new AllowanceCharge
                 {
-                    IsCharge = charge > 0m, Amount = Math.Abs(charge),
+                    IsCharge = absolute || charge > 0m, Amount = Math.Abs(charge),
                     BaseAmount = chargeBase != 0m ? Math.Abs(chargeBase) : null,
                     Percentage = chargePercent != 0m ? Math.Abs(chargePercent) : null,
-                    Reason = L(InvoiceFieldAliases.LineChargeReason) ?? (charge > 0m ? "Zuschlag" : "Rabatt"),
-                    ReasonCode = L(charge > 0m ? InvoiceFieldAliases.LineChargeReasonCode : InvoiceFieldAliases.LineAllowanceReasonCode),
+                    Reason = L(InvoiceFieldAliases.LineChargeReason) ?? (absolute || charge > 0m ? "Zuschlag" : "Rabatt"),
+                    ReasonCode = L(absolute || charge > 0m ? InvoiceFieldAliases.LineChargeReasonCode : InvoiceFieldAliases.LineAllowanceReasonCode),
                     VatCategory = category, VatRate = line.VatRate,
                 });
             decimal allowanceBase = Decimal(L(InvoiceFieldAliases.LineAllowanceBase), "line discount base amount", warn);
@@ -320,11 +329,11 @@ public static partial class InvoiceMapper
             if (allowance != 0m)
                 line.AllowancesAndCharges.Add(new AllowanceCharge
                 {
-                    IsCharge = allowance < 0m, Amount = Math.Abs(allowance),
+                    IsCharge = !absolute && allowance < 0m, Amount = Math.Abs(allowance),
                     BaseAmount = allowanceBase != 0m ? Math.Abs(allowanceBase) : null,
                     Percentage = allowancePercent != 0m ? Math.Abs(allowancePercent) : null,
-                    Reason = L(InvoiceFieldAliases.LineAllowanceReason) ?? (allowance > 0m ? "Rabatt" : "Zuschlag"),
-                    ReasonCode = L(allowance > 0m ? InvoiceFieldAliases.LineAllowanceReasonCode : InvoiceFieldAliases.LineChargeReasonCode),
+                    Reason = L(InvoiceFieldAliases.LineAllowanceReason) ?? (absolute || allowance > 0m ? "Rabatt" : "Zuschlag"),
+                    ReasonCode = L(absolute || allowance > 0m ? InvoiceFieldAliases.LineAllowanceReasonCode : InvoiceFieldAliases.LineChargeReasonCode),
                     VatCategory = category, VatRate = line.VatRate,
                 });
             inv.AddLine(line);
@@ -369,19 +378,32 @@ public static partial class InvoiceMapper
         if (absolute) prepaid = Math.Abs(prepaid);
         if (prepaid != 0m) inv.PrepaidAmount = prepaid;
 
+        // BR-IC-12: an intra-community supply needs the deliver-to country; the buyer's country when none was sent.
+        if (inv.Lines.Any(l => l.VatCategory == VatCategory.IntraCommunitySupply)
+            || inv.AllowancesAndCharges.Any(a => a.VatCategory == VatCategory.IntraCommunitySupply))
+            inv.Delivery.Address ??= new PostalAddress { CountryCode = buyerCountry };
+
         // After the lines and the header charge: a cash discount given as an amount only needs the gross total.
         AddPaymentTerms(inv, data, issueDate, warn);
 
         // ── VAT exemption reasons ───────────────────────────────────────────
-        // E, AE, K, G and O need a reason in the breakdown (BT-120); the export's vatNote, else a default.
-        foreach (var category in inv.Lines.Select(l => l.VatCategory).Concat(inv.AllowancesAndCharges.Select(a => a.VatCategory))
-                     .Distinct().Where(c => c.RequiresExemptionReason()))
+        // E, AE, K, G and O need a reason in the breakdown (BT-120). The export's vatNote and vatExemptionReasonCode belong
+        // to one category; with several, each further category gets its own default text so no reason lands on the wrong one.
+        var exemptCategories = inv.Lines.Select(l => l.VatCategory).Concat(inv.AllowancesAndCharges.Select(a => a.VatCategory))
+            .Distinct().Where(c => c.RequiresExemptionReason()).ToList();
+        string? vatNote = string.IsNullOrWhiteSpace(data.VatNote) ? null : data.VatNote.Trim();
+        string? reasonCode = Pick(InvoiceFieldAliases.VatExemptionReasonCode);
+        if (exemptCategories.Count > 1 && (vatNote is not null || reasonCode is not null))
+            warn?.Invoke($"vatNote / vatExemptionReasonCode apply to {exemptCategories[0].ToCode()} only; {string.Join(", ", exemptCategories.Skip(1).Select(c => c.ToCode()))} get the default reason.");
+        for (int i = 0; i < exemptCategories.Count; i++)
         {
+            var category = exemptCategories[i];
+            bool own = i == 0;
             inv.VatExemptions.Add(new VatExemption
             {
                 Category = category,
-                Reason = string.IsNullOrWhiteSpace(data.VatNote) ? "Exempt from VAT" : data.VatNote.Trim(),
-                ReasonCode = Pick(InvoiceFieldAliases.VatExemptionReasonCode),
+                Reason = (own ? vatNote : null) ?? DefaultExemptionReason(category),
+                ReasonCode = own ? reasonCode : null,
             });
         }
 
@@ -531,6 +553,28 @@ public static partial class InvoiceMapper
         return rate == 0m ? VatCategory.Exempt : VatCategory.StandardRate;
     }
 
+    /// <summary>
+    /// The rate of a category that has none (E, Z, AE, K, G: 0 % by BR-E-05, BR-Z-05, BR-AE-05, BR-IC-05, BR-G-05): a header
+    /// rate inherited by such a line becomes 0, a different rate sent for it is a warning and becomes 0 too.
+    /// </summary>
+    internal static decimal RateForCategory(VatCategory category, decimal rate, bool ownRate, string where, Action<string>? warn)
+    {
+        if (category is not (VatCategory.Exempt or VatCategory.ZeroRated or VatCategory.ReverseCharge
+                or VatCategory.IntraCommunitySupply or VatCategory.ExportOutsideEu) || rate == 0m) return rate;
+        if (ownRate) warn?.Invoke($"{where}: VAT category {category.ToCode()} has the rate 0, not {rate}; 0 is written.");
+        return 0m;
+    }
+
+    /// <summary>The BT-120 text for a category when the export sends none (the wording of the EN 16931 rule titles).</summary>
+    private static string DefaultExemptionReason(VatCategory category) => category switch
+    {
+        VatCategory.ReverseCharge => "Reverse charge",
+        VatCategory.IntraCommunitySupply => "Intra-community supply",
+        VatCategory.ExportOutsideEu => "Export outside the EU",
+        VatCategory.NotSubjectToVat => "Not subject to VAT",
+        _ => "Exempt from VAT",
+    };
+
     /// <summary>A GS1 GLN (scheme 0088) when the value is 13 digits; otherwise null with a warning.</summary>
     private static SchemedIdentifier? Gln(string? value, string field, Action<string>? warn)
     {
@@ -553,22 +597,49 @@ public static partial class InvoiceMapper
     }
 
     /// <summary>`{country}{vatId without leading 2 alpha}` — mirrors mapper.ts.</summary>
-    private static string NormalizeVat(string vatId, string country)
+    /// <summary>
+    /// A VAT identifier with its ISO 3166-1 prefix (BR-CO-09): spaces and dots removed, upper case, a prefix the ERP sent
+    /// kept, a missing one taken from the party's country (Greece: EL, the prefix of Greek VAT numbers).
+    /// </summary>
+    internal static string NormalizeVat(string vatId, string country)
     {
-        var trimmed = vatId.Trim();
-        if (trimmed.Length >= 2 && char.IsLetter(trimmed[0]) && char.IsLetter(trimmed[1]))
-            trimmed = trimmed.Substring(2);
-        return $"{country}{trimmed}";
+        var compact = new string(vatId.Where(c => !char.IsWhiteSpace(c) && c != '.').ToArray()).ToUpperInvariant();
+        if (compact.Length >= 2 && char.IsAsciiLetter(compact[0]) && char.IsAsciiLetter(compact[1]))
+            return compact;
+        return (country == "GR" ? "EL" : country) + compact;
     }
 
     /// <summary>ISO 3166-1 alpha-2 code for a code or an English/German country name; DE when unknown.</summary>
-    public static string ResolveCountry(string country)
+    public static string ResolveCountry(string country) => ResolveCountry(country, null, "country");
+
+    /// <summary>The same, with a warning when a given value is no country Hive BDC knows (it then writes DE).</summary>
+    public static string ResolveCountry(string? country, Action<string>? warn, string field)
     {
         if (string.IsNullOrWhiteSpace(country)) return "DE";
         var c = country.Trim();
         if (c.Length == 2 && CodeList.IsCountryCode(c.ToUpperInvariant())) return c.ToUpperInvariant();
-        return CountryNameMap.TryGetValue(c, out var iso) ? iso : "DE";
+        if (CountryNameMap.TryGetValue(c, out var iso)) return iso;
+        if (c.Length == 3 && Alpha3.Value.TryGetValue(c, out var fromAlpha3)) return fromAlpha3;
+        warn?.Invoke($"{field} '{c}' is no ISO 3166 code or known country name; DE is written.");
+        return "DE";
     }
+
+    // ISO 3166-1 alpha-3 codes (AUT, USA, ...) to alpha-2, from the regions .NET knows.
+    private static readonly Lazy<Dictionary<string, string>> Alpha3 = new(() =>
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var culture in System.Globalization.CultureInfo.GetCultures(System.Globalization.CultureTypes.SpecificCultures))
+        {
+            try
+            {
+                var region = new System.Globalization.RegionInfo(culture.Name);
+                if (region.TwoLetterISORegionName.Length == 2 && CodeList.IsCountryCode(region.TwoLetterISORegionName))
+                    map.TryAdd(region.ThreeLetterISORegionName, region.TwoLetterISORegionName);
+            }
+            catch (ArgumentException) { }
+        }
+        return map;
+    });
 
     private static string ResolveCurrency(string currency)
     {
@@ -645,13 +716,16 @@ public static partial class InvoiceMapper
     {
         if (string.IsNullOrWhiteSpace(s)) return null;
         s = s.Trim();
-        if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
+        // The documented formats first: the invariant culture reads "05.03.2026" month first (2026-05-03).
+        if (DateTime.TryParseExact(s, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
             return d.Date;
-        foreach (var fmt in new[] { "yyyy-MM-dd", "yyyy/MM/dd", "dd.MM.yyyy", "yyyyMMdd" })
-            if (DateTime.TryParseExact(s, fmt, CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
-                return d.Date;
+        // An ISO date with a time (AX and D365 export "2026-11-20T00:00:00"); nothing that could be read day or month first.
+        if (s.Length > 10 && s[4] == '-' && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out d))
+            return d.Date;
         return null;
     }
+
+    private static readonly string[] DateFormats = { "yyyy-MM-dd", "dd.MM.yyyy", "d.M.yyyy", "yyyy/MM/dd", "yyyyMMdd" };
 
     private static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
